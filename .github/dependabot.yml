@@ -1,0 +1,39 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /gateway
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    commit-message: { prefix: "build(deps)", include: scope }
+    groups:
+      go-minor-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: uv
+    directory: /agents
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    commit-message: { prefix: "build(deps)", include: scope }
+    groups:
+      python-minor-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: nuget
+    directory: /desktop
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    commit-message: { prefix: "build(deps)", include: scope }
+    groups:
+      dotnet-minor-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: docker
+    directory: /deploy/docker
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    commit-message: { prefix: "build(deps)", include: scope }
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    commit-message: { prefix: "ci", include: scope }
+    groups:
+      actions: { patterns: ["*"] }

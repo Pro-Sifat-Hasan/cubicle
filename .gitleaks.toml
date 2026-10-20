@@ -1,0 +1,11 @@
+# Secret scanning config (used by CI and the pre-commit hook).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Build output and dependency folders are never committed"
+paths = [
+  '''(^|/)(dist|build|bin|obj|\.venv|node_modules)/''',
+  '''(^|/)uv\.lock$''',
+  '''(^|/)go\.sum$''',
+]
