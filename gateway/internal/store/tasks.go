@@ -11,31 +11,37 @@ import (
 )
 
 type Task struct {
-	ID          string    `json:"id"`
-	ParentID    string    `json:"parent_id,omitempty"`
-	Kind        string    `json:"kind"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	Assignee    string    `json:"assignee"`
-	Status      string    `json:"status"`
-	Result      string    `json:"result,omitempty"`
-	Error       string    `json:"error,omitempty"`
-	DependsOn   []string  `json:"depends_on"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string   `json:"id"`
+	ParentID    string   `json:"parent_id,omitempty"`
+	Kind        string   `json:"kind"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Assignee    string   `json:"assignee"`
+	Status      string   `json:"status"`
+	Result      string   `json:"result,omitempty"`
+	Error       string   `json:"error,omitempty"`
+	DependsOn   []string `json:"depends_on"`
+	RoutineID   string   `json:"routine_id,omitempty"`
+	// ConversationID links a chat task to its conversation.
+	ConversationID string    `json:"conversation_id,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // NewTask is the input for creating a task.
 type NewTask struct {
-	ParentID    string
-	Kind        string
-	Title       string
-	Description string
-	Assignee    string
-	DependsOn   []string
+	ParentID       string
+	Kind           string
+	Title          string
+	Description    string
+	Assignee       string
+	DependsOn      []string
+	RoutineID      string
+	ConversationID string
 }
 
-const taskCols = `id, parent_id, kind, title, description, assignee, status, result, error, depends_on, created_at, updated_at`
+const taskCols = `id, parent_id, kind, title, description, assignee, status, result, error, depends_on, routine_id,
+	conversation_id, created_at, updated_at`
 
 type scanner interface{ Scan(...any) error }
 
@@ -44,7 +50,7 @@ func scanTask(r scanner) (*Task, error) {
 	var deps string
 	var created, updated int64
 	if err := r.Scan(&t.ID, &t.ParentID, &t.Kind, &t.Title, &t.Description, &t.Assignee,
-		&t.Status, &t.Result, &t.Error, &deps, &created, &updated); err != nil {
+		&t.Status, &t.Result, &t.Error, &deps, &t.RoutineID, &t.ConversationID, &created, &updated); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(deps), &t.DependsOn); err != nil || t.DependsOn == nil {
@@ -66,10 +72,12 @@ func insertTask(ctx context.Context, tx *sql.Tx, now int64, n NewTask) (*Task, e
 	t := &Task{
 		ID: newID("tsk"), ParentID: n.ParentID, Kind: n.Kind, Title: n.Title,
 		Description: n.Description, Assignee: n.Assignee, Status: StatusQueued,
-		DependsOn: n.DependsOn, CreatedAt: fromMS(now), UpdatedAt: fromMS(now),
+		DependsOn: n.DependsOn, RoutineID: n.RoutineID, ConversationID: n.ConversationID,
+		CreatedAt: fromMS(now), UpdatedAt: fromMS(now),
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO tasks (`+taskCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		t.ID, t.ParentID, t.Kind, t.Title, t.Description, t.Assignee, t.Status, "", "", string(deps), now, now)
+	_, err := tx.ExecContext(ctx, `INSERT INTO tasks (`+taskCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.ID, t.ParentID, t.Kind, t.Title, t.Description, t.Assignee, t.Status, "", "", string(deps),
+		n.RoutineID, n.ConversationID, now, now)
 	return t, err
 }
 
@@ -94,7 +102,9 @@ func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
 type TaskFilter struct {
 	Status   string
 	ParentID *string
-	Limit    int
+	// ExcludeChat hides chat replies (they belong to conversations, not the task list).
+	ExcludeChat bool
+	Limit       int
 }
 
 func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*Task, error) {
@@ -107,6 +117,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*Task, error) {
 	if f.ParentID != nil {
 		q += ` AND parent_id = ?`
 		args = append(args, *f.ParentID)
+	}
+	if f.ExcludeChat {
+		q += ` AND kind != ?`
+		args = append(args, KindChat)
 	}
 	if f.Limit <= 0 || f.Limit > 500 {
 		f.Limit = 200
@@ -142,18 +156,33 @@ func (s *Store) GetTasks(ctx context.Context, ids []string) ([]*Task, error) {
 	return s.queryTasks(ctx, q, toAny(ids)...)
 }
 
+// Claim lanes: each agent works on tasks and chats in parallel, so a long task
+// never blocks a conversation.
+const (
+	LaneAny  = ""
+	LaneWork = "work"
+	LaneChat = "chat"
+)
+
 // ClaimTask atomically moves the oldest runnable queued task assigned to one of
-// employeeIDs into in_progress. A task is runnable when all its dependencies are done.
+// agentIDs into in_progress. A task is runnable when all its dependencies are done.
 // Returns (nil, nil) when nothing is available.
-func (s *Store) ClaimTask(ctx context.Context, employeeIDs []string) (*Task, error) {
-	if len(employeeIDs) == 0 {
+func (s *Store) ClaimTask(ctx context.Context, agentIDs []string, lane string) (*Task, error) {
+	if len(agentIDs) == 0 {
 		return nil, nil
+	}
+	laneFilter := ""
+	switch lane {
+	case LaneChat:
+		laneFilter = ` AND kind = '` + KindChat + `'`
+	case LaneWork:
+		laneFilter = ` AND kind != '` + KindChat + `'`
 	}
 	var claimed *Task
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT `+taskCols+` FROM tasks WHERE status = ? AND assignee IN (`+
-			placeholders(len(employeeIDs))+`) ORDER BY created_at ASC LIMIT 50`,
-			append([]any{StatusQueued}, toAny(employeeIDs)...)...)
+		rows, err := tx.QueryContext(ctx, `SELECT `+taskCols+` FROM tasks WHERE status = ?`+laneFilter+` AND assignee IN (`+
+			placeholders(len(agentIDs))+`) ORDER BY created_at ASC LIMIT 50`,
+			append([]any{StatusQueued}, toAny(agentIDs)...)...)
 		if err != nil {
 			return err
 		}
@@ -283,6 +312,9 @@ func (s *Store) Complete(ctx context.Context, id, result string) ([]*Task, error
 		}
 		t.Status, t.Result, t.UpdatedAt = StatusDone, result, fromMS(now)
 		changed = append(changed, t)
+		if t.Kind == KindChat {
+			return addReply(ctx, tx, now, t, result, StatusDone)
+		}
 
 		if t.Kind == KindSynthesis && t.ParentID != "" {
 			res, err := tx.ExecContext(ctx, `UPDATE tasks SET status = ?, result = ?, updated_at = ? WHERE id = ? AND status = ?`,
@@ -323,6 +355,9 @@ func (s *Store) Fail(ctx context.Context, id, reason string) ([]*Task, error) {
 			return err
 		}
 		changed = append(changed, id)
+		if t.Kind == KindChat {
+			return addReply(ctx, tx, now, t, reason, StatusFailed)
+		}
 		if t.ParentID == "" {
 			return nil
 		}
@@ -396,6 +431,34 @@ func cancelChildren(ctx context.Context, tx *sql.Tx, now int64, parentID string)
 		}
 	}
 	return ids, nil
+}
+
+// RequeueInterrupted puts tasks that were in progress back in the queue. It runs
+// when a worker starts: anything still in progress then was interrupted by a
+// restart or crash and would otherwise wait forever.
+func (s *Store) RequeueInterrupted(ctx context.Context) ([]*Task, error) {
+	var ids []string
+	err := s.withTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		if ids, err = idsWhereTx(ctx, tx, "tasks", "status", StatusInProgress); err != nil || len(ids) == 0 {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE tasks SET status = ?, updated_at = ? WHERE status = ?`,
+			StatusQueued, s.ms(), StatusInProgress)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.GetTasks(ctx, ids)
+}
+
+// TasksForRoutine returns an automation's recent runs, newest first.
+func (s *Store) TasksForRoutine(ctx context.Context, routineID string, limit int) ([]*Task, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 20
+	}
+	return s.queryTasks(ctx, `SELECT `+taskCols+` FROM tasks WHERE routine_id = ? ORDER BY created_at DESC LIMIT ?`, routineID, limit)
 }
 
 // TaskCounts returns the number of tasks per status.

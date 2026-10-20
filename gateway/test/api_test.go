@@ -82,18 +82,12 @@ func TestAuthIsEnforcedAndSeparated(t *testing.T) {
 	h.do("GET", "/healthz", "", nil, 200, nil)
 	h.do("GET", "/api/v1/status", "", nil, 401, nil)
 	h.do("GET", "/api/v1/status", workerTok, nil, 401, nil) // worker token can't use owner API
-	h.do("POST", "/internal/v1/tasks/claim", adminTok, map[string]any{"employee_ids": []string{"x"}}, 401, nil)
+	h.do("POST", "/internal/v1/tasks/claim", adminTok, map[string]any{"agent_ids": []string{"x"}}, 401, nil)
 	h.do("GET", "/api/v1/status", adminTok, nil, 200, nil)
 }
 
 func TestFullAssignmentLifecycle(t *testing.T) {
-	h := newHarness(t)
-	roster := []map[string]string{
-		{"id": "manager", "name": "Max", "title": "Chief of Staff", "role": "manager"},
-		{"id": "researcher", "name": "Rhea", "title": "Researcher", "role": "specialist"},
-		{"id": "writer", "name": "Quill", "title": "Writer", "role": "specialist"},
-	}
-	h.do("PUT", "/internal/v1/employees", workerTok, roster, 204, nil)
+	h := newHarness(t) // starts with the default team: manager, researcher, writer, ...
 
 	var asg store.Task
 	h.do("POST", "/api/v1/assignments", adminTok, map[string]string{"title": "Weekly report"}, 201, &asg)
@@ -103,7 +97,7 @@ func TestFullAssignmentLifecycle(t *testing.T) {
 
 	// Manager claims and delegates.
 	var claim api.ClaimResponse
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"manager"}}, 200, &claim)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}}, 200, &claim)
 	if claim.Task.ID != asg.ID {
 		t.Fatalf("claimed wrong task %s", claim.Task.ID)
 	}
@@ -116,27 +110,27 @@ func TestFullAssignmentLifecycle(t *testing.T) {
 	}, 201, nil)
 
 	// Writer must wait for researcher.
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"writer"}}, 204, nil)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"writer"}}, 204, nil)
 
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"researcher"}}, 200, &claim)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"researcher"}}, 200, &claim)
 	research := claim.Task.ID
 	// Researcher asks the human, task parks, human answers, task re-queues.
 	var item store.InboxItem
 	h.do("POST", "/internal/v1/tasks/"+research+"/ask", workerTok, map[string]string{"employee_id": "researcher", "question": "Which week?"}, 201, &item)
 	h.do("POST", "/api/v1/inbox/"+item.ID+"/answer", adminTok, map[string]string{"answer": "Last week"}, 200, nil)
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"researcher"}}, 200, &claim)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"researcher"}}, 200, &claim)
 	if len(claim.HumanAnswers) != 1 || claim.HumanAnswers[0].Answer != "Last week" {
 		t.Fatalf("expected human answer in claim, got %+v", claim.HumanAnswers)
 	}
 	h.do("POST", "/internal/v1/tasks/"+research+"/complete", workerTok, map[string]string{"result": "facts"}, 204, nil)
 
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"writer"}}, 200, &claim)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"writer"}}, 200, &claim)
 	if len(claim.DependencyResults) != 1 || claim.DependencyResults[0].Result != "facts" {
 		t.Fatalf("writer should see research result, got %+v", claim.DependencyResults)
 	}
 	h.do("POST", "/internal/v1/tasks/"+claim.Task.ID+"/complete", workerTok, map[string]string{"result": "draft"}, 204, nil)
 
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"manager"}}, 200, &claim)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}}, 200, &claim)
 	if claim.Task.Kind != store.KindSynthesis {
 		t.Fatalf("expected synthesis, got %s", claim.Task.Kind)
 	}
@@ -151,19 +145,15 @@ func TestFullAssignmentLifecycle(t *testing.T) {
 
 func TestSubtaskFailureFailsAssignment(t *testing.T) {
 	h := newHarness(t)
-	h.do("PUT", "/internal/v1/employees", workerTok, []map[string]string{
-		{"id": "manager", "name": "Max", "title": "Boss", "role": "manager"},
-		{"id": "dev", "name": "Dev", "title": "Engineer", "role": "specialist"},
-	}, 204, nil)
 	var asg store.Task
 	h.do("POST", "/api/v1/assignments", adminTok, map[string]string{"title": "Ship it"}, 201, &asg)
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"manager"}}, 200, nil)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}}, 200, nil)
 	h.do("POST", "/internal/v1/tasks/"+asg.ID+"/delegate", workerTok, map[string]any{
-		"subtasks":  []map[string]any{{"title": "Code", "assignee": "dev"}},
+		"subtasks":  []map[string]any{{"title": "Code", "assignee": "engineer"}},
 		"synthesis": map[string]string{"title": "Wrap", "assignee": "manager"},
 	}, 201, nil)
 	var claim api.ClaimResponse
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"dev"}}, 200, &claim)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"engineer"}}, 200, &claim)
 	h.do("POST", "/internal/v1/tasks/"+claim.Task.ID+"/fail", workerTok, map[string]string{"error": "boom"}, 204, nil)
 
 	var got api.TaskDetail
@@ -180,10 +170,9 @@ func TestSubtaskFailureFailsAssignment(t *testing.T) {
 
 func TestDelegateRejectsUnknownAssignee(t *testing.T) {
 	h := newHarness(t)
-	h.do("PUT", "/internal/v1/employees", workerTok, []map[string]string{{"id": "manager", "name": "Max", "title": "Boss", "role": "manager"}}, 204, nil)
 	var asg store.Task
 	h.do("POST", "/api/v1/assignments", adminTok, map[string]string{"title": "x"}, 201, &asg)
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"manager"}}, 200, nil)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}}, 200, nil)
 	h.do("POST", "/internal/v1/tasks/"+asg.ID+"/delegate", workerTok, map[string]any{
 		"subtasks":  []map[string]any{{"title": "Hack", "assignee": "ghost"}},
 		"synthesis": map[string]string{"title": "Wrap", "assignee": "manager"},
@@ -193,9 +182,9 @@ func TestDelegateRejectsUnknownAssignee(t *testing.T) {
 func TestCircuitBreakerBlocksClaims(t *testing.T) {
 	h := newHarness(t)
 	h.do("POST", "/internal/v1/usage", workerTok, map[string]any{"input_tokens": 800, "output_tokens": 300}, 204, nil)
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"manager"}}, 503, nil)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}}, 503, nil)
 	h.do("POST", "/api/v1/breaker/reset", adminTok, nil, 204, nil)
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"manager"}}, 204, nil)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}}, 204, nil)
 }
 
 func TestSecretsAreWriteOnlyAndEncrypted(t *testing.T) {
