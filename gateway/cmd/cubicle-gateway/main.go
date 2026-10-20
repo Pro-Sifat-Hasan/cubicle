@@ -113,14 +113,17 @@ func serve(ctx context.Context, serviceMode bool) error {
 			}
 			gatewayURL := scheme + "://" + loopbackAddr(cfg.Addr)
 			sup := supervisor.New(command, wargs, func() []string {
-				return append(srv.SecretEnv(),
+				return append(srv.WorkerEnv(),
 					"CUBICLE_GATEWAY_URL="+gatewayURL,
 					"CUBICLE_WORKER_TOKEN="+cfg.WorkerToken,
 					"CUBICLE_HOME="+cfg.Home,
 				)
 			}, log)
 			sup.OnExit = func(error) { _ = st.MarkAllOffline(context.Background()); hub.Publish("employees.offline", nil) }
-			srv.OnSecretsChanged = sup.Restart
+			srv.OnConfigChanged = sup.Restart
+			srv.ListModels = func(ctx context.Context, env []string) ([]string, error) {
+				return listModels(ctx, command, wargs, env)
+			}
 			go sup.Run(ctx)
 		}
 	}

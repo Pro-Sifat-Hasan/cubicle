@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -25,7 +26,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"open_questions":     len(inbox),
 		"breaker_open":       s.BreakerOpen(),
 		"tokens_today":       used,
-		"daily_token_budget": s.cfg.DailyTokenBudget,
+		"daily_token_budget": s.dailyBudget(r.Context()),
 	})
 }
 
@@ -257,8 +258,8 @@ func (s *Server) handlePutSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logActivity(r.Context(), "", "", "Secret "+name+" updated.")
-	if s.OnSecretsChanged != nil {
-		s.OnSecretsChanged()
+	if s.OnConfigChanged != nil {
+		s.OnConfigChanged()
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -269,8 +270,8 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		s.storeErr(w, err)
 		return
 	}
-	if s.OnSecretsChanged != nil {
-		s.OnSecretsChanged()
+	if s.OnConfigChanged != nil {
+		s.OnConfigChanged()
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -316,10 +317,8 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// SecretEnv decrypts all secrets into KEY=VALUE pairs for the worker process.
-func (s *Server) SecretEnv() []string {
-	ctx, cancel := contextWithTimeout()
-	defer cancel()
+// secretEnv decrypts all secrets into KEY=VALUE pairs for the worker process.
+func (s *Server) secretEnv(ctx context.Context) []string {
 	names, err := s.store.ListSecretNames(ctx)
 	if err != nil {
 		return nil

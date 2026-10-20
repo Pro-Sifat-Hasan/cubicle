@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -206,9 +207,11 @@ func TestSecretsAreWriteOnlyAndEncrypted(t *testing.T) {
 	if len(names) != 1 || names[0] != "ANTHROPIC_API_KEY" {
 		t.Fatalf("names = %v", names)
 	}
-	env := h.gw.SecretEnv()
-	if len(env) != 1 || env[0] != "ANTHROPIC_API_KEY=sk-test" {
-		t.Fatalf("env = %v", env)
+	env := h.gw.WorkerEnv()
+	for _, want := range []string{"ANTHROPIC_API_KEY=sk-test", "CUBICLE_LLM_KIND=anthropic"} {
+		if !slices.Contains(env, want) {
+			t.Fatalf("worker env missing %q: %v", want, env)
+		}
 	}
 }
 

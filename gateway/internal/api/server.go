@@ -31,9 +31,16 @@ type Server struct {
 	secrets *secrets.Box
 	log     *slog.Logger
 
-	// OnSecretsChanged is invoked after a secret is written or deleted, so the
-	// supervisor can restart the worker with fresh credentials.
-	OnSecretsChanged func()
+	// OnConfigChanged is invoked after secrets or settings change, so the
+	// supervisor can restart the worker with the new configuration.
+	OnConfigChanged func()
+
+	// ListModels runs the worker in "models" mode with the given environment and
+	// returns the model ids the provider offers. Nil when no worker is available.
+	ListModels func(ctx context.Context, env []string) ([]string, error)
+
+	// WorkspaceDir is where employees save files, one folder per assignment.
+	WorkspaceDir string
 
 	breakerMu      sync.Mutex
 	breakerOpen    bool
@@ -66,6 +73,13 @@ func (s *Server) Handler() http.Handler {
 	owner.HandleFunc("DELETE /api/v1/secrets/{name}", s.handleDeleteSecret)
 	owner.HandleFunc("POST /api/v1/breaker/reset", s.handleBreakerReset)
 	owner.HandleFunc("GET /api/v1/events", s.handleEvents)
+	owner.HandleFunc("GET /api/v1/settings", s.handleGetSettings)
+	owner.HandleFunc("PUT /api/v1/settings", s.handlePutSettings)
+	owner.HandleFunc("GET /api/v1/providers", s.handleListProviders)
+	owner.HandleFunc("GET /api/v1/providers/{id}/models", s.handleListModels)
+	owner.HandleFunc("GET /api/v1/memories", s.handleListMemories)
+	owner.HandleFunc("POST /api/v1/memories", s.handleOwnerAddMemory)
+	owner.HandleFunc("DELETE /api/v1/memories/{id}", s.handleDeleteMemory)
 
 	worker := http.NewServeMux()
 	worker.HandleFunc("PUT /internal/v1/employees", s.handleSyncEmployees)
@@ -78,6 +92,8 @@ func (s *Server) Handler() http.Handler {
 	worker.HandleFunc("POST /internal/v1/tasks/{id}/ask", s.handleAsk)
 	worker.HandleFunc("POST /internal/v1/usage", s.handleUsage)
 	worker.HandleFunc("POST /internal/v1/activity", s.handleAddActivity)
+	worker.HandleFunc("GET /internal/v1/memories", s.handleListMemories)
+	worker.HandleFunc("POST /internal/v1/memories", s.handleWorkerAddMemory)
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +184,8 @@ func (s *Server) BreakerOpen() bool {
 }
 
 func (s *Server) checkBudget(ctx context.Context) {
-	if s.cfg.DailyTokenBudget <= 0 {
+	budget := s.dailyBudget(ctx)
+	if budget <= 0 {
 		return
 	}
 	used, err := s.store.TokensSince(ctx, s.startOfBudgetWindow())
@@ -176,15 +193,15 @@ func (s *Server) checkBudget(ctx context.Context) {
 		return
 	}
 	s.breakerMu.Lock()
-	tripped := !s.breakerOpen && used >= s.cfg.DailyTokenBudget
+	tripped := !s.breakerOpen && used >= budget
 	if tripped {
 		s.breakerOpen = true
 	}
 	s.breakerMu.Unlock()
 	if tripped {
-		s.log.Warn("circuit breaker tripped", "tokens_used", used, "budget", s.cfg.DailyTokenBudget)
-		s.hub.Publish("breaker.tripped", map[string]int64{"tokens_used": used, "budget": s.cfg.DailyTokenBudget})
-		s.logActivity(ctx, "", "", fmt.Sprintf("Circuit breaker tripped: %d tokens used today (budget %d). Work is paused.", used, s.cfg.DailyTokenBudget))
+		s.log.Warn("circuit breaker tripped", "tokens_used", used, "budget", budget)
+		s.hub.Publish("breaker.tripped", map[string]int64{"tokens_used": used, "budget": budget})
+		s.logActivity(ctx, "", "", fmt.Sprintf("Circuit breaker tripped: %d tokens used today (budget %d). Work is paused.", used, budget))
 	}
 }
 
