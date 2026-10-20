@@ -16,7 +16,7 @@ jobs:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # scan the full history, not just the last commit
       - name: Install gitleaks
@@ -47,13 +47,13 @@ jobs:
           - language: actions
             build-mode: none
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         if: matrix.language == 'go'
         with:
           go-version-file: gateway/go.mod
           cache-dependency-path: gateway/go.sum
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -62,7 +62,7 @@ jobs:
         if: matrix.language == 'go'
         working-directory: gateway
         run: go build ./...
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
 
@@ -71,7 +71,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
