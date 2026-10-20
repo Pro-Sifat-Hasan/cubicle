@@ -1,0 +1,41 @@
+# Build output
+/dist/
+/build/
+bin/
+obj/
+*.exe
+!installer/**/*.exe
+
+# Go
+/gateway/cubicle-gateway
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+*.spec
+
+# .NET
+*.user
+.vs/
+TestResults/
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Local Cubicle data — never commit tokens, keys or databases
+.cubicle/
+*.token
+master.key
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
