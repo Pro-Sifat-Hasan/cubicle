@@ -1,0 +1,19 @@
+name: Feature request
+description: Hire a new kind of employee, add a routine type, or improve the office
+labels: [enhancement]
+body:
+  - type: textarea
+    id: job
+    attributes:
+      label: What job do you want your AI staff to do?
+      description: Describe the everyday task from your life or work.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could Cubicle help?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you tried already?

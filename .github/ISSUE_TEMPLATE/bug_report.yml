@@ -1,0 +1,31 @@
+name: Bug report
+description: Something in Cubicle isn't working
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Cubicle version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options: [Desktop app, Gateway, Agents, Installer, Docker / server, Not sure]
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "From %LOCALAPPDATA%\\Cubicle\\logs\\gateway.log. Remove anything private first — never paste tokens or API keys."
+      render: text
