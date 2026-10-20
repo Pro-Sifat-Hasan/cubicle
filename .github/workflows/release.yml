@@ -4,12 +4,18 @@ name: Release
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_dispatch: # re-publish the Docker image for an existing tag
+    inputs:
+      tag:
+        description: Existing release tag, e.g. v0.1.0
+        required: true
 
 permissions:
   contents: write
 
 jobs:
   windows:
+    if: github.event_name == 'push'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,8 +47,15 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: Image name
+        # Registry paths must be lowercase; GitHub owner names may not be.
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cubicle" >> "$GITHUB_ENV"
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -54,5 +67,9 @@ jobs:
           file: deploy/docker/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/cubicle:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/cubicle:latest
+            ${{ env.IMAGE }}:${{ env.TAG }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.TAG }}
+            org.opencontainers.image.licenses=MIT
