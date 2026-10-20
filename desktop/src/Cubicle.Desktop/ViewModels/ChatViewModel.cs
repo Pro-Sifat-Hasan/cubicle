@@ -46,6 +46,8 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
     {
         _agents = agents.ToDictionary(a => a.Id);
         var selectedId = Selected?.Conversation.Id;
+        // Clearing the list makes the ListBox null out Selected, which would wipe the open thread.
+        _reloading = true;
         Conversations.Clear();
         foreach (var c in conversations)
             Conversations.Add(new ConversationItemViewModel(c, _agents.GetValueOrDefault(c.AgentId)));
@@ -57,9 +59,13 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
         NewChatAgent = AgentChoices.FirstOrDefault(a => a.Id == pick) ?? AgentChoices.FirstOrDefault();
 
         var current = Conversations.FirstOrDefault(c => c.Conversation.Id == selectedId);
-        _reloading = current is not null;
         Selected = current;
         _reloading = false;
+        if (current is null && selectedId is not null)
+        {
+            LiveStatus = LiveText = "";
+            Messages.Clear();
+        }
     }
 
     partial void OnSelectedChanged(ConversationItemViewModel? value)
