@@ -3,12 +3,16 @@ import asyncio
 import pytest
 
 from cubicle_agents.office.directives import extract
+from cubicle_agents.staff.roster import DEFAULT_ROSTER, McpServer, Skill
 from cubicle_agents.tools import build_toolbox
 from cubicle_agents.tools.base import ToolError
+from cubicle_agents.tools.mcp import MCPUnavailableError, server_env
 from cubicle_agents.tools.web import check_url, html_to_text
 from cubicle_agents.tools.workspace import Workspace
 
 from fakes import FakeGateway
+
+WRITER = next(e for e in DEFAULT_ROSTER if e.id == "writer")
 
 
 def run(coro):
@@ -31,8 +35,7 @@ def test_workspace_rejects_escapes(tmp_path, path):
 
 
 def test_toolbox_turns_errors_into_results(tmp_path):
-    box = build_toolbox(workspace=tmp_path, gateway=FakeGateway(), employee_id="writer",
-                        may_ask=True, client_web_fetch=False)
+    box = build_toolbox(employee=WRITER, workspace=tmp_path, gateway=FakeGateway(), may_ask=True, client_web_fetch=False)
     bad = run(box.call("read_file", {"path": "../../secret"}))
     assert bad.is_error
     assert run(box.call("no_such_tool", {})).is_error
@@ -41,12 +44,30 @@ def test_toolbox_turns_errors_into_results(tmp_path):
 
 def test_remember_and_ask_tools(tmp_path):
     gw = FakeGateway()
-    box = build_toolbox(workspace=tmp_path, gateway=gw, employee_id="writer", may_ask=True, client_web_fetch=True)
+    box = build_toolbox(employee=WRITER, workspace=tmp_path, gateway=gw, may_ask=True, client_web_fetch=True)
     assert {t.name for t in box.tools} == {"write_file", "read_file", "list_files", "remember", "ask_owner", "web_fetch"}
     run(box.call("remember", {"fact": "Owner is vegetarian"}))
     run(box.call("ask_owner", {"question": "Which city?"}))
     assert gw.memories == ["Owner is vegetarian"]
     assert box.question == "Which city?"
+
+
+def test_skill_tool_loads_full_instructions(tmp_path):
+    import dataclasses
+
+    writer = dataclasses.replace(WRITER, skills=(Skill("email-writing", "Use for emails.", "Lead with the point."),))
+    box = build_toolbox(employee=writer, workspace=tmp_path, gateway=FakeGateway(), may_ask=False, client_web_fetch=False)
+    assert "Lead with the point." in run(box.call("load_skill", {"name": "email-writing"})).content
+    assert run(box.call("load_skill", {"name": "nope"})).is_error
+
+
+def test_mcp_server_env_only_passes_configured_secrets():
+    server = McpServer("brave", "Brave", "stdio", command="npx", env=(("MODE", "x"),), secret_env=("BRAVE_API_KEY",))
+    environ = {"PATH": "C:\\bin", "BRAVE_API_KEY": "b-key", "ANTHROPIC_API_KEY": "sk-secret"}
+    env = server_env(server, environ)
+    assert env == {"PATH": "C:\\bin", "MODE": "x", "BRAVE_API_KEY": "b-key"}
+    with pytest.raises(MCPUnavailableError, match="BRAVE_API_KEY"):
+        server_env(server, {"PATH": "C:\\bin"})
 
 
 # ---- web fetch SSRF guard ----

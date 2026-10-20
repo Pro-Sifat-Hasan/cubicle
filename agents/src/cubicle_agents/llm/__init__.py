@@ -9,21 +9,18 @@ from cubicle_agents.core.settings import (
     KIND_OPENAI_COMPATIBLE,
     LLMSettings,
 )
-from cubicle_agents.llm.base import LLM, AgentResult, LLMConfigError, LLMRefusalError
+from cubicle_agents.llm.base import LLM, AgentResult, LLMConfigError, LLMRefusalError, Turn
 
-__all__ = ["LLM", "AgentResult", "LLMConfigError", "LLMRefusalError", "make_llm"]
+__all__ = ["LLM", "AgentResult", "LLMConfigError", "LLMRefusalError", "Turn", "make_llm"]
 
 
 def make_llm(settings: LLMSettings) -> LLM:
-    if settings.kind == KIND_ANTHROPIC:
-        from cubicle_agents.llm.anthropic_llm import AnthropicLLM
+    if settings.kind in (KIND_ANTHROPIC, KIND_OPENAI_COMPATIBLE):
+        from cubicle_agents.llm.pydantic_llm import PydanticLLM
 
-        return AnthropicLLM(api_key=settings.api_key, effort=settings.effort,
-                            max_output_tokens=settings.max_output_tokens, web_access=settings.web_access)
-    if settings.kind == KIND_OPENAI_COMPATIBLE:
-        from cubicle_agents.llm.openai_llm import OpenAICompatibleLLM
-
-        return OpenAICompatibleLLM(name=settings.provider, base_url=settings.base_url, api_key=settings.api_key)
+        return PydanticLLM(kind=settings.kind, provider=settings.provider, api_key=settings.api_key,
+                           base_url=settings.base_url, effort=settings.effort,
+                           max_output_tokens=settings.max_output_tokens, web_access=settings.web_access)
     if settings.kind == KIND_CLAUDE_CODE:
         from cubicle_agents.llm.claude_code_llm import ClaudeCodeLLM
 
