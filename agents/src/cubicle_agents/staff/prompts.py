@@ -8,6 +8,7 @@ Two working modes:
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from cubicle_agents.staff.roster import Employee
@@ -40,10 +41,13 @@ PLAN_SCHEMA: dict[str, Any] = {
 }
 
 
-def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_mode: bool, web: bool) -> str:
+def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_mode: bool, web: bool,
+                  today: date | None = None) -> str:
+    today = today or date.today()
     parts = [
         f"You are {employee.name}, the {employee.title} on {owner}'s personal AI staff in Cubicle. {employee.persona}",
         f"Your strengths: {employee.skills}.",
+        f"Today is {today:%A, %d %B %Y}. Interpret relative dates (\"this week\", \"tomorrow\") from this date.",
         _working_rules(owner, tool_mode=tool_mode, web=web),
     ]
     if memories:
@@ -55,7 +59,10 @@ def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_m
 def _working_rules(owner: str, *, tool_mode: bool, web: bool) -> str:
     rules = [
         f"Deliver finished work for {owner}, not a description of what you would do.",
+        "Think about what a great result looks like before you start, then do the work.",
         "Be accurate. Never invent facts, figures, quotes or sources; label assumptions clearly.",
+        "Before you answer, check your work against the task: every requirement met, facts right, nothing missing. "
+        "Fix problems you find rather than mentioning them.",
         "Write in clear Markdown with short headings and lists where they help. Be concise.",
     ]
     if web:
