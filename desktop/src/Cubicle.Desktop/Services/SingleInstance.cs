@@ -6,8 +6,11 @@ namespace Cubicle.Desktop.Services;
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
-    private const string MutexName = @"Local\Cubicle.Desktop";
-    private const string ShowEventName = @"Local\Cubicle.Desktop.Show";
+    // CUBICLE_INSTANCE (set by portable mode or for development) gives a separate lock,
+    // so that copy can run next to the installed app. Read on use, after startup set it.
+    private static string Suffix => Environment.GetEnvironmentVariable("CUBICLE_INSTANCE") is { Length: > 0 } s ? "." + s : "";
+    private static string MutexName => @"Local\Cubicle.Desktop" + Suffix;
+    private static string ShowEventName => @"Local\Cubicle.Desktop.Show" + Suffix;
 
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _showEvent;

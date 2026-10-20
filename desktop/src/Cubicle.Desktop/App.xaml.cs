@@ -22,6 +22,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        PortableMode.ApplyIfPresent(); // must run before anything reads paths, ports or the instance name
         _instance = SingleInstance.TryAcquire(() => Dispatcher.BeginInvoke(ShowWindow));
         if (_instance is null)
         {
@@ -29,8 +30,12 @@ public partial class App : Application
             return;
         }
 
-        _vm = new MainViewModel();
+        var preferences = UiPreferences.Load();
+        ThemeService.Apply(preferences.Theme);
+
+        _vm = new MainViewModel(preferences.Theme);
         _window = new MainWindow { DataContext = _vm };
+        ThemeService.ApplyTitleBar(_window);
         _window.Closing += OnWindowClosing;
 
         _tray = new TrayIcon(open: ShowWindow, quit: () => Quit(stopStaff: false), stopStaffAndQuit: () => Quit(stopStaff: true));

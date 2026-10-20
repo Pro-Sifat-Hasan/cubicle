@@ -65,6 +65,23 @@ if ($LASTEXITCODE) { throw "dotnet publish failed" }
 
 Copy-Item (Join-Path $Root "LICENSE") $Stage
 
+Step "Portable zip"
+$portableRoot = Join-Path $Dist "portable"
+$portableApp = Join-Path $portableRoot "Cubicle"
+if (Test-Path $portableRoot) { Remove-Item -Recurse -Force $portableRoot }
+New-Item -ItemType Directory -Force $portableApp | Out-Null
+Copy-Item -Recurse (Join-Path $Stage "*") $portableApp
+@"
+Cubicle portable mode.
+
+While this file sits next to Cubicle.exe, Cubicle keeps all of its data in the
+'data' folder here and uses port $(7879), so it runs alongside an installed copy
+without touching it. Delete this file to use the normal per-user data folder.
+"@ | Set-Content -Encoding utf8 (Join-Path $portableApp "portable.txt")
+$zip = Join-Path $Dist "Cubicle-Portable-$Version-win-x64.zip"
+if (Test-Path $zip) { Remove-Item -Force $zip }
+Compress-Archive -Path $portableApp -DestinationPath $zip -CompressionLevel Optimal
+
 if ($SkipInstaller) {
     Write-Host "`nStaged build in $Stage" -ForegroundColor Green
     exit 0

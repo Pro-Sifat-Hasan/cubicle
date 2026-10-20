@@ -34,11 +34,12 @@ jobs:
         run: ./scripts/build.ps1 -Version ("${{ github.ref_name }}".TrimStart("v"))
       - name: Checksums
         shell: pwsh
-        run: Get-ChildItem dist/*.exe | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content dist/SHA256SUMS.txt
+        run: Get-ChildItem dist/*.exe, dist/*.zip | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content dist/SHA256SUMS.txt
       - uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/Cubicle-Setup-*.exe
+            dist/Cubicle-Portable-*.zip
             dist/SHA256SUMS.txt
           generate_release_notes: true
 
