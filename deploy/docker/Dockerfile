@@ -8,7 +8,7 @@ RUN go mod download
 COPY gateway/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/cubicle-gateway ./cmd/cubicle-gateway
 
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
