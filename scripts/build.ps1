@@ -49,6 +49,8 @@ try {
     uv run --group build pyinstaller packaging/entry.py `
         --name cubicle-agents --onedir --console --noconfirm --clean `
         --collect-submodules cubicle_agents `
+        --collect-submodules pydantic_ai --collect-submodules fastmcp --collect-submodules mcp --collect-submodules ddgs `
+        --copy-metadata pydantic_ai_slim --copy-metadata fastmcp_slim --copy-metadata mcp --copy-metadata genai_prices `
         --distpath $Stage `
         --workpath (Join-Path $Root "build\pyinstaller") `
         --specpath (Join-Path $Root "build\pyinstaller")
