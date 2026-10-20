@@ -66,6 +66,18 @@ jobs:
       - run: dotnet build desktop/Cubicle.slnx -c Release
       - run: dotnet test desktop/Cubicle.slnx -c Release --no-build
 
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: docker build -f deploy/docker/Dockerfile -t cubicle:ci .
+      - name: Check both programs start
+        run: |
+          docker run --rm --entrypoint cubicle-gateway cubicle:ci version
+          docker run --rm --entrypoint cubicle-agents cubicle:ci --version
+
   smoke:
     name: End-to-end smoke test
     needs: [gateway, agents]
