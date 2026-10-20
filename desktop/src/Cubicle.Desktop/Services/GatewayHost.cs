@@ -48,17 +48,18 @@ public static class GatewayHost
         return false;
     }
 
-    /// <summary>Stops gateways started from this install (and their agent workers).</summary>
+    /// <summary>Stops the gateway started from this install (and its agent worker), never other copies.</summary>
     public static void Stop()
     {
-        var exe = FindGatewayExe();
+        if (FindGatewayExe() is not { } exe)
+            return;
         foreach (var p in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(ExeName)))
         {
             using (p)
             {
                 try
                 {
-                    if (exe is null || string.Equals(p.MainModule?.FileName, exe, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(p.MainModule?.FileName, exe, StringComparison.OrdinalIgnoreCase))
                         p.Kill(entireProcessTree: true);
                 }
                 catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
