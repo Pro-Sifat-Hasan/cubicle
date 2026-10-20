@@ -20,7 +20,7 @@
             <StackPanel>
                 <TextBlock Text="{Binding Greeting}" Style="{StaticResource PageTitle}" />
                 <TextBlock Style="{StaticResource PageSubtitle}" Margin="0,6,0,18"
-                           Text="Describe the outcome you want. Your Chief of Staff plans it, hands each part to the right specialist, and brings you the finished result." />
+                           Text="Describe the outcome you want. Your main agent plans it, hands each part to the right teammate, and brings you the finished result. Or give it straight to one agent." />
 
                 <!-- Stats -->
                 <UniformGrid Columns="3" Margin="0,0,0,18">
@@ -53,8 +53,8 @@
                                  AcceptsReturn="True" TextWrapping="Wrap" MinHeight="76" MaxHeight="180" VerticalScrollBarVisibility="Auto"
                                  controls:Placeholder.Text="Add details: context, links, tone, deadline… (optional)" />
                         <DockPanel Margin="0,12,0,0" LastChildFill="False">
-                            <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center"
-                                       Text="Tip: be specific about the result you want." />
+                            <ComboBox ItemsSource="{Binding AssignTargets}" SelectedItem="{Binding AssignTo}" DisplayMemberPath="Label"
+                                      MinWidth="200" MaxWidth="300" ToolTip="Who gets this assignment" />
                             <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Command="{Binding AssignCommand}" IsDefault="True">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Assign" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
@@ -76,7 +76,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-                                    CornerRadius="999" Padding="4,4,14,4" Margin="0,0,8,8" ToolTip="{Binding Skills}">
+                                    CornerRadius="999" Padding="4,4,14,4" Margin="0,0,8,8" ToolTip="{Binding Description}">
                                 <StackPanel Orientation="Horizontal">
                                     <Grid>
                                         <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource AvatarTemplate}" Width="30" Height="30"></ContentPresenter>

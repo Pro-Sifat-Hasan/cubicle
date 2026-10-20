@@ -128,10 +128,22 @@
                             </Border>
                         </Grid>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Routines">
+                    <ListBoxItem ToolTip="Agents">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource NavIcon}" Text="&#xE716;" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Agents" />
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem ToolTip="Automations">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xE8EE;" />
-                            <TextBlock Style="{StaticResource NavLabel}" Text="Routines" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Automations" />
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem ToolTip="Tools &amp; skills">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource NavIcon}" Text="&#xE90F;" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Tools &amp; skills" />
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem ToolTip="Memory">
@@ -179,7 +191,7 @@
                 <Border Background="{DynamicResource AccentSoftBrush}" Padding="20,10"
                         Visibility="{Binding Ai.IsDemo, Converter={StaticResource BoolToVisibility}}">
                     <DockPanel>
-                        <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Content="Connect an AI" Command="{Binding NavigateCommand}" CommandParameter="5" />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Content="Connect an AI" Command="{Binding NavigateCommand}" CommandParameter="7" />
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE945;" Margin="0,0,10,0" />
                         <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" TextTrimming="None"
                                    Text="Demo mode: your staff give sample answers until you connect an AI." />
@@ -195,7 +207,9 @@
                 </TabControl.ItemContainerStyle>
                 <TabItem><pages:TodayPage /></TabItem>
                 <TabItem><pages:InboxPage /></TabItem>
-                <TabItem><pages:RoutinesPage /></TabItem>
+                <TabItem><pages:AgentsPage /></TabItem>
+                <TabItem><pages:AutomationsPage /></TabItem>
+                <TabItem><pages:ToolsPage /></TabItem>
                 <TabItem><pages:MemoryPage /></TabItem>
                 <TabItem><pages:ActivityPage /></TabItem>
                 <TabItem><pages:SettingsPage /></TabItem>

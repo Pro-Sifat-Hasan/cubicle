@@ -12,15 +12,21 @@ namespace Cubicle.Desktop.ViewModels;
 /// <summary>
 /// State for the whole window. Keeps a live connection to the gateway: initial
 /// load, then incremental refreshes driven by the gateway's event stream.
-/// All members run on the UI thread.
+/// Each page with its own logic has a view model (Agents, Tools, Chat,
+/// Automations, AI settings); this one connects them. All members run on the UI thread.
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     public const string RepoUrl = "https://github.com/Pro-Sifat-Hasan/cubicle";
 
+    // Navigation rail order (MainWindow.xaml).
+    public const int TodaySection = 0, InboxSection = 1, AgentsSection = 2, AutomationsSection = 3,
+        ToolsSection = 4, MemorySection = 5, ActivitySection = 6, SettingsSection = 7;
+
     private readonly Uri _gatewayUri;
     private readonly CancellationTokenSource _life = new();
     private GatewayClient? _client;
+    private Catalog? _catalog;
     private bool _refreshQueued;
 
     /// <summary>Raised for things worth a desktop notification (title, message).</summary>
@@ -32,20 +38,36 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _gatewayUri = new Uri(string.IsNullOrWhiteSpace(url) ? CubiclePaths.DefaultGatewayUrl : url);
         _startWithWindows = AutoStart.IsEnabled;
         _theme = theme;
-        Ai = new AiSettingsViewModel(() => _client, message => ErrorText = message, (title, message) => Notify?.Invoke(title, message));
+        void ShowError(string message) => ErrorText = message;
+        void Notice(string title, string message) => Notify?.Invoke(title, message);
+        Ai = new AiSettingsViewModel(() => _client, ShowError, Notice);
+        AgentsPage = new AgentsViewModel(() => _client, ShowError, Notice);
+        Tools = new ToolsViewModel(() => _client, ShowError, Notice);
+        Chat = new ChatViewModel(() => _client, ShowError);
+        Automations = new AutomationsViewModel(() => _client, ShowError, Notice);
+        AgentsPage.Changed += QueueRefresh;
+        Tools.Changed += QueueRefresh;
+        Automations.Changed += QueueRefresh;
+        AgentsPage.ChatRequested += id =>
+        {
+            SelectedSection = InboxSection;
+            _ = Chat.OpenChatWithAsync(id);
+        };
     }
 
     public AiSettingsViewModel Ai { get; }
+    public AgentsViewModel AgentsPage { get; }
+    public ToolsViewModel Tools { get; }
+    public ChatViewModel Chat { get; }
+    public AutomationsViewModel Automations { get; }
 
-    public ObservableCollection<Employee> Staff { get; } = [];
+    public ObservableCollection<Agent> Staff { get; } = [];
     public ObservableCollection<AssignmentViewModel> Assignments { get; } = [];
     public ObservableCollection<SubtaskViewModel> SelectedSubtasks { get; } = [];
     public ObservableCollection<InboxItemViewModel> Inbox { get; } = [];
-    public ObservableCollection<RoutineViewModel> Routines { get; } = [];
     public ObservableCollection<ActivityItem> Activity { get; } = [];
     public ObservableCollection<MemoryViewModel> Memories { get; } = [];
-
-    public IReadOnlyList<string> RoutineKinds { get; } = ["Every weekday", "Every day", "Every N minutes"];
+    public ObservableCollection<AgentChoice> AssignTargets { get; } = [];
 
     // ---- connection / status ----
 
@@ -72,6 +94,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public string MainAgentName => Staff.FirstOrDefault(a => a.IsMain)?.Name ?? "Your main agent";
+
     public string VersionText { get; } =
         $"Cubicle {typeof(MainViewModel).Assembly.GetName().Version?.ToString(3)} · MIT licensed";
 
@@ -83,6 +107,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private string _newDescription = "";
 
+    /// <summary>Who gets the assignment: the main agent (empty id) or one agent directly.</summary>
+    [ObservableProperty] private AgentChoice? _assignTo;
+
     // ---- memory composer ----
 
     [ObservableProperty]
@@ -93,17 +120,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private AssignmentViewModel? _selectedAssignment;
     [ObservableProperty] private TaskDetail? _selectedDetail;
-
-    // ---- routine composer ----
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(CreateRoutineCommand))]
-    private string _routineTitle = "";
-
-    [ObservableProperty] private string _routineDescription = "";
-    [ObservableProperty] private int _routineKind;
-    [ObservableProperty] private string _routineTime = "09:00";
-    [ObservableProperty] private string _routineEveryMinutes = "60";
 
     // ---- settings & layout ----
 
@@ -125,9 +141,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public string ThemeGlyph => Theme switch
     {
-        ThemeService.LightMode => "",
-        ThemeService.DarkMode => "",
-        _ => "",
+        ThemeService.LightMode => "",
+        ThemeService.DarkMode => "",
+        _ => "",
     };
 
     public string ThemeTooltip => $"Theme: {Theme} (click to change)";
@@ -168,6 +184,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
                 _client?.Dispose();
                 _client = new GatewayClient(_gatewayUri, token);
+                _catalog = await _client.GetCatalogAsync(ct);
                 await RefreshAllAsync();
                 await Ai.LoadAsync();
                 IsConnected = true;
@@ -194,6 +211,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         switch (evt.Type)
         {
+            case "task.progress":
+                Chat.OnProgress(evt.Data);
+                return; // frequent and cosmetic: no full refresh
+            case "conversation.updated":
+                Chat.OnConversationUpdated(evt.Data);
+                break;
             case "assignment.done":
                 Notify?.Invoke("Done ✅", evt.Data.GetProperty("title").GetString() ?? "An assignment is finished.");
                 break;
@@ -230,17 +253,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task RefreshAllAsync()
     {
-        if (_client is null)
+        if (_client is null || _catalog is null)
             return;
         var c = _client;
         var statusTask = c.GetStatusAsync();
-        var staffTask = c.GetEmployeesAsync();
+        var agentsTask = c.GetAgentsAsync();
         var assignmentsTask = c.GetAssignmentsAsync(100);
         var inboxTask = c.GetInboxAsync("open");
         var routinesTask = c.GetRoutinesAsync();
         var activityTask = c.GetActivityAsync(150);
         var memoriesTask = c.GetMemoriesAsync();
-        await Task.WhenAll(statusTask, staffTask, assignmentsTask, inboxTask, routinesTask, activityTask, memoriesTask);
+        var conversationsTask = c.GetConversationsAsync();
+        var serversTask = c.GetMcpServersAsync();
+        var skillsTask = c.GetSkillsAsync();
+        var pluginsTask = c.GetPluginsAsync();
+        var secretsTask = c.GetSecretNamesAsync();
+        await Task.WhenAll(statusTask, agentsTask, assignmentsTask, inboxTask, routinesTask, activityTask, memoriesTask,
+            conversationsTask, serversTask, skillsTask, pluginsTask, secretsTask);
 
         var status = statusTask.Result;
         BreakerOpen = status.BreakerOpen;
@@ -251,11 +280,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ? $"{status.TokensToday:N0} / {status.DailyTokenBudget:N0} tokens today"
             : $"{status.TokensToday:N0} tokens today";
 
-        Replace(Staff, staffTask.Result);
-        var names = staffTask.Result.ToDictionary(e => e.Id, e => e.Name);
+        var agents = agentsTask.Result;
+        Replace(Staff, agents);
+        OnPropertyChanged(nameof(MainAgentName));
+        var names = agents.ToDictionary(e => e.Id, e => e.Name);
+        UpdateAssignTargets(agents);
+
+        AgentsPage.Load(agents, _catalog, serversTask.Result, skillsTask.Result);
+        Tools.Load(_catalog, serversTask.Result, skillsTask.Result, pluginsTask.Result, agents, secretsTask.Result);
+        Chat.Load(conversationsTask.Result, agents);
+        Automations.Load(routinesTask.Result, agents);
 
         var selectedId = SelectedAssignment?.Task.Id;
-        Replace(Assignments, assignmentsTask.Result.Select(t => new AssignmentViewModel(t)));
+        Replace(Assignments, assignmentsTask.Result.Select(t => new AssignmentViewModel(t, names.GetValueOrDefault(t.Assignee, t.Assignee))));
         SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == selectedId) ?? SelectedAssignment;
 
         // Keep half-typed answers when the inbox refreshes.
@@ -266,7 +303,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }));
         OnPropertyChanged(nameof(OpenQuestions));
 
-        Replace(Routines, routinesTask.Result.Select(r => new RoutineViewModel(r, ToggleRoutineAsync, DeleteRoutineAsync)));
         Replace(Activity, activityTask.Result);
         Replace(Memories, memoriesTask.Result.Select(m => new MemoryViewModel(m,
             string.IsNullOrEmpty(m.EmployeeId) ? "Added by you" : $"Learned by {names.GetValueOrDefault(m.EmployeeId, m.EmployeeId)}",
@@ -274,6 +310,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (SelectedAssignment is not null)
             await LoadDetailAsync(SelectedAssignment.Task.Id, names);
+    }
+
+    private void UpdateAssignTargets(IReadOnlyList<Agent> agents)
+    {
+        var pick = AssignTo?.Id ?? "";
+        var main = agents.FirstOrDefault(a => a.IsMain);
+        AssignTargets.Clear();
+        AssignTargets.Add(new AgentChoice("", $"{main?.Name ?? "Main agent"} · plans it with the team"));
+        foreach (var a in agents.Where(a => a.Enabled && !a.IsMain))
+            AssignTargets.Add(new AgentChoice(a.Id, $"{a.Name} · {(string.IsNullOrEmpty(a.Title) ? "Agent" : a.Title)} (alone)"));
+        AssignTo = AssignTargets.FirstOrDefault(t => t.Id == pick) ?? AssignTargets[0];
     }
 
     partial void OnSelectedAssignmentChanged(AssignmentViewModel? value)
@@ -305,7 +352,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanAssign))]
     private Task AssignAsync() => SafeAsync(async () =>
     {
-        var task = await _client!.CreateAssignmentAsync(NewTitle.Trim(), NewDescription.Trim());
+        var target = string.IsNullOrEmpty(AssignTo?.Id) ? null : AssignTo.Id;
+        var task = await _client!.CreateAssignmentAsync(NewTitle.Trim(), NewDescription.Trim(), target);
         NewTitle = NewDescription = "";
         await RefreshAllAsync();
         SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == task.Id);
@@ -323,41 +371,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         await _client!.AnswerAsync(item.Item.Id, item.AnswerText.Trim());
         Inbox.Remove(item);
         OnPropertyChanged(nameof(OpenQuestions));
-    });
-
-    private bool CanCreateRoutine() => !string.IsNullOrWhiteSpace(RoutineTitle);
-
-    [RelayCommand(CanExecute = nameof(CanCreateRoutine))]
-    private Task CreateRoutineAsync() => SafeAsync(async () =>
-    {
-        string schedule;
-        if (RoutineKind == 2)
-        {
-            if (!int.TryParse(RoutineEveryMinutes, out var minutes) || minutes < 5)
-                throw new FormatException("Interval must be a whole number of minutes, at least 5.");
-            schedule = Schedules.Every(TimeSpan.FromMinutes(minutes));
-        }
-        else
-        {
-            if (!TimeOnly.TryParse(RoutineTime, out var at))
-                throw new FormatException("Time must look like 09:00.");
-            schedule = RoutineKind == 0 ? Schedules.Weekdays(at) : Schedules.Daily(at);
-        }
-        await _client!.CreateRoutineAsync(RoutineTitle.Trim(), RoutineDescription.Trim(), schedule);
-        RoutineTitle = RoutineDescription = "";
-        await RefreshAllAsync();
-    });
-
-    private Task ToggleRoutineAsync(RoutineViewModel r, bool enabled) => SafeAsync(async () =>
-    {
-        await _client!.SetRoutineEnabledAsync(r.Routine.Id, enabled);
-        await RefreshAllAsync();
-    });
-
-    private Task DeleteRoutineAsync(RoutineViewModel r) => SafeAsync(async () =>
-    {
-        await _client!.DeleteRoutineAsync(r.Routine.Id);
-        Routines.Remove(r);
     });
 
     private bool CanAddMemory() => !string.IsNullOrWhiteSpace(NewMemory);
@@ -388,11 +401,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         if (SelectedAssignment is null)
             return;
-        var folder = Path.Combine(CubiclePaths.WorkspaceDirectory, SelectedAssignment.Task.Id);
+        OpenWorkspace(SelectedAssignment.Task.Id, "No files were saved for this assignment.");
+    }
+
+    /// <summary>Opens the folder where an agent saved files during the open chat.</summary>
+    [RelayCommand]
+    private void OpenChatFiles()
+    {
+        if (Chat.Selected is { } c)
+            OpenWorkspace(c.Conversation.Id, "No files were saved in this chat yet.");
+    }
+
+    private void OpenWorkspace(string id, string missing)
+    {
+        var folder = Path.Combine(CubiclePaths.WorkspaceDirectory, id);
         if (Directory.Exists(folder))
             Open(folder);
         else
-            ErrorText = "No files were saved for this assignment.";
+            ErrorText = missing;
     }
 
     [RelayCommand]
