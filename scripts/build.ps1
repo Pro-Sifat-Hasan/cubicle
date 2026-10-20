@@ -80,7 +80,9 @@ without touching it. Delete this file to use the normal per-user data folder.
 "@ | Set-Content -Encoding utf8 (Join-Path $portableApp "portable.txt")
 $zip = Join-Path $Dist "Cubicle-Portable-$Version-win-x64.zip"
 if (Test-Path $zip) { Remove-Item -Force $zip }
-Compress-Archive -Path $portableApp -DestinationPath $zip -CompressionLevel Optimal
+# System.IO.Compression is faster and more reliable than Compress-Archive on large trees.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($portableRoot, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 
 if ($SkipInstaller) {
     Write-Host "`nStaged build in $Stage" -ForegroundColor Green
