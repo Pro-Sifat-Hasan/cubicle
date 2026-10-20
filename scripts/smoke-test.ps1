@@ -21,13 +21,12 @@ if ($LASTEXITCODE) { throw "go build failed" }
 # Let the gateway supervise the worker straight from source.
 @{
     worker_command = "uv"
-    worker_args    = @("run", "--project", (Join-Path $Root "agents"), "cubicle-agents", "run")
+    worker_args    = @("run", "--project", (Join-Path $Root "agents"), "cubicle-agents")
 } | ConvertTo-Json | Set-Content -Encoding ascii (Join-Path $Home_ "config.json")
 
 $env:CUBICLE_HOME = $Home_
 $env:CUBICLE_ADDR = "127.0.0.1:$Port"
-$env:CUBICLE_PROVIDER = "demo"
-Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue  # no keys stored: the office runs in demo mode
 
 $proc = Start-Process $gatewayExe -ArgumentList "serve" -PassThru -WindowStyle Hidden `
     -RedirectStandardError (Join-Path $Home_ "stderr.log") -RedirectStandardOutput (Join-Path $Home_ "stdout.log")
@@ -58,6 +57,11 @@ try {
 
     if ($detail.status -ne "done") { throw "assignment ended as '$($detail.status)': $($detail.error)" }
     Write-Host "`nRESULT:`n$($detail.result)`n" -ForegroundColor Green
+
+    # Live model listing runs the worker in "models" mode; with no Ollama server it must report a clean error.
+    $models = Invoke-RestMethod "$Base/api/v1/providers/ollama/models" -Headers $h -TimeoutSec 90
+    if (-not ($models.live -or $models.error)) { throw "model listing did not reach the worker" }
+    Write-Host "Model listing via worker: live=$($models.live) error='$($models.error)'"
     Write-Host "SMOKE TEST PASSED" -ForegroundColor Green
 }
 catch {
