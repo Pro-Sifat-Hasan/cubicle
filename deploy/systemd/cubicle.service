@@ -1,0 +1,37 @@
+# Linux server install (no Docker):
+#   sudo useradd --system --create-home --home-dir /var/lib/cubicle cubicle
+#   sudo install -m 0755 cubicle-gateway /usr/local/bin/
+#   sudo pip install ./agents            # provides the `cubicle-agents` command
+#   sudo cp deploy/systemd/cubicle.service /etc/systemd/system/
+#   sudo systemctl enable --now cubicle
+[Unit]
+Description=Cubicle - personal AI staff (gateway + agents)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=cubicle
+Group=cubicle
+Environment=CUBICLE_HOME=/var/lib/cubicle
+Environment=CUBICLE_WORKER_COMMAND=/usr/local/bin/cubicle-agents
+ExecStart=/usr/local/bin/cubicle-gateway serve
+Restart=always
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cubicle
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
