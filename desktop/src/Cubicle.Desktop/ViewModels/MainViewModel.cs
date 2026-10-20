@@ -31,7 +31,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var url = Environment.GetEnvironmentVariable("CUBICLE_GATEWAY_URL");
         _gatewayUri = new Uri(string.IsNullOrWhiteSpace(url) ? CubiclePaths.DefaultGatewayUrl : url);
         _startWithWindows = AutoStart.IsEnabled;
+        Ai = new AiSettingsViewModel(() => _client, message => ErrorText = message, (title, message) => Notify?.Invoke(title, message));
     }
+
+    public AiSettingsViewModel Ai { get; }
 
     public ObservableCollection<Employee> Staff { get; } = [];
     public ObservableCollection<AssignmentViewModel> Assignments { get; } = [];
@@ -39,7 +42,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<InboxItemViewModel> Inbox { get; } = [];
     public ObservableCollection<RoutineViewModel> Routines { get; } = [];
     public ObservableCollection<ActivityItem> Activity { get; } = [];
-    public ObservableCollection<string> ConfiguredSecrets { get; } = [];
+    public ObservableCollection<MemoryViewModel> Memories { get; } = [];
 
     public IReadOnlyList<string> RoutineKinds { get; } = ["Every weekday", "Every day", "Every N minutes"];
 
@@ -49,7 +52,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _connectionText = "Starting your office…";
     [ObservableProperty] private bool _breakerOpen;
     [ObservableProperty] private string _usageText = "";
-    [ObservableProperty] private bool _needsApiKey;
     [ObservableProperty] private int _selectedSection;
     [ObservableProperty] private string? _errorText;
 
@@ -62,6 +64,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private string _newTitle = "";
 
     [ObservableProperty] private string _newDescription = "";
+
+    // ---- memory composer ----
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AddMemoryCommand))]
+    private string _newMemory = "";
 
     // ---- selected assignment ----
 
@@ -112,6 +120,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 _client?.Dispose();
                 _client = new GatewayClient(_gatewayUri, token);
                 await RefreshAllAsync();
+                await Ai.LoadAsync();
                 IsConnected = true;
                 ConnectionText = "Office open";
 
@@ -181,8 +190,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var inboxTask = c.GetInboxAsync("open");
         var routinesTask = c.GetRoutinesAsync();
         var activityTask = c.GetActivityAsync(150);
-        var secretsTask = c.GetSecretNamesAsync();
-        await Task.WhenAll(statusTask, staffTask, assignmentsTask, inboxTask, routinesTask, activityTask, secretsTask);
+        var memoriesTask = c.GetMemoriesAsync();
+        await Task.WhenAll(statusTask, staffTask, assignmentsTask, inboxTask, routinesTask, activityTask, memoriesTask);
 
         var status = statusTask.Result;
         BreakerOpen = status.BreakerOpen;
@@ -207,8 +216,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         Replace(Routines, routinesTask.Result.Select(r => new RoutineViewModel(r, ToggleRoutineAsync, DeleteRoutineAsync)));
         Replace(Activity, activityTask.Result);
-        Replace(ConfiguredSecrets, secretsTask.Result);
-        NeedsApiKey = !secretsTask.Result.Contains("ANTHROPIC_API_KEY");
+        Replace(Memories, memoriesTask.Result.Select(m => new MemoryViewModel(m,
+            string.IsNullOrEmpty(m.EmployeeId) ? "Added by you" : $"Learned by {names.GetValueOrDefault(m.EmployeeId, m.EmployeeId)}",
+            DeleteMemoryAsync)));
 
         if (SelectedAssignment is not null)
             await LoadDetailAsync(SelectedAssignment.Task.Id, names);
@@ -298,14 +308,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Routines.Remove(r);
     });
 
-    /// <summary>Called from the view with the PasswordBox contents (never bound or stored in memory longer than needed).</summary>
-    public Task SaveApiKeyAsync(string key) => SafeAsync(async () =>
+    private bool CanAddMemory() => !string.IsNullOrWhiteSpace(NewMemory);
+
+    [RelayCommand(CanExecute = nameof(CanAddMemory))]
+    private Task AddMemoryAsync() => SafeAsync(async () =>
     {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new FormatException("Paste your Anthropic API key first.");
-        await _client!.SetSecretAsync("ANTHROPIC_API_KEY", key.Trim());
+        await _client!.AddMemoryAsync(NewMemory.Trim());
+        NewMemory = "";
         await RefreshAllAsync();
-        Notify?.Invoke("API key saved", "Your staff are restarting with real model access.");
+    });
+
+    private Task DeleteMemoryAsync(MemoryViewModel m) => SafeAsync(async () =>
+    {
+        await _client!.DeleteMemoryAsync(m.Memory.Id);
+        Memories.Remove(m);
     });
 
     [RelayCommand]
@@ -313,6 +329,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void OpenDataFolder() => Open(CubiclePaths.Home);
+
+    /// <summary>Opens the folder where the staff saved files for the selected assignment.</summary>
+    [RelayCommand]
+    private void OpenAssignmentFiles()
+    {
+        if (SelectedAssignment is null)
+            return;
+        var folder = Path.Combine(CubiclePaths.WorkspaceDirectory, SelectedAssignment.Task.Id);
+        if (Directory.Exists(folder))
+            Open(folder);
+        else
+            ErrorText = "No files were saved for this assignment.";
+    }
 
     [RelayCommand]
     private void OpenRepo() => Open(RepoUrl);

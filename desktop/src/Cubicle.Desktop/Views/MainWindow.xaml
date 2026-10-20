@@ -66,6 +66,9 @@
                         <TextBlock Text="⟳  Routines" FontSize="14" />
                     </ListBoxItem>
                     <ListBoxItem Padding="10,9">
+                        <TextBlock Text="✦  Memory" FontSize="14" />
+                    </ListBoxItem>
+                    <ListBoxItem Padding="10,9">
                         <TextBlock Text="☰  Activity" FontSize="14" />
                     </ListBoxItem>
                     <ListBoxItem Padding="10,9">
@@ -96,11 +99,11 @@
                     </DockPanel>
                 </Border>
                 <Border Background="{StaticResource AmberSoftBrush}" Padding="16,10"
-                        Visibility="{Binding NeedsApiKey, Converter={StaticResource BoolToVisibility}}">
+                        Visibility="{Binding Ai.IsDemo, Converter={StaticResource BoolToVisibility}}">
                     <DockPanel>
-                        <Button DockPanel.Dock="Right" Content="Add API key" Command="{Binding NavigateCommand}" CommandParameter="4" />
+                        <Button DockPanel.Dock="Right" Content="Choose AI provider" Command="{Binding NavigateCommand}" CommandParameter="5" />
                         <TextBlock VerticalAlignment="Center" TextWrapping="Wrap"
-                                   Text="🧪  Demo mode: your staff are using sample answers. Add an Anthropic API key to put them to real work." />
+                                   Text="🧪  Demo mode: your staff are using sample answers. Connect Claude, OpenAI, Gemini, a local model or your Claude subscription to put them to real work." />
                     </DockPanel>
                 </Border>
             </StackPanel>
@@ -216,7 +219,10 @@
                                                Visibility="{Binding SelectedDetail, Converter={StaticResource NotNullToCollapsed}}" />
                                     <DockPanel Visibility="{Binding SelectedDetail, Converter={StaticResource NullToVisibility}}">
                                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                                            <Button DockPanel.Dock="Right" Content="Cancel" Command="{Binding CancelSelectedCommand}" />
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                                                <Button Content="Open files" Command="{Binding OpenAssignmentFilesCommand}" Margin="0,0,8,0" />
+                                                <Button Content="Cancel" Command="{Binding CancelSelectedCommand}" />
+                                            </StackPanel>
                                             <StackPanel>
                                                 <TextBlock Text="{Binding SelectedDetail.Title}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                 <Border Style="{StaticResource StatusPill}" Tag="{Binding SelectedDetail.Status}" Margin="0,6,0,0">
@@ -352,6 +358,46 @@
                     </ScrollViewer>
                 </TabItem>
 
+                <!-- ===== Memory ===== -->
+                <TabItem>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="28,24" MaxWidth="900" HorizontalAlignment="Left">
+                            <TextBlock Text="Memory" Style="{StaticResource PageTitle}" />
+                            <TextBlock Style="{StaticResource PageSubtitle}"
+                                       Text="What your staff know about you: preferences, people, projects. They learn as they work, and you can teach them directly. Every employee sees this." />
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Remember" Style="{StaticResource AccentButton}" Margin="10,0,0,0"
+                                            Command="{Binding AddMemoryCommand}" />
+                                    <TextBox Text="{Binding NewMemory, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="e.g. I write in British English and sign emails as 'Sam'." />
+                                </DockPanel>
+                            </Border>
+                            <TextBlock Style="{StaticResource Muted}" Text="Nothing remembered yet."
+                                       Visibility="{Binding Memories.Count, Converter={StaticResource ZeroToVisibility}}" />
+                            <ItemsControl ItemsSource="{Binding Memories}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="14,10">
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right" Content="Forget" Command="{Binding DeleteCommand}" VerticalAlignment="Center" />
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Content}" TextWrapping="Wrap" />
+                                                    <TextBlock FontSize="12" Style="{StaticResource Muted}" Margin="0,3,0,0">
+                                                        <Run Text="{Binding Source, Mode=OneWay}" />
+                                                        <Run Text=" · " />
+                                                        <Run Text="{Binding Added, Mode=OneWay}" />
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
                 <!-- ===== Activity ===== -->
                 <TabItem>
                     <DockPanel Margin="28,24">
@@ -380,20 +426,76 @@
                             <TextBlock Text="Settings" Style="{StaticResource PageTitle}" />
                             <TextBlock Style="{StaticResource PageSubtitle}" Text="Everything stays on this PC. Keys are encrypted with Windows DPAPI and never shown again." />
 
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,14" DataContext="{Binding Ai}">
                                 <StackPanel>
-                                    <TextBlock Text="Anthropic API key" Style="{StaticResource SectionTitle}" />
-                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
-                                               Text="Your staff use Claude. Create a key at console.anthropic.com and paste it here. Saving restarts your staff with the new key." />
+                                    <TextBlock Text="AI provider" Style="{StaticResource SectionTitle}" />
+                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
+                                               Text="Choose the AI your staff work with. Saving restarts them with the new setup." />
+
+                                    <TextBlock Text="Provider" FontWeight="SemiBold" Margin="0,0,0,4" />
+                                    <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding SelectedProvider}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Name}" />
+                                                    <TextBlock Text="  ✓ connected" Foreground="{StaticResource MintBrush}"
+                                                               Visibility="{Binding Configured, Converter={StaticResource BoolToVisibility}}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <TextBlock Text="{Binding SelectedProvider.Description}" Style="{StaticResource Muted}" FontSize="12" Margin="0,6,0,12" />
+
+                                    <StackPanel Visibility="{Binding SelectedProvider.NeedsKey, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,12">
+                                        <TextBlock FontWeight="SemiBold" Margin="0,0,0,4">
+                                            <Run Text="API key" />
+                                            <Run Text="{Binding SelectedProvider.SecretName, Mode=OneWay}" FontWeight="Normal" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                        </TextBlock>
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="Save key" Margin="10,0,0,0" Click="SaveApiKey_Click" />
+                                            <PasswordBox x:Name="ApiKeyBox" />
+                                        </DockPanel>
+                                        <TextBlock Text="Stored encrypted on this PC and never shown again." Style="{StaticResource Muted}" FontSize="12" Margin="0,4,0,0" />
+                                    </StackPanel>
+
+                                    <StackPanel Visibility="{Binding SelectedProvider.BaseUrlEditable, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,12">
+                                        <TextBlock Text="Server URL" FontWeight="SemiBold" Margin="0,0,0,4" />
+                                        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+
+                                    <TextBlock Text="Model" FontWeight="SemiBold" Margin="0,0,0,4" />
                                     <DockPanel>
-                                        <Button DockPanel.Dock="Right" Content="Save key" Style="{StaticResource AccentButton}" Margin="10,0,0,0"
-                                                Click="SaveApiKey_Click" />
-                                        <PasswordBox x:Name="ApiKeyBox" />
+                                        <Button DockPanel.Dock="Right" Content="Test connection" Margin="10,0,0,0" Command="{Binding TestConnectionCommand}" />
+                                        <ComboBox IsEditable="True" ItemsSource="{Binding Models}" Text="{Binding Model, UpdateSourceTrigger=PropertyChanged}" />
                                     </DockPanel>
-                                    <TextBlock Margin="0,10,0,0" FontSize="12" Style="{StaticResource Muted}">
-                                        <Run Text="Configured secrets: " />
-                                        <Run Text="{Binding ConfiguredSecrets.Count, Mode=OneWay}" />
-                                    </TextBlock>
+                                    <TextBlock Text="{Binding ConnectionStatus}" FontSize="12" Margin="0,6,0,12" TextWrapping="Wrap"
+                                               Visibility="{Binding ConnectionStatus, Converter={StaticResource NullToVisibility}}" />
+
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Effort" FontWeight="SemiBold" Margin="0,0,0,4" />
+                                            <ComboBox ItemsSource="{Binding Efforts}" SelectedItem="{Binding Effort}"
+                                                      ToolTip="Higher effort means more careful work but more tokens. Used by Claude models." />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Daily token budget" FontWeight="SemiBold" Margin="0,0,0,4" />
+                                            <TextBox Text="{Binding DailyBudget, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="Work pauses when today's usage reaches this. 0 = unlimited, empty = default." />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <TextBlock Text="Your name" FontWeight="SemiBold" Margin="0,0,0,4" />
+                                    <TextBox Text="{Binding OwnerName, UpdateSourceTrigger=PropertyChanged}" ToolTip="How your staff address you." Margin="0,0,0,12" />
+
+                                    <CheckBox IsChecked="{Binding WebAccess}" Content="Allow web search and browsing" Margin="0,0,0,14" />
+
+                                    <Button Content="Save AI settings" Style="{StaticResource AccentButton}" HorizontalAlignment="Left"
+                                            Command="{Binding SaveCommand}" />
                                 </StackPanel>
                             </Border>
 

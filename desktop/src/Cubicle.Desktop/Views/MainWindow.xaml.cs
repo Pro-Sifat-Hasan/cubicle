@@ -15,6 +15,6 @@ public partial class MainWindow : Window
             return;
         var key = ApiKeyBox.Password;
         ApiKeyBox.Clear();
-        await vm.SaveApiKeyAsync(key);
+        await vm.Ai.SaveKeyAsync(key);
     }
 }
