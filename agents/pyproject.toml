@@ -9,6 +9,7 @@ authors = [{ name = "Cubicle contributors" }]
 dependencies = [
     "anthropic>=1.15",
     "httpx>=0.27",
+    "openai>=1.100",
 ]
 
 [project.scripts]
