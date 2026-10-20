@@ -283,11 +283,15 @@ func (s *Store) UpdateAgent(ctx context.Context, in Agent) (*Agent, error) {
 		if err := NormalizeAgent(&in); err != nil {
 			return err
 		}
+		now := s.ms()
 		_, err = tx.ExecContext(ctx, `UPDATE agents SET name=?, title=?, avatar=?, description=?, instructions=?, model=?,
 			effort=?, tools=?, mcp_servers=?, skills=?, team=?, enabled=?, updated_at=? WHERE id = ?`,
 			in.Name, in.Title, in.Avatar, in.Description, in.Instructions, in.Model, in.Effort, listJSON(in.Tools),
-			listJSON(in.MCPServers), listJSON(in.Skills), listJSON(in.Team), boolInt(in.Enabled), s.ms(), in.ID)
-		return err
+			listJSON(in.MCPServers), listJSON(in.Skills), listJSON(in.Team), boolInt(in.Enabled), now, in.ID)
+		if err != nil || in.Enabled || !cur.Enabled {
+			return err
+		}
+		return handOverQueuedWork(ctx, tx, now, in.ID)
 	})
 	if err != nil {
 		return nil, err
@@ -352,8 +356,19 @@ func deleteAgentTx(ctx context.Context, tx *sql.Tx, now int64, id string) error 
 	if err := removeFromLists(ctx, tx, "agents", "team", id, now); err != nil {
 		return err
 	}
+	return handOverQueuedWork(ctx, tx, now, id)
+}
+
+// handOverQueuedWork moves an agent's queued work to the main agent when the
+// agent is removed or turned off. Unanswered chat messages are cancelled: a reply
+// from somebody else would be confusing.
+func handOverQueuedWork(ctx context.Context, tx *sql.Tx, now int64, id string) error {
 	var mainID string
 	if err := tx.QueryRowContext(ctx, `SELECT id FROM agents WHERE role = ?`, RoleMain).Scan(&mainID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status = ?, updated_at = ? WHERE assignee = ? AND status = ? AND kind = ?`,
+		StatusCancelled, now, id, StatusQueued, KindChat); err != nil {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `UPDATE tasks SET assignee = ?, updated_at = ? WHERE assignee = ? AND status = ?`,

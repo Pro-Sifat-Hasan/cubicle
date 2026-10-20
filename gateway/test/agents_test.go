@@ -114,6 +114,18 @@ func TestDeleteAgentCleansUpTeamsAndWork(t *testing.T) {
 	h.do("POST", "/api/v1/assignments", adminTok, map[string]string{"title": "x", "agent_id": "researcher"}, 400, nil)
 }
 
+func TestTurningAgentOffHandsOverQueuedWork(t *testing.T) {
+	h := newHarness(t)
+	var asg store.Task
+	h.do("POST", "/api/v1/assignments", adminTok, map[string]string{"title": "Draft", "agent_id": "writer"}, 201, &asg)
+	h.do("PUT", "/api/v1/agents/writer", adminTok, map[string]any{"enabled": false}, 200, nil)
+	var got api.TaskDetail
+	h.do("GET", "/api/v1/tasks/"+asg.ID, adminTok, nil, 200, &got)
+	if got.Assignee != "manager" {
+		t.Fatalf("queued work of a disabled agent should move to the main agent, got %s", got.Assignee)
+	}
+}
+
 func TestWorkerRosterResolvesExtensionsAndLongPolls(t *testing.T) {
 	h := newHarness(t)
 	var srv store.MCPServer
