@@ -30,7 +30,8 @@ class AnthropicLLM:
 
     def __init__(self, *, api_key: str = "", effort: str = "medium", max_output_tokens: int = 16000,
                  web_access: bool = True, client: Any = None) -> None:
-        self._client = client or anthropic.AsyncAnthropic(api_key=api_key or None)
+        # Extra retries ride out rate limits and transient overloads on long tasks.
+        self._client = client or anthropic.AsyncAnthropic(api_key=api_key or None, max_retries=4)
         self._effort = effort
         self._max_tokens = max_output_tokens
         self._web = web_access
@@ -60,6 +61,8 @@ class AnthropicLLM:
                 messages=messages,
                 thinking={"type": "adaptive"},
                 output_config=output_config,
+                # Cache the growing conversation prefix: each tool round re-reads it at a fraction of the cost.
+                cache_control={"type": "ephemeral"},
                 betas=[_FALLBACK_BETA],
                 fallbacks="default",
                 **kwargs,

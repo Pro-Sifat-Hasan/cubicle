@@ -22,7 +22,8 @@ class OpenAICompatibleLLM:
     def __init__(self, *, name: str, base_url: str, api_key: str = "", client: Any = None) -> None:
         self.name = name
         # Local servers such as Ollama ignore the key, but the SDK requires one.
-        self._client = client or openai.AsyncOpenAI(base_url=base_url or None, api_key=api_key or "not-needed")
+        self._client = client or openai.AsyncOpenAI(base_url=base_url or None, api_key=api_key or "not-needed",
+                                                    max_retries=4)
 
     async def run(self, *, system: str, prompt: str, model: str, toolbox: Toolbox | None = None,
                   json_schema: dict[str, Any] | None = None, workdir: Path | None = None) -> AgentResult:
