@@ -56,6 +56,20 @@ Cubicle after editing it.
 | `--background` | Start in the tray without opening the window (used by "Start with Windows") |
 | `CUBICLE_GATEWAY_URL` | Connect to a gateway other than `http://127.0.0.1:7878` |
 | `CUBICLE_GATEWAY_EXE` | Gateway binary to launch when none is running |
+| `CUBICLE_INSTANCE` | Run a second, independent copy (for example, a development build next to the installed app) |
+
+The appearance (Light, Dark or System) is saved in `desktop.json` in the data folder.
+
+## Portable mode
+
+The `Cubicle-Portable-<version>-win-x64.zip` release asset runs without installing. Unzip it
+anywhere and start `Cubicle.exe`. While `portable.txt` sits next to the exe, Cubicle:
+
+- keeps all its data in the `data` folder beside the exe,
+- serves the office on port `7879`, and
+- uses its own instance lock, so it runs alongside an installed copy without touching it.
+
+Delete `portable.txt` to make that copy use the normal data folder and port.
 
 ## Windows service
 

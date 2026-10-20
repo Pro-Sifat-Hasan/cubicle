@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Light and dark themes with a toggle (Light / Dark / System), plus a title bar that matches the theme.
+- A redesigned, responsive interface: a dashboard with stats, staff avatars, an assignment plan and rendered Markdown results, icon navigation that collapses on narrow windows, and placeholder hints.
+- A portable build (`Cubicle-Portable-<version>-win-x64.zip`) that runs without installing, alongside an installed copy.
+- Staff know today's date and check their work before delivering it.
+- Claude prompt caching and extra retries for transient API errors.
+
+### Fixed
+- Dark text on dark backgrounds, and the Windows accent colour (for example green) leaking into selections and the title bar.
+- A blurry app and tray icon at small sizes.
+- VS Code C# Dev Kit loading WPF's temporary project files.
+
 ## [0.1.0] - 2026-10-20
 
 The first public release.
