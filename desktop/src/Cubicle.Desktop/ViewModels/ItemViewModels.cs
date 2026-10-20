@@ -21,12 +21,27 @@ public sealed partial class InboxItemViewModel(InboxItem item, string employeeNa
     private Task SendAsync() => send(this);
 }
 
-public sealed partial class RoutineViewModel(Routine routine, Func<RoutineViewModel, bool, Task> toggle, Func<RoutineViewModel, Task> delete) : ObservableObject
+public sealed partial class RoutineViewModel(
+    Routine routine,
+    string who,
+    Func<RoutineViewModel, bool, Task> toggle,
+    Func<RoutineViewModel, Task> delete,
+    Action<RoutineViewModel> edit,
+    Func<RoutineViewModel, Task> runNow) : ObservableObject
 {
     public Routine Routine { get; } = routine;
     public string When => Schedules.Describe(Routine.Schedule);
+    public string Who { get; } = who;
     public string NextRun => Routine.Enabled ? $"Next: {Routine.NextRunAt.ToLocalTime():ddd dd MMM, HH:mm}" : "Paused";
     public string LastRun => Routine.LastRunAt is { Year: > 1 } last ? $"Last: {last.ToLocalTime():ddd dd MMM, HH:mm}" : "Never run yet";
+    public string LastStatus => Routine.LastStatus ?? "";
+    public string LastStatusLabel => string.IsNullOrEmpty(Routine.LastStatus) ? "" : StatusText.For(Routine.LastStatus);
+
+    [RelayCommand]
+    private void Edit() => edit(this);
+
+    [RelayCommand]
+    private Task RunNowAsync() => runNow(this);
 
     public bool Enabled
     {
@@ -53,13 +68,13 @@ public sealed partial class MemoryViewModel(Memory memory, string source, Func<M
     private Task DeleteAsync() => delete(this);
 }
 
-public sealed class AssignmentViewModel(TaskItem task)
+public sealed class AssignmentViewModel(TaskItem task, string assigneeName)
 {
     public TaskItem Task { get; } = task;
     public string Title => Task.Title;
     public string Status => Task.Status;
     public string StatusLabel => StatusText.For(Task.Status);
-    public string When => Task.CreatedAt.ToLocalTime().ToString("ddd dd MMM, HH:mm");
+    public string When => $"{Task.CreatedAt.ToLocalTime():ddd dd MMM, HH:mm} · {assigneeName}{(string.IsNullOrEmpty(Task.RoutineId) ? "" : " · automation")}";
 }
 
 public sealed class SubtaskViewModel(TaskItem task, string assigneeName)

@@ -86,7 +86,7 @@ func TestSettingsBudgetOverridesConfig(t *testing.T) {
 	h.do("PUT", "/api/v1/settings", adminTok, map[string]any{"provider": "demo", "daily_token_budget": 0}, 200, nil)
 	h.do("POST", "/internal/v1/usage", workerTok, map[string]any{"input_tokens": 5000, "output_tokens": 0}, 204, nil)
 	// Unlimited via settings: claims are still allowed (204 = no work, not 503).
-	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"employee_ids": []string{"manager"}}, 204, nil)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}}, 204, nil)
 }
 
 func TestProvidersReportConfiguredAndActive(t *testing.T) {

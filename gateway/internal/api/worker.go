@@ -12,72 +12,31 @@ func contextWithTimeout() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 10*time.Second)
 }
 
-func (s *Server) handleSyncEmployees(w http.ResponseWriter, r *http.Request) {
-	var list []store.Employee
-	if !decode(w, r, &list) {
-		return
-	}
-	if len(list) == 0 || len(list) > 50 {
-		writeErr(w, http.StatusBadRequest, "roster must contain 1-50 employees")
-		return
-	}
-	for _, e := range list {
-		if err := checkLen("id", e.ID, 64, true); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
-			return
-		}
-	}
-	if err := s.store.SyncEmployees(r.Context(), list); err != nil {
-		s.storeErr(w, err)
-		return
-	}
-	emps, _ := s.store.ListEmployees(r.Context())
-	s.hub.Publish("employees.synced", emps)
-	s.logActivity(r.Context(), "", "", "Your staff clocked in.")
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) handleEmployeeStatus(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Status        string `json:"status"`
-		CurrentTaskID string `json:"current_task_id"`
-	}
-	if !decode(w, r, &in) {
-		return
-	}
-	switch in.Status {
-	case "idle", "working", "waiting", "offline":
-	default:
-		writeErr(w, http.StatusBadRequest, "status must be idle, working, waiting or offline")
-		return
-	}
-	e, err := s.store.SetEmployeeStatus(r.Context(), r.PathValue("id"), in.Status, in.CurrentTaskID)
-	if err != nil {
-		s.storeErr(w, err)
-		return
-	}
-	s.hub.Publish("employee.updated", e)
-	writeJSON(w, http.StatusOK, e)
-}
-
 // ClaimResponse bundles everything an employee needs to work on a task.
 type ClaimResponse struct {
 	Task              *store.Task        `json:"task"`
 	Parent            *store.Task        `json:"parent,omitempty"`
 	DependencyResults []*store.Task      `json:"dependency_results"`
 	HumanAnswers      []*store.InboxItem `json:"human_answers"`
+	// History is the conversation so far, for chat tasks (oldest first).
+	History []*store.Message `json:"history"`
 }
 
 // handleClaim long-polls for up to 25s for a runnable task.
 func (s *Server) handleClaim(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		EmployeeIDs []string `json:"employee_ids"`
+		AgentIDs []string `json:"agent_ids"`
+		Lane     string   `json:"lane"` // work | chat | empty for both
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	if len(in.EmployeeIDs) == 0 || len(in.EmployeeIDs) > 50 {
-		writeErr(w, http.StatusBadRequest, "employee_ids must contain 1-50 ids")
+	if len(in.AgentIDs) == 0 || len(in.AgentIDs) > 50 {
+		writeErr(w, http.StatusBadRequest, "agent_ids must contain 1-50 ids")
+		return
+	}
+	if in.Lane != store.LaneAny && in.Lane != store.LaneWork && in.Lane != store.LaneChat {
+		writeErr(w, http.StatusBadRequest, "lane must be work or chat")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), s.LongPollWait)
@@ -88,7 +47,7 @@ func (s *Server) handleClaim(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		wait := s.hub.WaitC() // grab before claiming so no wake-up is missed
-		t, err := s.store.ClaimTask(r.Context(), in.EmployeeIDs)
+		t, err := s.store.ClaimTask(r.Context(), in.AgentIDs, in.Lane)
 		if err != nil {
 			s.storeErr(w, err)
 			return
@@ -108,7 +67,17 @@ func (s *Server) handleClaim(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) buildClaim(ctx context.Context, t *store.Task) ClaimResponse {
-	resp := ClaimResponse{Task: t, DependencyResults: []*store.Task{}, HumanAnswers: []*store.InboxItem{}}
+	resp := ClaimResponse{Task: t, DependencyResults: []*store.Task{}, HumanAnswers: []*store.InboxItem{}, History: []*store.Message{}}
+	if t.ConversationID != "" {
+		if msgs, err := s.store.Messages(ctx, t.ConversationID, 60); err == nil {
+			for _, m := range msgs {
+				if m.TaskID == t.ID && m.Role == store.MessageOwner {
+					break // later messages are newer than this request
+				}
+				resp.History = append(resp.History, m)
+			}
+		}
+	}
 	if t.ParentID != "" {
 		resp.Parent, _ = s.store.GetTask(ctx, t.ParentID)
 	}
@@ -161,8 +130,8 @@ func (s *Server) handleDelegate(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	for a := range assignees {
-		if ok, _ := s.store.EmployeeExists(r.Context(), a); !ok {
-			writeErr(w, http.StatusBadRequest, "unknown assignee: "+a)
+		if ok, _ := s.store.AgentIsActive(r.Context(), a); !ok {
+			writeErr(w, http.StatusBadRequest, "unknown or disabled assignee: "+a)
 			return
 		}
 	}
@@ -200,9 +169,12 @@ func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.publishTasks(changed...)
 	for _, t := range changed {
-		if t.Kind == store.KindAssignment {
+		switch t.Kind {
+		case store.KindAssignment:
 			s.hub.Publish("assignment.done", t)
 			s.logActivity(r.Context(), "", t.ID, "Done: "+t.Title)
+		case store.KindChat:
+			s.publishConversation(r, t.ConversationID)
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -221,6 +193,11 @@ func (s *Server) handleFail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.publishTasks(changed...)
+	for _, t := range changed {
+		if t.Kind == store.KindChat {
+			s.publishConversation(r, t.ConversationID)
+		}
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

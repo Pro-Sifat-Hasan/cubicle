@@ -1,5 +1,5 @@
 ; Cubicle Windows installer (Inno Setup 6).
-; Built by scripts/build.ps1:  ISCC /DAppVersion=0.1.0 /DStageDir=..\dist\stage installer\cubicle.iss
+; Built by scripts/build.ps1:  ISCC /DAppVersion=0.2.0 /DStageDir=..\build\package\stage installer\cubicle.iss
 ;
 ; Per-user install: no administrator prompt, installs in seconds, and the
 ; office runs under your own account (your data stays in %LOCALAPPDATA%\Cubicle).
@@ -8,7 +8,7 @@
   #define AppVersion "0.1.0"
 #endif
 #ifndef StageDir
-  #define StageDir "..\dist\stage"
+  #define StageDir "..\build\package\stage"
 #endif
 
 #define AppName "Cubicle"

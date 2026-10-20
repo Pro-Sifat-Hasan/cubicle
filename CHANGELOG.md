@@ -7,13 +7,24 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Agents page:** create agents, add them from 18 role templates in one click, and customise each one's instructions, model, effort, tools, MCP servers, skills and team. Choose the main agent, which plans assignments with its team. Changes apply without restarting.
+- **Chat in the Inbox:** talk to any agent, with live progress and replies that stream in. Agents can consult teammates, and the main agent can start a full assignment from a chat.
+- **MCP servers:** connect agents to apps and services (GitHub, files, browser, search and more) with presets or custom stdio and HTTP servers, encrypted secrets, and a live connection test.
+- **Skills and plugins:** SKILL.md skills that agents load when relevant (templates, an editor and file import), and plugins that install agents, MCP servers and skills together, including Claude Code plugin folders.
+- **Automations** (formerly Routines): send work to the main agent or any agent, weekly and one-off schedules, editing, Run now, and the last run's status.
+- Assign work straight to one agent from the Today page.
 - Light and dark themes with a toggle (Light / Dark / System), plus a title bar that matches the theme.
 - A redesigned, responsive interface: a dashboard with stats, staff avatars, an assignment plan and rendered Markdown results, icon navigation that collapses on narrow windows, and placeholder hints.
 - A portable build (`Cubicle-Portable-<version>-win-x64.zip`) that runs without installing, alongside an installed copy.
 - Staff know today's date and check their work before delivering it.
 - Claude prompt caching and extra retries for transient API errors.
 
+### Changed
+- The agent worker runs on Pydantic AI: one engine for every API provider, validated plans that are retried when invalid, streaming, and usage limits.
+- Agents are stored by the gateway and edited in the app; `staff.json` is only imported once on upgrade, and `cubicle-agents init-staff` and `roster` were removed.
+
 ### Fixed
+- Work in progress when the worker restarted (for example after saving settings) stayed "Working" forever; it is now resumed.
 - Dark text on dark backgrounds, and the Windows accent colour (for example green) leaking into selections and the title bar.
 - A blurry app and tray icon at small sizes.
 - VS Code C# Dev Kit loading WPF's temporary project files.

@@ -1,5 +1,5 @@
-// Package store persists the office state (employees, tasks, inbox, activity,
-// usage, encrypted secrets) in a single SQLite file. It uses a pure-Go driver,
+// Package store persists the office state (agents, tasks, inbox, conversations,
+// extensions, activity, usage, encrypted secrets) in a single SQLite file. It uses a pure-Go driver,
 // so the gateway builds without cgo and ships as one static binary.
 package store
 
@@ -36,21 +36,10 @@ const (
 	KindAssignment = "assignment" // top-level request from a human, handled by the manager
 	KindSubtask    = "subtask"    // delegated piece of work for a specialist
 	KindSynthesis  = "synthesis"  // manager's final roll-up once all subtasks are done
+	KindChat       = "chat"       // one reply in a conversation with an agent
 )
 
 const schema = `
-CREATE TABLE IF NOT EXISTS employees (
-	id TEXT PRIMARY KEY,
-	name TEXT NOT NULL,
-	title TEXT NOT NULL,
-	role TEXT NOT NULL,
-	avatar TEXT NOT NULL DEFAULT '',
-	model TEXT NOT NULL DEFAULT '',
-	skills TEXT NOT NULL DEFAULT '',
-	status TEXT NOT NULL DEFAULT 'offline',
-	current_task_id TEXT NOT NULL DEFAULT '',
-	updated_at INTEGER NOT NULL
-);
 CREATE TABLE IF NOT EXISTS tasks (
 	id TEXT PRIMARY KEY,
 	parent_id TEXT NOT NULL DEFAULT '',
@@ -114,11 +103,54 @@ func Open(path string) (*Store, error) {
 	// One connection serialises writes and removes SQLITE_BUSY races; the
 	// workload (a handful of agents) is far below what this can sustain.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema + routinesSchema + settingsSchema + memoriesSchema); err != nil {
+	s := &Store{db: db, now: time.Now}
+	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	return &Store{db: db, now: time.Now}, nil
+	return s, nil
+}
+
+func (s *Store) migrate() error {
+	if _, err := s.db.Exec(schema + routinesSchema + settingsSchema + memoriesSchema + agentsSchema +
+		extensionsSchema + chatSchema); err != nil {
+		return err
+	}
+	// Columns added after the first release. SQLite has no ADD COLUMN IF NOT EXISTS.
+	for _, c := range []struct{ table, column, def string }{
+		{"tasks", "routine_id", "TEXT NOT NULL DEFAULT ''"},
+		{"tasks", "conversation_id", "TEXT NOT NULL DEFAULT ''"},
+		{"routines", "agent_id", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		if err := s.addColumn(c.table, c.column, c.def); err != nil {
+			return err
+		}
+	}
+	_, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_routine ON tasks(routine_id);
+		CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id)`)
+	return err
+}
+
+func (s *Store) addColumn(table, column, def string) error {
+	rows, err := s.db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def)
+	return err
 }
 
 func (s *Store) Close() error { return s.db.Close() }

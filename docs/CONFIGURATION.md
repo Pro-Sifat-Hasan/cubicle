@@ -16,13 +16,14 @@ Set `CUBICLE_HOME` to use a different folder. Its contents are:
 
 | Path | Contents |
 |---|---|
-| `cubicle.db` | Tasks, routines, inbox, memory, settings and encrypted secrets (SQLite) |
+| `cubicle.db` | Agents, MCP servers, skills, plugins, chats, tasks, automations, inbox, memory, settings and encrypted secrets (SQLite) |
 | `admin.token`, `worker.token` | API credentials, created on first start |
 | `master.key` | Encryption key for secrets (wrapped with DPAPI on Windows) |
-| `workspace/<assignment>/` | Files your staff produced |
-| `staff.json` | Optional custom roster (`cubicle-agents init-staff` creates one) |
+| `workspace/<assignment or chat>/` | Files your staff produced |
+| `staff.json` | Read once, on first start, if present: a roster from an earlier release |
 | `config.json` | Optional gateway settings (below) |
 | `logs/gateway.log` | Gateway and agent logs |
+| `logs/mcp-<id>.log` | Messages from each stdio MCP server, for troubleshooting |
 
 ## Gateway settings
 
@@ -42,12 +43,16 @@ Settings are applied in this order: defaults, then `config.json`, then environme
 The gateway refuses to listen on a non-loopback address without TLS unless
 `allow_insecure_remote` is set. Only set it behind a TLS-terminating reverse proxy.
 
-## Staff
+## Agents
 
-Run `cubicle-agents init-staff` to write the default roster to `staff.json`. In that file you can
-rename employees, change their skills and personas, give each one its own `model`, or add new
-specialists. The roster must contain exactly one employee with `"role": "manager"`. Restart
-Cubicle after editing it.
+Manage agents on the **Agents** page (or through the [HTTP API](API.md)): add them from templates,
+edit their instructions, model, tools, MCP servers, skills and team, and choose the main agent.
+Changes apply without a restart. An office upgraded from a release that used `staff.json` imports
+that roster once, on first start.
+
+MCP servers that run locally (stdio) need their command on this PC, typically Node.js (`npx`) or
+uv (`uvx`). Store the secrets they need on the **Tools & skills** page; secret values are encrypted
+and only passed to the server that declares them.
 
 ## Desktop app
 

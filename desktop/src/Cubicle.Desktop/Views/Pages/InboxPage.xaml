@@ -7,53 +7,224 @@
              xmlns:controls="clr-namespace:Cubicle.Desktop.Controls"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="32,28" MaxWidth="860" HorizontalAlignment="Stretch">
-            <TextBlock Text="Inbox" Style="{StaticResource PageTitle}" />
-            <TextBlock Style="{StaticResource PageSubtitle}"
-                       Text="Your staff only ask when they genuinely need you. Answer, and the work continues automatically." />
+    <UserControl.Resources>
+        <Style x:Key="MarkdownBox" TargetType="RichTextBox">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="IsDocumentEnabled" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="controls:WheelPassthrough.IsEnabled" Value="True" />
+        </Style>
+    </UserControl.Resources>
 
-            <Border Style="{StaticResource EmptyState}" Visibility="{Binding Inbox.Count, Converter={StaticResource ZeroToVisibility}}">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="18" Foreground="{DynamicResource SuccessBrush}" Margin="0,0,12,0" />
-                    <TextBlock Text="Inbox zero. Your staff have everything they need." VerticalAlignment="Center" />
-                </StackPanel>
+    <Grid Margin="32,28,32,24">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="4*" MinWidth="290" MaxWidth="400" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="7*" MinWidth="380" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ============ Left: questions and chats ============ -->
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Top">
+                <TextBlock Text="Inbox" Style="{StaticResource PageTitle}" />
+                <TextBlock Style="{StaticResource PageSubtitle}" Margin="0,6,0,16"
+                           Text="Chat with any agent, and answer the questions your staff ask while they work." />
+            </StackPanel>
+
+            <!-- New chat -->
+            <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Padding="12" Margin="0,0,0,14" DataContext="{Binding Chat}">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Command="{Binding NewChatCommand}" Margin="8,0,0,0" Padding="14,8">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8BD;" FontSize="13" Margin="0,0,7,0" Foreground="{DynamicResource TextOnAccentBrush}" />
+                            <TextBlock Text="New chat" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+                    <ComboBox ItemsSource="{Binding AgentChoices}" SelectedItem="{Binding NewChatAgent}" DisplayMemberPath="Label" />
+                </DockPanel>
             </Border>
 
-            <ItemsControl ItemsSource="{Binding Inbox}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-                            <DockPanel>
-                                <Grid DockPanel.Dock="Left" Width="36" Height="36" Margin="0,0,14,0" VerticalAlignment="Top">
-                                    <Ellipse Fill="{Binding Item.EmployeeId, Converter={StaticResource AvatarBrush}}" />
-                                    <TextBlock Text="{Binding EmployeeName, Converter={StaticResource Initial}}" Foreground="White"
-                                               FontWeight="SemiBold" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Grid>
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource Caption}">
-                                        <Run Text="{Binding EmployeeName, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" />
-                                        <Run Text=" asked · " />
-                                        <Run Text="{Binding Asked, Mode=OneWay}" />
-                                    </TextBlock>
-                                    <TextBlock Text="{Binding Item.Question}" FontSize="15" TextWrapping="Wrap" TextTrimming="None" Margin="0,6,0,12" />
-                                    <DockPanel>
-                                        <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Margin="10,0,0,0"
-                                                Command="{Binding SendCommand}" VerticalAlignment="Bottom">
-                                            <StackPanel Orientation="Horizontal">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <!-- Questions -->
+                    <StackPanel Visibility="{Binding Inbox.Count, Converter={StaticResource CountToVisibility}}">
+                        <TextBlock Text="NEEDS YOUR ANSWER" Style="{StaticResource Label}" />
+                        <ItemsControl ItemsSource="{Binding Inbox}" Margin="0,0,0,14">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource Card}" Padding="14,12" Margin="0,0,0,8" BorderBrush="{DynamicResource AccentBrush}">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource Caption}">
+                                                <Run Text="{Binding EmployeeName, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                <Run Text=" asked · " />
+                                                <Run Text="{Binding Asked, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Item.Question}" TextWrapping="Wrap" TextTrimming="None" Margin="0,6,0,10" />
+                                            <TextBox Text="{Binding AnswerText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
+                                                     TextWrapping="Wrap" MinHeight="36" controls:Placeholder.Text="Type your answer…" />
+                                            <Button Style="{StaticResource AccentButton}" HorizontalAlignment="Right" Margin="0,8,0,0" Padding="14,7"
+                                                    Command="{Binding SendCommand}">
                                                 <TextBlock Text="Reply" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
-                                                <TextBlock Style="{StaticResource Icon}" Text="&#xE72A;" FontSize="12" Margin="8,0,0,0" Foreground="{DynamicResource TextOnAccentBrush}" />
-                                            </StackPanel>
-                                        </Button>
-                                        <TextBox Text="{Binding AnswerText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
-                                                 TextWrapping="Wrap" MinHeight="40" controls:Placeholder.Text="Type your answer…" />
-                                    </DockPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Chats -->
+                    <TextBlock Text="CHATS" Style="{StaticResource Label}" />
+                    <Border Style="{StaticResource EmptyState}" Visibility="{Binding Chat.Conversations.Count, Converter={StaticResource ZeroToVisibility}}">
+                        <TextBlock Style="{StaticResource Muted}" Text="No chats yet. Pick an agent above and say hello." />
+                    </Border>
+                    <ListBox ItemsSource="{Binding Chat.Conversations}" SelectedItem="{Binding Chat.Selected}"
+                             Style="{StaticResource PlainList}" ItemContainerStyle="{StaticResource CardItem}"
+                             ScrollViewer.VerticalScrollBarVisibility="Disabled" controls:WheelPassthrough.IsEnabled="True">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel>
+                                    <ContentPresenter DockPanel.Dock="Left" Content="{Binding}" ContentTemplate="{StaticResource AvatarTemplate}"
+                                                      Width="34" Height="34" Margin="0,0,10,0" VerticalAlignment="Top" />
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding When}" Style="{StaticResource Caption}" VerticalAlignment="Top" Margin="8,0,0,0" />
+                                    <StackPanel>
+                                        <TextBlock>
+                                            <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                            <Run Text="{Binding Title, Mode=OneWay}" Foreground="{DynamicResource TextTertiaryBrush}" FontSize="12" />
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Preview}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                                        <TextBlock Text="Replying…" FontSize="11.5" Foreground="{DynamicResource InfoBrush}" Margin="0,3,0,0"
+                                                   Visibility="{Binding Busy, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+
+        <!-- ============ Right: the conversation ============ -->
+        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0" DataContext="{Binding Chat}">
+            <Grid>
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="340"
+                            Visibility="{Binding HasThread, Converter={StaticResource InverseBoolToVisibility}}">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE8BD;" FontSize="34" HorizontalAlignment="Center" Foreground="{DynamicResource TextTertiaryBrush}" />
+                    <TextBlock Text="Chat with your staff" FontWeight="SemiBold" FontSize="15" HorizontalAlignment="Center" Margin="0,12,0,4" />
+                    <TextBlock Style="{StaticResource Muted}" TextAlignment="Center"
+                               Text="Ask a quick question, brainstorm, or hand over a job. Agents use their own tools, MCP servers and skills, and can ask teammates for help. Your main agent can also start a full assignment for the team." />
+                </StackPanel>
+
+                <DockPanel Visibility="{Binding HasThread, Converter={StaticResource BoolToVisibility}}">
+                    <!-- Header -->
+                    <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="20,14">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource GhostButton}" Margin="0,0,8,0" ToolTip="Open the files saved in this chat"
+                                        Command="{Binding DataContext.OpenChatFilesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" Margin="0,0,7,0" />
+                                        <TextBlock Text="Files" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource GhostButton}" ToolTip="Delete this chat" Padding="10,8"
+                                        Command="{Binding DeleteConversationCommand}" CommandParameter="{Binding Selected}">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" />
+                                </Button>
+                            </StackPanel>
+                            <ContentPresenter DockPanel.Dock="Left" Content="{Binding Selected}" ContentTemplate="{StaticResource AvatarTemplate}"
+                                              Width="36" Height="36" Margin="0,0,12,0" />
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{Binding ThreadTitle}" FontWeight="SemiBold" FontSize="15" />
+                                <TextBlock Text="{Binding ThreadAgent}" Style="{StaticResource Caption}" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Composer -->
+                    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="16,12">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Command="{Binding SendCommand}" Margin="10,0,0,0"
+                                    VerticalAlignment="Bottom" ToolTip="Send (Enter). Shift+Enter adds a new line.">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Send" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE724;" FontSize="12" Margin="8,0,0,0" Foreground="{DynamicResource TextOnAccentBrush}" />
                                 </StackPanel>
+                            </Button>
+                            <TextBox x:Name="Composer" Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
+                                     MinHeight="40" MaxHeight="180" VerticalScrollBarVisibility="Auto" PreviewKeyDown="Composer_PreviewKeyDown"
+                                     controls:Placeholder.Text="Message your agent…  (Enter to send, Shift+Enter for a new line)" />
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Messages -->
+                    <ScrollViewer x:Name="ThreadScroll" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="20,16">
+                            <ItemsControl ItemsSource="{Binding Messages}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,12">
+                                            <!-- From you -->
+                                            <Border HorizontalAlignment="Right" MaxWidth="560" CornerRadius="12,12,2,12" Padding="14,10"
+                                                    Background="{DynamicResource AccentSoftBrush}"
+                                                    Visibility="{Binding FromOwner, Converter={StaticResource BoolToVisibility}}">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Content}" TextWrapping="Wrap" TextTrimming="None" />
+                                                    <TextBlock Text="{Binding Time}" Style="{StaticResource Caption}" HorizontalAlignment="Right" Margin="0,4,0,0" FontSize="11" />
+                                                </StackPanel>
+                                            </Border>
+                                            <!-- From the agent -->
+                                            <DockPanel HorizontalAlignment="Left" MaxWidth="680"
+                                                       Visibility="{Binding FromAgent, Converter={StaticResource BoolToVisibility}}">
+                                                <ContentPresenter DockPanel.Dock="Left" Content="{Binding}" ContentTemplate="{StaticResource AvatarTemplate}"
+                                                                  Width="28" Height="28" Margin="0,2,10,0" VerticalAlignment="Top" />
+                                                <Border CornerRadius="12,12,12,2" Padding="14,10" Background="{DynamicResource SurfaceAltBrush}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Failed}" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource DangerSoftBrush}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <StackPanel>
+                                                        <RichTextBox Style="{StaticResource MarkdownBox}" controls:Markdown.Source="{Binding Content}" />
+                                                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" FontSize="11">
+                                                            <Run Text="{Binding Name, Mode=OneWay}" />
+                                                            <Run Text=" · " />
+                                                            <Run Text="{Binding Time, Mode=OneWay}" />
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DockPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Live reply -->
+                            <DockPanel HorizontalAlignment="Left" MaxWidth="680" Visibility="{Binding IsReplying, Converter={StaticResource BoolToVisibility}}">
+                                <ContentPresenter DockPanel.Dock="Left" Content="{Binding Selected}" ContentTemplate="{StaticResource AvatarTemplate}"
+                                                  Width="28" Height="28" Margin="0,2,10,0" VerticalAlignment="Top" />
+                                <Border CornerRadius="12,12,12,2" Padding="14,10" Background="{DynamicResource SurfaceAltBrush}">
+                                    <StackPanel>
+                                        <RichTextBox Style="{StaticResource MarkdownBox}" controls:Markdown.Source="{Binding LiveText}"
+                                                     Visibility="{Binding LiveText, Converter={StaticResource NullToVisibility}}" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                            <Ellipse Width="7" Height="7" Fill="{DynamicResource InfoBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding LiveStatus}" Style="{StaticResource Caption}" FontStyle="Italic" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
                             </DockPanel>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </StackPanel>
-    </ScrollViewer>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Grid>
+        </Border>
+    </Grid>
 </UserControl>

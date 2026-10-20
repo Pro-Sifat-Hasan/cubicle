@@ -25,6 +25,8 @@ public static partial class Markdown
     {
         if (d is FlowDocumentScrollViewer viewer)
             viewer.Document = Render(e.NewValue as string ?? "");
+        else if (d is RichTextBox box) // a read-only box sizes to its content (chat bubbles)
+            box.Document = Render(e.NewValue as string ?? "");
     }
 
     public static FlowDocument Render(string markdown)

@@ -41,7 +41,7 @@ try {
     # Wait for the staff to clock in.
     do {
         Start-Sleep -Milliseconds 500
-        $staff = Invoke-RestMethod "$Base/api/v1/employees" -Headers $h
+        $staff = Invoke-RestMethod "$Base/api/v1/agents" -Headers $h
     } while ((Get-Date) -lt $deadline -and @($staff | Where-Object status -ne "offline").Count -eq 0)
     Write-Host "Staff online: $(@($staff).Count)"
 
@@ -57,6 +57,38 @@ try {
 
     if ($detail.status -ne "done") { throw "assignment ended as '$($detail.status)': $($detail.error)" }
     Write-Host "`nRESULT:`n$($detail.result)`n" -ForegroundColor Green
+
+    # A new agent from a template is picked up by the running worker without a restart.
+    $new = Invoke-RestMethod "$Base/api/v1/agents" -Method Post -Headers $h -ContentType "application/json" `
+        -Body (@{ template_id = "travel-planner" } | ConvertTo-Json)
+    do {
+        Start-Sleep -Milliseconds 500
+        $agent = Invoke-RestMethod "$Base/api/v1/agents/$($new.id)" -Headers $h
+    } while ((Get-Date) -lt $deadline -and $agent.status -eq "offline")
+    if ($agent.status -eq "offline") { throw "new agent $($new.id) was not picked up by the worker" }
+    Write-Host "New agent online without a restart: $($agent.name) ($($agent.status))"
+
+    # Chat with it.
+    $conv = Invoke-RestMethod "$Base/api/v1/conversations" -Method Post -Headers $h -ContentType "application/json" `
+        -Body (@{ agent_id = $new.id } | ConvertTo-Json)
+    Invoke-RestMethod "$Base/api/v1/conversations/$($conv.id)/messages" -Method Post -Headers $h -ContentType "application/json" `
+        -Body (@{ content = "Plan a weekend in Lisbon" } | ConvertTo-Json) | Out-Null
+    do {
+        Start-Sleep -Milliseconds 500
+        $thread = Invoke-RestMethod "$Base/api/v1/conversations/$($conv.id)" -Headers $h
+    } while ((Get-Date) -lt $deadline -and @($thread.messages).Count -lt 2)
+    $reply = @($thread.messages)[-1]
+    if ($reply.role -ne "agent" -or $reply.status -ne "done") { throw "no chat reply: $($thread | ConvertTo-Json -Depth 5)" }
+    Write-Host "Chat reply: $($reply.content.Substring(0, [Math]::Min(80, $reply.content.Length)))…"
+
+    # An MCP server is started and listed through the worker (the app's Test button).
+    $python = Join-Path $Root "agents\.venv\Scripts\python.exe"
+    $mcp = Invoke-RestMethod "$Base/api/v1/mcp-servers" -Method Post -Headers $h -ContentType "application/json" -Body (@{
+        name = "Echo"; transport = "stdio"; command = $python; args = @("-I", (Join-Path $Root "agents\tests\mcp_echo_server.py"))
+    } | ConvertTo-Json)
+    $test = Invoke-RestMethod "$Base/api/v1/mcp-servers/$($mcp.id)/test" -Method Post -Headers $h -TimeoutSec 120
+    if ($test.error -or @($test.tools).Count -lt 1) { throw "MCP test failed: $($test.error)" }
+    Write-Host "MCP tools via worker: $((@($test.tools) | ForEach-Object name) -join ', ')"
 
     # Live model listing runs the worker in "models" mode; with no Ollama server it must report a clean error.
     $models = Invoke-RestMethod "$Base/api/v1/providers/ollama/models" -Headers $h -TimeoutSec 90
