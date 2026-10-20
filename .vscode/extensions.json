@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "golang.go",
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "ms-dotnettools.csdevkit",
+    "editorconfig.editorconfig"
+  ]
+}
