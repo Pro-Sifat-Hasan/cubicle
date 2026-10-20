@@ -18,55 +18,132 @@ Invoke-RestMethod http://127.0.0.1:7878/api/v1/status -Headers @{ Authorization 
 
 ## Owner API
 
+### Office and work
+
 | Method & path | Body | Returns |
 |---|---|---|
 | `GET /api/v1/status` | | version, task counts, open questions, breaker state, tokens today |
-| `GET /api/v1/employees` | | roster with live status |
-| `POST /api/v1/assignments` | `{title, description?}` | the new assignment (`201`) |
-| `GET /api/v1/tasks?status=&parent_id=&limit=` | | tasks, newest first (`parent_id=` with an empty value returns top-level assignments) |
+| `POST /api/v1/assignments` | `{title, description?, agent_id?}` | the new assignment (`201`). Without `agent_id` it goes to the main agent, who plans it with the team |
+| `GET /api/v1/tasks?status=&parent_id=&limit=` | | tasks, newest first (`parent_id=` with an empty value returns top-level work, without chat replies) |
 | `GET /api/v1/tasks/{id}` | | task + `children` + `inbox` |
 | `POST /api/v1/tasks/{id}/cancel` | | cancelled task and children |
 | `GET /api/v1/inbox?status=open` | | questions from your staff |
 | `POST /api/v1/inbox/{id}/answer` | `{answer}` | answered item; the task resumes |
-| `GET /api/v1/routines` | | routines |
-| `POST /api/v1/routines` | `{title, description?, schedule}` | new routine (`201`) |
-| `POST /api/v1/routines/{id}/enable` / `disable` | | routine |
-| `DELETE /api/v1/routines/{id}` | | `204` |
 | `GET /api/v1/activity?limit=` | | activity log, newest first |
-| `GET /api/v1/secrets` | | secret **names** only |
-| `PUT /api/v1/secrets/{NAME}` | `{value}` | `204`; the worker restarts with the new value |
-| `DELETE /api/v1/secrets/{NAME}` | | `204` |
 | `POST /api/v1/breaker/reset` | | `204` |
+| `GET /api/v1/events` | | Server-Sent Events stream |
+
+### Agents
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET /api/v1/agents` | | the roster (main agent first) with live `status` |
+| `POST /api/v1/agents` | `{template_id}` or agent fields, `join_team?` (default true) | new agent (`201`); it joins the main agent's team |
+| `GET /api/v1/agents/{id}` | | agent |
+| `PUT /api/v1/agents/{id}` | any agent fields (omitted fields are kept) | updated agent |
+| `DELETE /api/v1/agents/{id}` | | `204`; `409` for the main agent. Queued work moves to the main agent |
+| `POST /api/v1/agents/{id}/main` | | makes it the main agent; the previous main agent joins its team |
+| `GET /api/v1/catalog` | | built-in `tools`, agent templates (`agents`), `mcp_servers`, `skills` and `plugins` |
+
+Agent fields: `name`, `title`, `avatar`, `description` (what it is good at; the main agent routes
+work by it), `instructions`, `model` and `effort` (empty = office default), `tools` (built-in tool
+ids: `files`, `web`, `memory`, `assignments`), `mcp_servers`, `skills` and `team` (ids), `enabled`.
+Turning an agent off hands its queued work to the main agent.
+
+### Tools: MCP servers, skills, plugins
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET /api/v1/mcp-servers` | | MCP servers |
+| `POST /api/v1/mcp-servers` | `{template_id, args?, name?, url?, env?}` or server fields | new server (`201`) |
+| `PUT /api/v1/mcp-servers/{id}` | server fields | updated server |
+| `DELETE /api/v1/mcp-servers/{id}` | | `204`; detached from every agent |
+| `POST /api/v1/mcp-servers/{id}/test` | | `{tools: [{name, description}], error?}`: starts or connects to the server through the worker |
+| `GET /api/v1/skills` / `GET /api/v1/skills/{id}` | | skills |
+| `POST /api/v1/skills` | `{template_id}` or `{name, description, content}` | new skill (`201`) |
+| `PUT /api/v1/skills/{id}` | `{name, description, content, enabled}` | updated skill |
+| `DELETE /api/v1/skills/{id}` | | `204`; detached from every agent |
+| `GET /api/v1/plugins` | | installed plugins with the ids of what they added |
+| `POST /api/v1/plugins` | `{catalog_id}` or `{bundle: {name, description, version, agents, mcp_servers, skills}}` | installed plugin (`201`) |
+| `DELETE /api/v1/plugins/{id}` | | `204`; removes everything the plugin added |
+
+MCP server fields: `name`, `description`, `transport` (`stdio` or `http`), `command`, `args`,
+`env` (plain values), `secret_env` (names of secrets passed to a stdio server), `url`, `headers`,
+`auth_secret` (name of a secret sent as `Authorization: Bearer`), `enabled`. Secret **values** are
+never part of a server; store them with `PUT /api/v1/secrets/{NAME}`.
+
+In a plugin bundle, agents may refer to the bundle's own servers and skills by the ids used inside
+the bundle; they are rewritten to the ids actually created.
+
+### Chat
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET /api/v1/conversations` | | conversations, most recent first, with `last_message` and `busy` |
+| `POST /api/v1/conversations` | `{agent_id, title?}` | new conversation (`201`) |
+| `GET /api/v1/conversations/{id}` | | conversation + `messages` (oldest first; `role` is `owner` or `agent`, `status` is `done` or `failed`) |
+| `POST /api/v1/conversations/{id}/messages` | `{content}` | your message (`201`); the reply arrives as a `conversation.updated` event |
+| `DELETE /api/v1/conversations/{id}` | | `204`; pending replies are cancelled |
+
+### Automations
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET /api/v1/routines` | | automations with `next_run_at`, `last_run_at`, `last_status` |
+| `POST /api/v1/routines` | `{title, description?, schedule, agent_id?}` | new automation (`201`) |
+| `PUT /api/v1/routines/{id}` | `{title, description?, schedule, agent_id?}` | updated automation (a changed schedule restarts its clock) |
+| `POST /api/v1/routines/{id}/run` | | the run's task (`201`); the schedule is unchanged |
+| `GET /api/v1/routines/{id}/runs?limit=` | | recent runs, newest first |
+| `POST /api/v1/routines/{id}/enable` / `disable` | | automation |
+| `DELETE /api/v1/routines/{id}` | | `204` |
+
+Schedules (local time): `daily@09:00`, `weekdays@08:30`, `weekly@mon,thu@08:30`, `every:30m`,
+`every:2h` (minimum 5 minutes), `once@2026-10-21T09:00` (turns itself off after running). An empty
+`agent_id` sends the work to the main agent; an agent that was removed or turned off is replaced by
+the main agent.
+
+### Settings, providers, secrets and memory
+
+| Method & path | Body | Returns |
+|---|---|---|
 | `GET /api/v1/settings` | | provider, model, effort, base URL, owner name, web access, daily budget |
 | `PUT /api/v1/settings` | `{provider, model, effort, base_url, owner_name, web_access, daily_token_budget}` | saved settings; the worker restarts |
 | `GET /api/v1/providers` | | provider catalog with `configured` and `active` flags |
 | `GET /api/v1/providers/{id}/models?base_url=` | | `{models, live, error?}`: a live list from the provider, or suggestions |
+| `GET /api/v1/secrets` | | secret **names** only |
+| `PUT /api/v1/secrets/{NAME}` | `{value}` | `204`; the worker restarts with the new value |
+| `DELETE /api/v1/secrets/{NAME}` | | `204` |
 | `GET /api/v1/memories` | | what the staff remember, newest first |
 | `POST /api/v1/memories` | `{content}` | the new memory (`201`) |
 | `DELETE /api/v1/memories/{id}` | | `204` |
-| `GET /api/v1/events` | | Server-Sent Events stream |
 
-Schedules: `daily@09:00`, `weekdays@08:30`, `every:30m`, `every:2h` (minimum 5 minutes, local time).
+### Events
 
-Event types: `task.updated`, `assignment.done`, `inbox.new`, `inbox.answered`, `employee.updated`,
-`employees.synced`, `employees.offline`, `routine.updated`, `routine.deleted`, `activity`,
-`breaker.tripped`, `breaker.reset`, `settings.updated`, `memory.added`, `memory.deleted`. Each frame is `data: {"type": "...", "data": {...}, "at": "..."}`.
+Each frame is `data: {"type": "...", "data": {...}, "at": "..."}`. Types: `task.updated`,
+`task.progress` (live `{task_id, conversation_id, agent_id, status, text}` while an agent works; not
+stored), `assignment.done`, `inbox.new`, `inbox.answered`, `agent.status`, `agents.updated`,
+`employees.offline`, `mcp.updated`, `skills.updated`, `plugins.updated`, `conversation.updated`,
+`conversation.deleted`, `routine.updated`, `routine.deleted`, `activity`, `breaker.tripped`,
+`breaker.reset`, `settings.updated`, `memory.added`, `memory.deleted`.
 
 ## Worker API
 
 | Method & path | Body | Notes |
 |---|---|---|
-| `PUT /internal/v1/employees` | `[{id, name, title, role, avatar, model, skills}]` | register the roster (1–50) |
-| `PATCH /internal/v1/employees/{id}` | `{status, current_task_id}` | `idle` / `working` / `waiting` / `offline` |
-| `POST /internal/v1/tasks/claim` | `{employee_ids: []}` | long-poll ≤ 25 s; `200` with `{task, parent, dependency_results, human_answers}`, `204` if none, `503` if the breaker is open |
-| `POST /internal/v1/tasks/{id}/delegate` | `{subtasks: [{title, description, assignee, depends_on: [index]}], synthesis: {title, description, assignee}}` | assignment → plan |
-| `POST /internal/v1/tasks/{id}/complete` | `{result}` | |
-| `POST /internal/v1/tasks/{id}/fail` | `{error}` | fails the parent and cancels siblings |
+| `POST /internal/v1/worker/start` | | called once on start: tasks left `in_progress` by a previous worker are queued again; returns `{requeued}` |
+| `GET /internal/v1/agents?after=` | | `{revision, agents}`: enabled agents with resolved `mcp` servers and `skill_docs`. With `after=<revision>` it long-polls (≤ 25 s, `204` if unchanged) |
+| `PATCH /internal/v1/agents/{id}/status` | `{status, current_task_id}` | `idle` / `working` / `waiting` / `offline` |
+| `POST /internal/v1/tasks/claim` | `{agent_ids: [], lane}` | `lane` is `work`, `chat` or empty. Long-poll ≤ 25 s; `200` with `{task, parent, dependency_results, human_answers, history}`, `204` if none, `503` if the breaker is open |
+| `POST /internal/v1/tasks/{id}/delegate` | `{subtasks: [{title, description, assignee, depends_on: [index]}], synthesis: {title, description, assignee}}` | assignment → plan; assignees must be enabled agents |
+| `POST /internal/v1/tasks/{id}/complete` | `{result}` | a chat task's result becomes the agent's reply |
+| `POST /internal/v1/tasks/{id}/fail` | `{error}` | fails the parent and cancels siblings; a failed chat task becomes a failed reply |
 | `POST /internal/v1/tasks/{id}/ask` | `{employee_id, question}` | creates an inbox item |
+| `POST /internal/v1/tasks/{id}/progress` | `{status?, text?}` | relayed to the app as `task.progress` |
+| `POST /internal/v1/assignments` | `{title, description, agent_id}` | an agent starts an assignment for the main agent (from a chat) |
 | `POST /internal/v1/usage` | `{task_id, employee_id, input_tokens, output_tokens}` | feeds the circuit breaker |
 | `POST /internal/v1/activity` | `{employee_id, task_id, message}` | activity log line |
 | `GET /internal/v1/memories?limit=` | | facts to include in prompts |
 | `POST /internal/v1/memories` | `{content, employee_id}` | saves a learned fact |
 
-Errors are returned as `{"error": "message"}` with `400`, `401`, `404`, `409` (the task is in the wrong state),
-`429` (rate limited), or `503` (the breaker is open).
+Errors are returned as `{"error": "message"}` with `400`, `401`, `404`, `409` (wrong state, or the
+main agent cannot be removed), `429` (rate limited), or `503` (the breaker is open).

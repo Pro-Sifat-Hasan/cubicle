@@ -85,7 +85,8 @@ installer and Docker image and publishes them.
 
 ## Good first contributions
 
-- New employees or better prompts: `agents/src/cubicle_agents/staff/`
+- Agent templates, MCP presets, skills and plugin packs: `gateway/internal/catalog/`
+- Better prompts: `agents/src/cubicle_agents/staff/prompts.py`
 - New tools: `agents/src/cubicle_agents/tools/`
 - New providers: `agents/src/cubicle_agents/llm/` and `gateway/internal/providers/catalog.go`
 - UI polish: `desktop/src/Cubicle.Desktop/Views/`
