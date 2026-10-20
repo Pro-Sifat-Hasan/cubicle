@@ -166,7 +166,11 @@ func (s *Store) ClaimTask(ctx context.Context, employeeIDs []string) (*Task, err
 			}
 			candidates = append(candidates, t)
 		}
+		err = rows.Err()
 		rows.Close()
+		if err != nil {
+			return err
+		}
 
 		for _, t := range candidates {
 			if len(t.DependsOn) > 0 {
@@ -381,7 +385,11 @@ func cancelChildren(ctx context.Context, tx *sql.Tx, now int64, parentID string)
 		}
 		ids = append(ids, id)
 	}
+	err = rows.Err()
 	rows.Close()
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range ids {
 		if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?`, StatusCancelled, now, id); err != nil {
 			return nil, err
