@@ -1,4 +1,4 @@
-﻿from datetime import date
+from datetime import date
 
 from cubicle_agents.staff import prompts
 from cubicle_agents.staff.roster import DEFAULT_ROSTER, Skill
