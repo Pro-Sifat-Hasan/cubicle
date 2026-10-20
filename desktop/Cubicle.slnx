@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Cubicle.Client/Cubicle.Client.csproj" />
+    <Project Path="src/Cubicle.Desktop/Cubicle.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cubicle.Client.Tests/Cubicle.Client.Tests.csproj" />
+  </Folder>
+</Solution>
