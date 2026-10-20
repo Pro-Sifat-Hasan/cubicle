@@ -1,95 +1,88 @@
 # Architecture
 
-Cubicle has three processes, each written in the language that fits its job.
+Cubicle runs as three cooperating processes on your machine.
 
-| Process | Language | Responsibility |
+```mermaid
+flowchart LR
+    UI["Cubicle.exe<br/>C# · WPF"] -- "REST + live events<br/>(admin token)" --> GW
+    subgraph GW["cubicle-gateway · Go"]
+        API["Owner API"] --- DB[("SQLite")]
+        SCH["Routine scheduler"] --- DB
+        SEC["Encrypted secrets"] --- DB
+        SUP["Worker supervisor"]
+    end
+    SUP -- "starts, configures, restarts" --> AG
+    AG["cubicle-agents · Python<br/>one desk per employee"] -- "Worker API<br/>(worker token)" --> GW
+    AG -- "official SDKs / CLI" --> LLM(("Claude · OpenAI · Gemini<br/>Ollama · Claude Code"))
+```
+
+| Process | Responsibility |
+|---|---|
+| **Desktop app** | What you see: tray icon, Today, Inbox, Routines, Memory, Activity and Settings. Holds no state of its own. |
+| **Gateway** | The single source of truth. It stores everything in SQLite, serves the owner and worker APIs, fires routines, enforces the token budget, encrypts secrets, and starts and restarts the agent worker. |
+| **Agents** | The AI staff. Each employee works at its own *desk*: it claims a task, works on it with a model and tools, and reports the result. |
+
+## How an assignment is done
+
+```
+assignment (you → Chief of Staff)
+ ├── subtask → specialist        ┐ run in parallel unless one depends on another
+ ├── subtask → specialist        ┘
+ ├── review  → Quality Reviewer  (for documents, emails or code you will rely on)
+ └── wrap-up → Chief of Staff    (runs once every subtask is done)
+```
+
+1. **Plan.** The manager turns your request into a JSON plan (structured output). The gateway
+   validates it: assignees must exist, and dependencies may only point to earlier subtasks.
+   It then creates the subtasks and a wrap-up task in one transaction.
+2. **Work.** A specialist claims a subtask once its dependencies are finished. The claim includes
+   the overall assignment, teammates' results and any answers you gave. The specialist works in
+   a loop with tools until the job is done.
+3. **Ask.** If a specialist is blocked, it asks you through the Inbox. The task pauses and
+   resumes automatically when you answer. Each task can ask at most twice.
+4. **Wrap up.** The manager merges the results into one deliverable, references the files that
+   were produced, and lists anything that needs you. Completing the wrap-up completes the assignment.
+
+A failed subtask fails its assignment and cancels the remaining work, so nothing waits forever.
+
+## Providers
+
+The gateway turns the provider you choose in Settings into environment variables for the worker,
+and restarts the worker whenever settings or keys change.
+
+| Adapter | Used for | How it works |
 |---|---|---|
-| `Cubicle.exe` | C# (.NET 10, WPF) | The owner's window into the office: tray icon, dashboard, inbox, routines, settings. Holds no state. |
-| `cubicle-gateway(.exe)` | Go | The control plane and single source of truth: SQLite state, owner API, worker API, routine scheduler, circuit breaker, encrypted secrets, and supervision of the agent worker. |
-| `cubicle-agents(.exe)` | Python | The AI staff: one async "desk" per employee that claims work, calls the model, and reports results. |
+| Anthropic | Claude API | Official Anthropic SDK with adaptive thinking, effort control, server-side web search and fetch, and refusal fallback |
+| OpenAI-compatible | OpenAI, Gemini, OpenRouter, Ollama, custom servers | Official OpenAI SDK, function calling, and structured output when the server supports it |
+| Claude Code | Your Claude subscription | Runs your installed `claude` CLI headlessly in the assignment folder, with file and web tools only (no shell) |
+| Demo | Trying Cubicle out | Sample answers with no model |
 
-## Lifecycle on a desktop
+**Test connection** in Settings runs `cubicle-agents models`, which asks the provider for its model
+list. A successful list confirms the key works.
 
-1. `Cubicle.exe` starts (at sign-in with `--background`, or from the Start menu).
-2. If `GET /healthz` on `127.0.0.1:7878` fails, it launches the bundled `cubicle-gateway.exe` as a detached, windowless process.
-3. On first start the gateway creates `%LOCALAPPDATA%\Cubicle\` (DACL: you, SYSTEM, Administrators), `admin.token`, `worker.token`, `master.key` (DPAPI-wrapped) and `cubicle.db`.
-4. The gateway starts `cubicle-agents.exe` with `CUBICLE_GATEWAY_URL`, `CUBICLE_WORKER_TOKEN`, and the decrypted secrets (for example `ANTHROPIC_API_KEY`) as environment variables, and restarts it with exponential backoff if it exits.
-5. The worker registers the roster (`PUT /internal/v1/employees`) and opens one long-poll per employee.
-6. The desktop app reads `admin.token`, loads state, and subscribes to `GET /api/v1/events` (Server-Sent Events) for live updates and notifications.
+## Tools
 
-Closing the window hides it. The gateway and worker keep running, so routines still fire. "Stop staff and quit" in the tray stops everything.
-
-## The work model
-
-```
-assignment (you → manager)
- ├── subtask (→ specialist)          ┐ run in parallel unless depends_on
- ├── subtask (→ specialist, deps: 0) ┘ says otherwise
- └── synthesis (→ manager, deps: all subtasks)
-```
-
-| Step | Who | What happens |
+| Tool | Purpose | Safeguards |
 |---|---|---|
-| Plan | Manager | Claims the `assignment` and asks the model for a JSON plan (structured output). The plan is sanitised: unknown assignees are remapped, forward or self dependencies are dropped, and at most 6 subtasks are kept. It is then posted to `/delegate`. The gateway creates the subtasks plus a `synthesis` task atomically and marks the assignment `delegated`. |
-| Work | Specialists | Each claims a subtask only when all its dependencies are `done`. The claim response includes dependency results and any answers you gave. |
-| Ask | Anyone | A reply that starts with `ASK_OWNER:` becomes an inbox item. The task moves to `waiting_human` and goes back to `queued` when you answer. Each task can ask at most 2 questions. |
-| Wrap up | Manager | Claims the `synthesis` task and merges the results. Completing it completes the parent assignment. With a single subtask, the result passes straight through and no extra tokens are spent. |
-| Failure | Gateway | A failed subtask fails its assignment and cancels unfinished siblings, so nothing waits forever. |
+| `write_file`, `read_file`, `list_files` | Produce deliverables in `workspace/<assignment>/` | Paths are confined to the assignment folder, with size and file-count limits |
+| `web_fetch` | Read public web pages (for providers without a built-in web tool) | Only public http(s) addresses, every redirect re-checked, and a size limit |
+| `remember` | Save a durable fact about you to office memory | Length limit, de-duplication, and a cap of 300 facts |
+| `ask_owner` | Ask you a question through the Inbox | Ends the turn, and is limited per task |
 
-Task statuses: `queued → in_progress → (delegated | waiting_human) → done | failed | cancelled`.
+Providers that cannot run Cubicle's tools (Claude Code, Demo) use plain-text directives instead.
+A line starting with `REMEMBER:` saves a fact, and `ASK_OWNER:` asks a question.
 
-### Claiming and concurrency
+## Routines and the budget
 
-`POST /internal/v1/tasks/claim` is a 25-second long-poll. The claim is one SQLite transaction: it picks the oldest `queued` task for the employee whose dependencies are all `done`, then flips it to `in_progress`. Any state change wakes waiting pollers through an in-memory broadcast, so work is picked up within milliseconds without busy polling. SQLite runs in WAL mode with a single connection, which serialises writes and removes `SQLITE_BUSY` races.
+Routines (`daily@HH:MM`, `weekdays@HH:MM`, or `every:30m` with a 5-minute minimum) become
+assignments for the manager. Runs missed while the PC was off collapse into a single run.
 
-### Routines
+Every model call reports its token usage. When the daily budget is reached, the circuit breaker
+opens: new work pauses until midnight or until you click **Resume work**.
 
-Schedules are `daily@HH:MM`, `weekdays@HH:MM`, or `every:<duration>` (minimum 5 minutes), in the machine's local time. Every 30 seconds the gateway turns due routines into manager assignments in one transaction and computes the next run from *now*. A PC that was asleep for three days runs a routine once, not three times.
+## Reliability
 
-### Circuit breaker
-
-The worker reports token usage after every model call. If `daily_token_budget` is set and today's usage reaches it, the breaker opens: claims return `503`, desks pause, and you get a notification. It closes at midnight or when you click **Resume work**.
-
-## Gateway package map
-
-```
-gateway/
-├── cmd/cubicle-gateway/   CLI: serve | service install|uninstall|start|stop | version
-└── internal/
-    ├── api/          HTTP handlers (owner.go, worker.go), middleware, scheduler, breaker
-    ├── store/        SQLite persistence: tasks, office (employees, inbox, activity, usage, secrets), routines
-    ├── secrets/      AES-256-GCM, with the key wrapped by DPAPI on Windows
-    ├── supervisor/   start, log, and restart the agent worker
-    ├── events/       SSE fan-out and long-poll wake-ups
-    ├── config/       defaults → config.json → CUBICLE_* env, plus token bootstrap
-    ├── fsutil/       owner-only directories and files (Windows DACL / POSIX modes)
-    └── winsvc/       Windows service integration
-```
-
-## Agents package map
-
-```
-agents/src/cubicle_agents/
-├── cli.py            run | roster | init-staff
-├── core/             settings (env), gateway client (+ Gateway protocol for fakes)
-├── llm/              LLM protocol, AnthropicLLM (official SDK), DemoLLM (offline)
-├── staff/            roster (default staff + staff.json), prompts (all templates in one file)
-└── office/           office (clock-in), desk (work loop), handlers (plan, work, wrap up)
-```
-
-The Anthropic provider uses `claude-opus-5-5` by default with adaptive thinking, `effort` (default `medium`), structured outputs for plans, and the server-side refusal fallback (`fallbacks: "default"`), so a declined request is retried on a suitable model instead of failing silently.
-
-## Desktop project map
-
-```
-desktop/
-├── src/Cubicle.Client/     UI-free: models, GatewayClient (REST + SSE), schedules, paths
-├── src/Cubicle.Desktop/
-│   ├── App.xaml(.cs)       single instance, tray, hide-on-close, --background
-│   ├── Views/              MainWindow (Today · Inbox · Routines · Activity · Settings)
-│   ├── ViewModels/         MainViewModel (CommunityToolkit.Mvvm) + item view models
-│   ├── Services/           GatewayHost, AutoStart, SingleInstance, TrayIcon
-│   ├── Converters/         status → colour or label, visibility helpers
-│   └── Themes/Brand.xaml   brand palette and shared styles over the Fluent theme
-└── tests/Cubicle.Client.Tests/
-```
+- Task claims are 25-second long-polls inside a single SQLite transaction. Any change wakes the waiting desks instantly.
+- SQLite runs in WAL mode with one connection, which serialises writes.
+- A crashed worker restarts with exponential backoff. The Windows service restarts on failure.
+- The desktop app reconnects automatically and refreshes from the live event stream.

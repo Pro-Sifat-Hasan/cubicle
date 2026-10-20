@@ -114,7 +114,7 @@ func Open(path string) (*Store, error) {
 	// One connection serialises writes and removes SQLITE_BUSY races; the
 	// workload (a handful of agents) is far below what this can sustain.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema + routinesSchema); err != nil {
+	if _, err := db.Exec(schema + routinesSchema + settingsSchema + memoriesSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

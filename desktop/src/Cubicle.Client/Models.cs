@@ -81,5 +81,40 @@ public sealed record OfficeStatus(
     long TokensToday,
     long DailyTokenBudget);
 
+/// <summary>How the office runs: which AI provider and model, effort, and limits.</summary>
+public sealed record OfficeSettings(
+    string Provider,
+    string Model,
+    string Effort,
+    string BaseUrl,
+    string OwnerName,
+    bool WebAccess,
+    long? DailyTokenBudget);
+
+/// <summary>An AI provider the owner can choose (see gateway/internal/providers).</summary>
+public sealed record ProviderInfo(
+    string Id,
+    string Name,
+    string Kind,
+    string Description,
+    string? SecretName,
+    bool KeyRequired,
+    string? BaseUrl,
+    bool BaseUrlEditable,
+    string DefaultModel,
+    IReadOnlyList<string> SuggestedModels,
+    bool WebSearch,
+    bool Configured,
+    bool Active)
+{
+    public bool NeedsKey => !string.IsNullOrEmpty(SecretName);
+}
+
+/// <summary>Models offered by a provider. <see cref="Live"/> is false when only suggestions are available.</summary>
+public sealed record ModelList(IReadOnlyList<string> Models, bool Live, string? Error);
+
+/// <summary>A durable fact the staff keep in mind across tasks.</summary>
+public sealed record Memory(string Id, string Content, string? EmployeeId, DateTimeOffset CreatedAt);
+
 /// <summary>A live event from the gateway's SSE stream.</summary>
 public sealed record GatewayEvent(string Type, JsonElement Data, DateTimeOffset At);

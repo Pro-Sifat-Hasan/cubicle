@@ -7,8 +7,8 @@ import logging
 
 import httpx
 
-from cubicle_agents.core.gateway import BreakerOpenError, Gateway, TaskConflictError
-from cubicle_agents.llm.base import LLMRefusalError
+from cubicle_agents.core.gateway import BreakerOpenError, Claim, Gateway, TaskConflictError
+from cubicle_agents.llm.base import LLMConfigError, LLMRefusalError
 from cubicle_agents.office.handlers import TaskHandler
 from cubicle_agents.staff.roster import Employee
 
@@ -32,18 +32,18 @@ class Desk:
                 backoff = 1.0
             except BreakerOpenError:
                 log.warning("%s: circuit breaker open, pausing", self.employee.id)
-                await _sleep(stop, BREAKER_PAUSE_S)
+                await sleep_until(stop, BREAKER_PAUSE_S)
                 continue
             except (httpx.HTTPError, OSError) as exc:
                 log.warning("%s: gateway unreachable (%s); retrying in %.0fs", self.employee.id, exc, backoff)
-                await _sleep(stop, backoff)
+                await sleep_until(stop, backoff)
                 backoff = min(backoff * 2, MAX_BACKOFF_S)
                 continue
             if claim is None:
                 continue  # long-poll timed out with no work
             await self.work_on(claim)
 
-    async def work_on(self, claim) -> None:
+    async def work_on(self, claim: Claim) -> None:
         task_id = claim.task["id"]
         emp = self.employee
         log.info("%s picked up %s (%s)", emp.id, task_id, claim.task.get("title"))
@@ -52,7 +52,7 @@ class Desk:
             await self.handler.handle(emp, claim)
         except TaskConflictError:
             log.info("%s: task %s changed while working (probably cancelled)", emp.id, task_id)
-        except LLMRefusalError as exc:
+        except (LLMRefusalError, LLMConfigError) as exc:
             await self._fail(task_id, str(exc))
         except Exception as exc:
             log.exception("%s: task %s failed", emp.id, task_id)
@@ -73,7 +73,7 @@ class Desk:
             pass
 
 
-async def _sleep(stop: asyncio.Event, seconds: float) -> None:
+async def sleep_until(stop: asyncio.Event, seconds: float) -> None:
     try:
         await asyncio.wait_for(stop.wait(), timeout=seconds)
     except TimeoutError:

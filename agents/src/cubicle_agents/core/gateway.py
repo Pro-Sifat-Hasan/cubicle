@@ -47,6 +47,8 @@ class Gateway(Protocol):
     async def ask(self, task_id: str, employee_id: str, question: str) -> None: ...
     async def report_usage(self, task_id: str, employee_id: str, input_tokens: int, output_tokens: int) -> None: ...
     async def log(self, employee_id: str, task_id: str, message: str) -> None: ...
+    async def list_memories(self, limit: int = 50) -> list[str]: ...
+    async def add_memory(self, content: str, employee_id: str) -> None: ...
 
 
 class GatewayClient:
@@ -106,3 +108,10 @@ class GatewayClient:
     async def log(self, employee_id: str, task_id: str, message: str) -> None:
         await self._send("POST", "/internal/v1/activity",
                          {"employee_id": employee_id, "task_id": task_id, "message": message[:2000]})
+
+    async def list_memories(self, limit: int = 50) -> list[str]:
+        resp = await self._send("GET", f"/internal/v1/memories?limit={limit}")
+        return [m["content"] for m in resp.json()]
+
+    async def add_memory(self, content: str, employee_id: str) -> None:
+        await self._send("POST", "/internal/v1/memories", {"content": content[:1000], "employee_id": employee_id})

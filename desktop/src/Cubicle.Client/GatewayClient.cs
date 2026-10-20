@@ -116,6 +116,37 @@ public sealed class GatewayClient : IDisposable
     public Task DeleteSecretAsync(string name, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, $"/api/v1/secrets/{Uri.EscapeDataString(name)}", null, ct);
 
+    // ---- AI provider settings ----
+
+    public Task<OfficeSettings> GetSettingsAsync(CancellationToken ct = default) =>
+        GetAsync<OfficeSettings>("/api/v1/settings", ct);
+
+    public Task<OfficeSettings> SaveSettingsAsync(OfficeSettings settings, CancellationToken ct = default) =>
+        SendAsync<OfficeSettings>(HttpMethod.Put, "/api/v1/settings", settings, ct);
+
+    public Task<List<ProviderInfo>> GetProvidersAsync(CancellationToken ct = default) =>
+        GetAsync<List<ProviderInfo>>("/api/v1/providers", ct);
+
+    /// <summary>Asks the provider for its models; also verifies the stored key. Can take a few seconds.</summary>
+    public Task<ModelList> GetModelsAsync(string providerId, string? baseUrl = null, CancellationToken ct = default)
+    {
+        var path = $"/api/v1/providers/{Uri.EscapeDataString(providerId)}/models";
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+            path += $"?base_url={Uri.EscapeDataString(baseUrl)}";
+        return GetAsync<ModelList>(path, ct, TimeSpan.FromSeconds(60));
+    }
+
+    // ---- memory ----
+
+    public Task<List<Memory>> GetMemoriesAsync(CancellationToken ct = default) =>
+        GetAsync<List<Memory>>("/api/v1/memories", ct);
+
+    public Task<Memory> AddMemoryAsync(string content, CancellationToken ct = default) =>
+        SendAsync<Memory>(HttpMethod.Post, "/api/v1/memories", new { content }, ct);
+
+    public Task DeleteMemoryAsync(string id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"/api/v1/memories/{Uri.EscapeDataString(id)}", null, ct);
+
     // ---- live events ----
 
     /// <summary>Streams Server-Sent Events until cancelled or the connection drops.</summary>
@@ -132,9 +163,9 @@ public sealed class GatewayClient : IDisposable
 
     // ---- plumbing ----
 
-    private async Task<T> GetAsync<T>(string path, CancellationToken ct)
+    private async Task<T> GetAsync<T>(string path, CancellationToken ct, TimeSpan? timeout = null)
     {
-        using var cts = WithTimeout(ct);
+        using var cts = WithTimeout(ct, timeout);
         using var resp = await _http.GetAsync(path, cts.Token).ConfigureAwait(false);
         await EnsureSuccess(resp, ct).ConfigureAwait(false);
         return (await resp.Content.ReadFromJsonAsync<T>(Json, cts.Token).ConfigureAwait(false))!;
@@ -162,10 +193,10 @@ public sealed class GatewayClient : IDisposable
         return resp;
     }
 
-    private static CancellationTokenSource WithTimeout(CancellationToken ct)
+    private static CancellationTokenSource WithTimeout(CancellationToken ct, TimeSpan? timeout = null)
     {
         var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(15));
+        cts.CancelAfter(timeout ?? TimeSpan.FromSeconds(15));
         return cts;
     }
 

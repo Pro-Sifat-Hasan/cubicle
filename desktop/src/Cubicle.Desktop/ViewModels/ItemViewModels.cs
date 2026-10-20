@@ -42,6 +42,17 @@ public sealed partial class RoutineViewModel(Routine routine, Func<RoutineViewMo
     private Task DeleteAsync() => delete(this);
 }
 
+public sealed partial class MemoryViewModel(Memory memory, string source, Func<MemoryViewModel, Task> delete) : ObservableObject
+{
+    public Memory Memory { get; } = memory;
+    public string Content => Memory.Content;
+    public string Source { get; } = source;
+    public string Added => Memory.CreatedAt.ToLocalTime().ToString("dd MMM yyyy");
+
+    [RelayCommand]
+    private Task DeleteAsync() => delete(this);
+}
+
 public sealed class AssignmentViewModel(TaskItem task)
 {
     public TaskItem Task { get; } = task;

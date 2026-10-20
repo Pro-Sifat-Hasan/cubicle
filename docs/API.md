@@ -37,13 +37,20 @@ Invoke-RestMethod http://127.0.0.1:7878/api/v1/status -Headers @{ Authorization 
 | `PUT /api/v1/secrets/{NAME}` | `{value}` | `204`; the worker restarts with the new value |
 | `DELETE /api/v1/secrets/{NAME}` | | `204` |
 | `POST /api/v1/breaker/reset` | | `204` |
+| `GET /api/v1/settings` | | provider, model, effort, base URL, owner name, web access, daily budget |
+| `PUT /api/v1/settings` | `{provider, model, effort, base_url, owner_name, web_access, daily_token_budget}` | saved settings; the worker restarts |
+| `GET /api/v1/providers` | | provider catalog with `configured` and `active` flags |
+| `GET /api/v1/providers/{id}/models?base_url=` | | `{models, live, error?}`: a live list from the provider, or suggestions |
+| `GET /api/v1/memories` | | what the staff remember, newest first |
+| `POST /api/v1/memories` | `{content}` | the new memory (`201`) |
+| `DELETE /api/v1/memories/{id}` | | `204` |
 | `GET /api/v1/events` | | Server-Sent Events stream |
 
 Schedules: `daily@09:00`, `weekdays@08:30`, `every:30m`, `every:2h` (minimum 5 minutes, local time).
 
 Event types: `task.updated`, `assignment.done`, `inbox.new`, `inbox.answered`, `employee.updated`,
 `employees.synced`, `employees.offline`, `routine.updated`, `routine.deleted`, `activity`,
-`breaker.tripped`, `breaker.reset`. Each frame is `data: {"type": "...", "data": {...}, "at": "..."}`.
+`breaker.tripped`, `breaker.reset`, `settings.updated`, `memory.added`, `memory.deleted`. Each frame is `data: {"type": "...", "data": {...}, "at": "..."}`.
 
 ## Worker API
 
@@ -58,6 +65,8 @@ Event types: `task.updated`, `assignment.done`, `inbox.new`, `inbox.answered`, `
 | `POST /internal/v1/tasks/{id}/ask` | `{employee_id, question}` | creates an inbox item |
 | `POST /internal/v1/usage` | `{task_id, employee_id, input_tokens, output_tokens}` | feeds the circuit breaker |
 | `POST /internal/v1/activity` | `{employee_id, task_id, message}` | activity log line |
+| `GET /internal/v1/memories?limit=` | | facts to include in prompts |
+| `POST /internal/v1/memories` | `{content, employee_id}` | saves a learned fact |
 
 Errors are returned as `{"error": "message"}` with `400`, `401`, `404`, `409` (the task is in the wrong state),
 `429` (rate limited), or `503` (the breaker is open).

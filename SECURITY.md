@@ -18,9 +18,10 @@ outside your user account can read your data, spend your API credits, or direct 
 | A compromised or misbehaving worker | The worker uses a **separate** token that cannot read secrets, change routines, answer the inbox, or reset the breaker. Delegations are validated server-side: assignees must exist, and dependency indices must point to earlier subtasks. |
 | Stolen database or disk image | API keys are encrypted with AES-256-GCM, with the secret name bound as associated data. The key file is wrapped with Windows DPAPI, so it only decrypts for your account on your machine. The API never returns secret values. |
 | Runaway spend or loops | A daily token budget circuit breaker, at most 6 subtasks per plan, at most 2 owner questions per task, request size limits (1 MiB), and per-IP rate limiting. |
-| Prompt injection via task content | Agents have no tools in this release: no shell, file system, or network access beyond the model API. Results are text for you to review. |
+| Prompt injection via task or web content | Agents have no shell. File tools are confined to the assignment's workspace folder. `web_fetch` reaches only public internet addresses, never localhost, the LAN or cloud metadata endpoints, and re-checks every redirect. The Claude Code provider runs with file and web tools only, in `dontAsk` permission mode. |
 | Malicious HTTP clients | Strict JSON decoding (unknown fields rejected), length limits, security headers, server timeouts, and panic recovery. |
-| Supply chain | Few dependencies, Dependabot on every ecosystem, CI on every PR, and SHA-256 checksums published with each release. |
+| Leaked credentials in the repository | gitleaks in CI on every push and pull request (with full history), a pre-commit hook, and GitHub secret scanning with push protection. |
+| Supply chain | Few dependencies, grouped Dependabot updates for every ecosystem, CodeQL analysis, dependency review on pull requests, and SHA-256 checksums published with each release. |
 
 ### Running as a server
 

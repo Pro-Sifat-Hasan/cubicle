@@ -116,10 +116,23 @@ func (s *Supervisor) runOnce(ctx context.Context) error {
 	}
 }
 
+// Capture runs the worker command once with extra arguments and returns its
+// stdout. Used for short utility calls such as listing a provider's models.
+func Capture(ctx context.Context, command string, args, env []string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.WaitDelay = 2 * time.Second
+	hideWindow(cmd)
+	return cmd.Output()
+}
+
 func (s *Supervisor) pipe(r io.Reader) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
 		s.Log.Info(sc.Text(), "src", "agents")
+	}
+	if err := sc.Err(); err != nil {
+		s.Log.Warn("stopped reading agent worker output", "err", err)
 	}
 }

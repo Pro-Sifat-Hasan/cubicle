@@ -189,7 +189,11 @@ func (s *Store) FireDueRoutines(ctx context.Context, managerID string) ([]*Task,
 			}
 			due = append(due, rt)
 		}
+		err = rows.Err()
 		rows.Close()
+		if err != nil {
+			return err
+		}
 
 		for _, rt := range due {
 			sc, err := ParseSchedule(rt.Schedule)
