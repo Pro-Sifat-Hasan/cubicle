@@ -1,0 +1,203 @@
+<UserControl x:Class="Cubicle.Desktop.Views.Pages.TodayPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Cubicle.Desktop.ViewModels"
+             xmlns:controls="clr-namespace:Cubicle.Desktop.Controls"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
+    <Grid Margin="32,28,32,24">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="5*" MinWidth="340" />
+            <ColumnDefinition Width="24" />
+            <ColumnDefinition Width="6*" MinWidth="360" />
+        </Grid.ColumnDefinitions>
+
+        <!-- ============ Left: compose, staff, assignments (scrolls as one column) ============ -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,-12,0" Padding="0,0,12,0">
+        <StackPanel>
+            <StackPanel>
+                <TextBlock Text="{Binding Greeting}" Style="{StaticResource PageTitle}" />
+                <TextBlock Style="{StaticResource PageSubtitle}" Margin="0,6,0,18"
+                           Text="Describe the outcome you want. Your Chief of Staff plans it, hands each part to the right specialist, and brings you the finished result." />
+
+                <!-- Stats -->
+                <UniformGrid Columns="3" Margin="0,0,0,18">
+                    <Border Style="{StaticResource Card}" Padding="14,12" Margin="0,0,8,0">
+                        <StackPanel>
+                            <TextBlock Text="{Binding ActiveCount}" FontSize="22" FontWeight="SemiBold" />
+                            <TextBlock Text="In progress" Style="{StaticResource Caption}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Padding="14,12" Margin="4,0">
+                        <StackPanel>
+                            <TextBlock Text="{Binding OpenQuestions}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource AccentTextBrush}" />
+                            <TextBlock Text="Need you" Style="{StaticResource Caption}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Padding="14,12" Margin="8,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="{Binding DoneCount}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource SuccessBrush}" />
+                            <TextBlock Text="Done" Style="{StaticResource Caption}" />
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
+
+                <!-- Composer -->
+                <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,22">
+                    <StackPanel>
+                        <TextBox Text="{Binding NewTitle, UpdateSourceTrigger=PropertyChanged}" FontSize="15"
+                                 controls:Placeholder.Text="What should your staff do?" />
+                        <TextBox Text="{Binding NewDescription, UpdateSourceTrigger=PropertyChanged}" Margin="0,10,0,0"
+                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="76" MaxHeight="180" VerticalScrollBarVisibility="Auto"
+                                 controls:Placeholder.Text="Add details: context, links, tone, deadline… (optional)" />
+                        <DockPanel Margin="0,12,0,0" LastChildFill="False">
+                            <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                       Text="Tip: be specific about the result you want." />
+                            <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Command="{Binding AssignCommand}" IsDefault="True">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Assign" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE72A;" FontSize="13" Margin="8,0,0,0" Foreground="{DynamicResource TextOnAccentBrush}" />
+                                </StackPanel>
+                            </Button>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Staff -->
+                <TextBlock Text="Your staff" Style="{StaticResource SectionTitle}" />
+                <ItemsControl ItemsSource="{Binding Staff}" Margin="0,0,0,18">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                    CornerRadius="999" Padding="4,4,14,4" Margin="0,0,8,8" ToolTip="{Binding Skills}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Grid>
+                                        <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource AvatarTemplate}" Width="30" Height="30"></ContentPresenter>
+                                        <Ellipse Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                 Fill="{Binding Status, Converter={StaticResource StatusToBrush}}"
+                                                 Stroke="{DynamicResource SurfaceBrush}" StrokeThickness="2" />
+                                    </Grid>
+                                    <StackPanel Margin="9,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" />
+                                        <TextBlock Text="{Binding Title}" Style="{StaticResource Caption}" FontSize="11.5" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Text="Assignments" Style="{StaticResource SectionTitle}" />
+                <Border Style="{StaticResource EmptyState}" Visibility="{Binding Assignments.Count, Converter={StaticResource ZeroToVisibility}}">
+                    <TextBlock Style="{StaticResource Muted}" Text="Nothing yet. Give your staff their first assignment above." />
+                </Border>
+            </StackPanel>
+
+            <ListBox ItemsSource="{Binding Assignments}" SelectedItem="{Binding SelectedAssignment}"
+                     Style="{StaticResource PlainList}" ItemContainerStyle="{StaticResource CardItem}"
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled" PreviewMouseWheel="List_PreviewMouseWheel">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel>
+                            <Border DockPanel.Dock="Right" Style="{StaticResource StatusPill}" Tag="{Binding Status}" VerticalAlignment="Top">
+                                <TextBlock Text="{Binding StatusLabel}" Style="{StaticResource PillText}" />
+                            </Border>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" />
+                                <TextBlock Text="{Binding When}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                            </StackPanel>
+                        </DockPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </StackPanel>
+        </ScrollViewer>
+
+        <!-- ============ Right: assignment detail ============ -->
+        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="24,22">
+            <Grid>
+                <!-- Empty state -->
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="320"
+                            Visibility="{Binding SelectedDetail, Converter={StaticResource NotNullToCollapsed}}">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE8A5;" FontSize="34" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource TextTertiaryBrush}" />
+                    <TextBlock Text="No assignment selected" FontWeight="SemiBold" FontSize="15" HorizontalAlignment="Center" Margin="0,12,0,4" />
+                    <TextBlock Style="{StaticResource Muted}" TextAlignment="Center"
+                               Text="Pick an assignment to follow the plan, see who is working on what, and read the final result." />
+                </StackPanel>
+
+                <DockPanel Visibility="{Binding SelectedDetail, Converter={StaticResource NullToVisibility}}">
+                    <!-- Header -->
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                            <Button Style="{StaticResource GhostButton}" Command="{Binding OpenAssignmentFilesCommand}" Margin="0,0,8,0" ToolTip="Open the files your staff saved">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE838;" FontSize="13" Margin="0,0,7,0" />
+                                    <TextBlock Text="Files" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource GhostButton}" Command="{Binding CancelSelectedCommand}" ToolTip="Stop this assignment">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="12" Margin="0,0,7,0" />
+                                    <TextBlock Text="Cancel" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Margin="0,0,12,0">
+                            <TextBlock Text="{Binding SelectedDetail.Title}" FontFamily="{StaticResource DisplayFont}" FontSize="20" FontWeight="SemiBold"
+                                       TextWrapping="Wrap" TextTrimming="None" />
+                            <Border Style="{StaticResource StatusPill}" Tag="{Binding SelectedDetail.Status}" Margin="0,8,0,0">
+                                <TextBlock Text="{Binding SelectedDetail.Status, Converter={StaticResource StatusToLabel}}" Style="{StaticResource PillText}" />
+                            </Border>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource DangerSoftBrush}" CornerRadius="8" Padding="12,8" Margin="0,0,0,12"
+                            Visibility="{Binding SelectedDetail.Error, Converter={StaticResource NullToVisibility}}">
+                        <TextBlock Text="{Binding SelectedDetail.Error}" TextWrapping="Wrap" TextTrimming="None" />
+                    </Border>
+
+                    <!-- Plan -->
+                    <StackPanel DockPanel.Dock="Top" Visibility="{Binding SelectedSubtasks.Count, Converter={StaticResource CountToVisibility}}">
+                        <TextBlock Text="PLAN" Style="{StaticResource Label}" />
+                        <ItemsControl ItemsSource="{Binding SelectedSubtasks}" Margin="0,0,0,14">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="10,8" Margin="0,0,0,6">
+                                        <DockPanel>
+                                            <ContentPresenter DockPanel.Dock="Left" Content="{Binding}" ContentTemplate="{StaticResource AvatarTemplate}"
+                                                              Width="28" Height="28" Margin="0,0,10,0"></ContentPresenter>
+                                            <Border DockPanel.Dock="Right" Style="{StaticResource StatusPill}" Tag="{Binding Status}">
+                                                <TextBlock Text="{Binding StatusLabel}" Style="{StaticResource PillText}" />
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
+                                                <TextBlock Text="{Binding Title}" FontSize="13" />
+                                                <TextBlock Text="{Binding Name}" Style="{StaticResource Caption}" FontSize="11.5" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Result -->
+                    <TextBlock DockPanel.Dock="Top" Text="RESULT" Style="{StaticResource Label}" />
+                    <Grid>
+                        <TextBlock Style="{StaticResource Muted}" Text="The finished work will appear here."
+                                   Visibility="{Binding SelectedDetail.Result, Converter={StaticResource NotNullToCollapsed}}" />
+                        <FlowDocumentScrollViewer controls:Markdown.Source="{Binding SelectedDetail.Result}"
+                                                  Visibility="{Binding SelectedDetail.Result, Converter={StaticResource NullToVisibility}}" />
+                    </Grid>
+                </DockPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

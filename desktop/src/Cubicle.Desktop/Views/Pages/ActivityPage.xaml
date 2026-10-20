@@ -1,0 +1,42 @@
+<UserControl x:Class="Cubicle.Desktop.Views.Pages.ActivityPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Cubicle.Desktop.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
+    <DockPanel Margin="32,28">
+        <StackPanel DockPanel.Dock="Top">
+            <TextBlock Text="Activity" Style="{StaticResource PageTitle}" />
+            <TextBlock Style="{StaticResource PageSubtitle}" Text="Everything your office did, newest first." />
+        </StackPanel>
+        <Border Style="{StaticResource Card}" Padding="8">
+            <ListBox ItemsSource="{Binding Activity}" Style="{StaticResource PlainList}">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Focusable" Value="False" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="12,10">
+                                        <ContentPresenter />
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Width="128" Style="{StaticResource Caption}" VerticalAlignment="Top" Margin="0,1,0,0"
+                                       Text="{Binding CreatedAt, StringFormat='{}{0:ddd dd MMM, HH:mm}'}" />
+                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" TextTrimming="None" />
+                        </DockPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+    </DockPanel>
+</UserControl>

@@ -4,106 +4,185 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Cubicle.Desktop.ViewModels"
+        xmlns:pages="clr-namespace:Cubicle.Desktop.Views.Pages"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
-        Title="Cubicle — your personal AI staff"
+        Title="Cubicle"
         Icon="/Assets/cubicle.ico"
-        Width="1200" Height="780" MinWidth="940" MinHeight="600"
-        WindowStartupLocation="CenterScreen">
+        Width="1280" Height="820" MinWidth="880" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource AppBackgroundBrush}"
+        SizeChanged="Window_SizeChanged">
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="232" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- ============ Navigation rail ============ -->
-        <Border Grid.Column="0" Padding="14,18" BorderThickness="0,0,1,0"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                Background="{DynamicResource LayerFillColorDefaultBrush}">
+        <!-- ================= Navigation rail ================= -->
+        <Border Background="{DynamicResource RailBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Width" Value="244" />
+                    <Setter Property="Padding" Value="14,18" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsCompact}" Value="True">
+                            <Setter Property="Width" Value="72" />
+                            <Setter Property="Padding" Value="10,18" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
             <DockPanel>
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,0,0,22">
-                    <Image Source="/Assets/cubicle.ico" Width="34" Height="34" />
-                    <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="Cubicle" FontSize="20" FontWeight="Bold" />
-                        <TextBlock Text="your personal AI staff" FontSize="11" Style="{StaticResource Muted}" />
+                <!-- Brand -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,0,0,26">
+                    <Image Source="/Assets/cubicle-256.png" Width="34" Height="34" RenderOptions.BitmapScalingMode="HighQuality" />
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center"
+                                Visibility="{Binding IsCompact, Converter={StaticResource InverseBoolToVisibility}}">
+                        <TextBlock Text="Cubicle" FontFamily="{StaticResource DisplayFont}" FontSize="19" FontWeight="Bold" />
+                        <TextBlock Text="Your personal AI staff" Style="{StaticResource Caption}" />
                     </StackPanel>
                 </StackPanel>
 
-                <StackPanel DockPanel.Dock="Bottom" Margin="4,12,4,0">
-                    <StackPanel Orientation="Horizontal">
-                        <Ellipse Width="9" Height="9" Margin="0,0,8,0">
-                            <Ellipse.Style>
-                                <Style TargetType="Ellipse">
-                                    <Setter Property="Fill" Value="{StaticResource SlateBrush}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsConnected}" Value="True">
-                                            <Setter Property="Fill" Value="{StaticResource MintBrush}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Ellipse.Style>
-                        </Ellipse>
-                        <TextBlock Text="{Binding ConnectionText}" FontSize="12" TextWrapping="Wrap" MaxWidth="180" />
-                    </StackPanel>
-                    <TextBlock Text="{Binding UsageText}" FontSize="11" Margin="17,4,0,0" Style="{StaticResource Muted}" />
+                <!-- Footer: status + theme -->
+                <StackPanel DockPanel.Dock="Bottom">
+                    <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="10" Padding="12,10" Margin="0,0,0,10"
+                            Visibility="{Binding IsCompact, Converter={StaticResource InverseBoolToVisibility}}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="8" Height="8" Margin="0,0,8,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource NeutralBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                                    <Setter Property="Fill" Value="{DynamicResource SuccessBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="{Binding ConnectionText}" FontSize="12.5" FontWeight="SemiBold" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding UsageText}" Style="{StaticResource Caption}" Margin="16,3,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Compact rail: one button that cycles the theme -->
+                    <Button Style="{StaticResource GhostButton}" Command="{Binding CycleThemeCommand}" ToolTip="{Binding ThemeTooltip}" Padding="0,9"
+                            Visibility="{Binding IsCompact, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Style="{StaticResource Icon}" Text="{Binding ThemeGlyph}" FontSize="15" />
+                    </Button>
+                    <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="3"
+                            Visibility="{Binding IsCompact, Converter={StaticResource InverseBoolToVisibility}}">
+                        <UniformGrid Columns="3">
+                            <RadioButton Style="{StaticResource SegmentButton}" ToolTip="Light theme"
+                                         IsChecked="{Binding Theme, Converter={StaticResource Equals}, ConverterParameter=Light}">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE706;" FontSize="14" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource SegmentButton}" ToolTip="Dark theme"
+                                         IsChecked="{Binding Theme, Converter={StaticResource Equals}, ConverterParameter=Dark}">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE708;" FontSize="14" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource SegmentButton}" ToolTip="Match Windows"
+                                         IsChecked="{Binding Theme, Converter={StaticResource Equals}, ConverterParameter=System}">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE7F4;" FontSize="14" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                            </RadioButton>
+                        </UniformGrid>
+                    </Border>
                 </StackPanel>
 
-                <ListBox SelectedIndex="{Binding SelectedSection}" BorderThickness="0" Background="Transparent">
-                    <ListBoxItem Padding="10,9">
-                        <TextBlock Text="☀  Today" FontSize="14" />
+                <!-- Navigation -->
+                <ListBox SelectedIndex="{Binding SelectedSection}" Style="{StaticResource PlainList}" ItemContainerStyle="{StaticResource NavItem}">
+                    <ListBox.Resources>
+                        <Style TargetType="TextBlock" x:Key="NavLabel" BasedOn="{StaticResource {x:Type TextBlock}}">
+                            <Setter Property="FontSize" Value="14" />
+                            <Setter Property="Margin" Value="14,0,0,0" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                            <Setter Property="Visibility" Value="{Binding DataContext.IsCompact, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource InverseBoolToVisibility}}" />
+                        </Style>
+                        <Style TargetType="TextBlock" x:Key="NavIcon" BasedOn="{StaticResource Icon}">
+                            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                        </Style>
+                    </ListBox.Resources>
+                    <ListBoxItem ToolTip="Today">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource NavIcon}" Text="&#xE80F;" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Today" />
+                        </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Padding="10,9">
-                        <DockPanel LastChildFill="False" Width="170">
-                            <TextBlock Text="✉  Inbox" FontSize="14" />
-                            <Border DockPanel.Dock="Right" Background="{StaticResource AmberBrush}" CornerRadius="9" Padding="7,0"
-                                    Visibility="{Binding OpenQuestions, Converter={StaticResource CountToVisibility}}">
-                                <TextBlock Text="{Binding OpenQuestions}" Foreground="{StaticResource InkBrush}" FontWeight="Bold" FontSize="12" />
+                    <ListBoxItem ToolTip="Inbox">
+                        <Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource NavIcon}" Text="&#xE715;" />
+                                <TextBlock Style="{StaticResource NavLabel}" Text="Inbox" />
+                            </StackPanel>
+                            <Border Background="{DynamicResource AccentBrush}" CornerRadius="999" Padding="7,0" MinWidth="20" Height="20"
+                                    HorizontalAlignment="Right" Margin="0,0,-4,0"
+                                    Visibility="{Binding DataContext.OpenQuestions, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource CountToVisibility}}">
+                                <TextBlock Text="{Binding DataContext.OpenQuestions, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                           Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="Bold" FontSize="11.5"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
-                        </DockPanel>
+                        </Grid>
                     </ListBoxItem>
-                    <ListBoxItem Padding="10,9">
-                        <TextBlock Text="⟳  Routines" FontSize="14" />
+                    <ListBoxItem ToolTip="Routines">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource NavIcon}" Text="&#xE8EE;" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Routines" />
+                        </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Padding="10,9">
-                        <TextBlock Text="✦  Memory" FontSize="14" />
+                    <ListBoxItem ToolTip="Memory">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource NavIcon}" Text="&#xEA80;" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Memory" />
+                        </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Padding="10,9">
-                        <TextBlock Text="☰  Activity" FontSize="14" />
+                    <ListBoxItem ToolTip="Activity">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource NavIcon}" Text="&#xE81C;" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Activity" />
+                        </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Padding="10,9">
-                        <TextBlock Text="⚙  Settings" FontSize="14" />
+                    <ListBoxItem ToolTip="Settings">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource NavIcon}" Text="&#xE713;" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Settings" />
+                        </StackPanel>
                     </ListBoxItem>
                 </ListBox>
             </DockPanel>
         </Border>
 
-        <!-- ============ Content ============ -->
+        <!-- ================= Content ================= -->
         <DockPanel Grid.Column="1">
-
-            <!-- Banners -->
             <StackPanel DockPanel.Dock="Top">
-                <Border Background="{StaticResource CoralBrush}" Padding="16,8"
+                <Border Background="{DynamicResource DangerSoftBrush}" Padding="20,10"
                         Visibility="{Binding ErrorText, Converter={StaticResource NullToVisibility}}">
                     <DockPanel>
-                        <Button DockPanel.Dock="Right" Content="Dismiss" Command="{Binding DismissErrorCommand}" />
-                        <TextBlock Text="{Binding ErrorText}" Foreground="White" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="Dismiss" Command="{Binding DismissErrorCommand}" />
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE783;" Foreground="{DynamicResource DangerBrush}" Margin="0,0,10,0" />
+                        <TextBlock Text="{Binding ErrorText}" VerticalAlignment="Center" TextWrapping="Wrap" TextTrimming="None" />
                     </DockPanel>
                 </Border>
-                <Border Background="{StaticResource AmberSoftBrush}" Padding="16,10"
+                <Border Background="{DynamicResource AccentSoftBrush}" Padding="20,10"
                         Visibility="{Binding BreakerOpen, Converter={StaticResource BoolToVisibility}}">
                     <DockPanel>
-                        <Button DockPanel.Dock="Right" Content="Resume work" Command="{Binding ResetBreakerCommand}" />
-                        <TextBlock VerticalAlignment="Center" TextWrapping="Wrap"
-                                   Text="⏸  Work is paused: today's token budget is used up. Resume to let your staff continue." />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Content="Resume work" Command="{Binding ResetBreakerCommand}" />
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE769;" Margin="0,0,10,0" />
+                        <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" TextTrimming="None"
+                                   Text="Work is paused: today's token budget is used up." />
                     </DockPanel>
                 </Border>
-                <Border Background="{StaticResource AmberSoftBrush}" Padding="16,10"
+                <Border Background="{DynamicResource AccentSoftBrush}" Padding="20,10"
                         Visibility="{Binding Ai.IsDemo, Converter={StaticResource BoolToVisibility}}">
                     <DockPanel>
-                        <Button DockPanel.Dock="Right" Content="Choose AI provider" Command="{Binding NavigateCommand}" CommandParameter="5" />
-                        <TextBlock VerticalAlignment="Center" TextWrapping="Wrap"
-                                   Text="🧪  Demo mode: your staff are using sample answers. Connect Claude, OpenAI, Gemini, a local model or your Claude subscription to put them to real work." />
+                        <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Content="Connect an AI" Command="{Binding NavigateCommand}" CommandParameter="5" />
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE945;" Margin="0,0,10,0" />
+                        <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" TextTrimming="None"
+                                   Text="Demo mode: your staff give sample answers until you connect an AI." />
                     </DockPanel>
                 </Border>
             </StackPanel>
@@ -114,422 +193,12 @@
                         <Setter Property="Visibility" Value="Collapsed" />
                     </Style>
                 </TabControl.ItemContainerStyle>
-
-                <!-- ===== Today ===== -->
-                <TabItem>
-                    <Grid Margin="28,24">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-
-                        <StackPanel Grid.Row="0">
-                            <TextBlock Text="What should your staff do?" Style="{StaticResource PageTitle}" />
-                            <TextBlock Style="{StaticResource PageSubtitle}"
-                                       Text="Describe the outcome you want. Your Chief of Staff plans it, hands pieces to the right people, and brings you the finished result." />
-                        </StackPanel>
-
-                        <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,18">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBox Text="{Binding NewTitle, UpdateSourceTrigger=PropertyChanged}" FontSize="15"
-                                             ToolTip="e.g. Draft replies to this week's client emails" />
-                                    <TextBox Text="{Binding NewDescription, UpdateSourceTrigger=PropertyChanged}" Margin="0,8,0,0"
-                                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" MaxHeight="160"
-                                             VerticalScrollBarVisibility="Auto"
-                                             ToolTip="Details, context, links, tone… (optional)" />
-                                </StackPanel>
-                                <Button Grid.Column="1" Content="Assign  →" Style="{StaticResource AccentButton}" Margin="12,0,0,0"
-                                        VerticalAlignment="Top" Command="{Binding AssignCommand}" IsDefault="True" />
-                            </Grid>
-                        </Border>
-
-                        <!-- Staff -->
-                        <StackPanel Grid.Row="2" Margin="0,0,0,14">
-                            <TextBlock Text="Your staff" Style="{StaticResource SectionTitle}" />
-                            <ItemsControl ItemsSource="{Binding Staff}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Style="{StaticResource Card}" Width="200" Margin="0,0,10,10" Padding="12">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding Avatar}" FontSize="26" VerticalAlignment="Center" Margin="0,0,10,0" />
-                                                <StackPanel>
-                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                                    <TextBlock Text="{Binding Title}" FontSize="12" Style="{StaticResource Muted}" />
-                                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                        <Ellipse Width="8" Height="8" Margin="0,0,6,0"
-                                                                 Fill="{Binding Status, Converter={StaticResource StatusToBrush}}" />
-                                                        <TextBlock Text="{Binding Status, Converter={StaticResource StatusToLabel}}" FontSize="12" />
-                                                    </StackPanel>
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-
-                        <!-- Assignments + detail -->
-                        <Grid Grid.Row="3">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="340" />
-                                <ColumnDefinition Width="16" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <DockPanel>
-                                <TextBlock DockPanel.Dock="Top" Text="Assignments" Style="{StaticResource SectionTitle}" />
-                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" Margin="0,0,0,8"
-                                           Visibility="{Binding Assignments.Count, Converter={StaticResource ZeroToVisibility}}"
-                                           Text="Nothing yet. Give your staff their first assignment above." />
-                                <ListBox ItemsSource="{Binding Assignments}" SelectedItem="{Binding SelectedAssignment}"
-                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Margin="2,4">
-                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                    <Border Style="{StaticResource StatusPill}" Tag="{Binding Status}">
-                                                        <TextBlock Text="{Binding StatusLabel}" FontSize="11" Foreground="White" />
-                                                    </Border>
-                                                    <TextBlock Text="{Binding When}" FontSize="11" Margin="8,0,0,0"
-                                                               VerticalAlignment="Center" Style="{StaticResource Muted}" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </DockPanel>
-
-                            <Border Grid.Column="2" Style="{StaticResource Card}">
-                                <Grid>
-                                    <TextBlock Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               Text="Select an assignment to see the plan and the result."
-                                               Visibility="{Binding SelectedDetail, Converter={StaticResource NotNullToCollapsed}}" />
-                                    <DockPanel Visibility="{Binding SelectedDetail, Converter={StaticResource NullToVisibility}}">
-                                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
-                                                <Button Content="Open files" Command="{Binding OpenAssignmentFilesCommand}" Margin="0,0,8,0" />
-                                                <Button Content="Cancel" Command="{Binding CancelSelectedCommand}" />
-                                            </StackPanel>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding SelectedDetail.Title}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                                <Border Style="{StaticResource StatusPill}" Tag="{Binding SelectedDetail.Status}" Margin="0,6,0,0">
-                                                    <TextBlock Text="{Binding SelectedDetail.Status, Converter={StaticResource StatusToLabel}}"
-                                                               FontSize="11" Foreground="White" />
-                                                </Border>
-                                            </StackPanel>
-                                        </DockPanel>
-
-                                        <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedDetail.Error}" Foreground="{StaticResource CoralBrush}"
-                                                   TextWrapping="Wrap" Margin="0,0,0,8"
-                                                   Visibility="{Binding SelectedDetail.Error, Converter={StaticResource NullToVisibility}}" />
-
-                                        <Expander DockPanel.Dock="Top" Header="Plan and progress" IsExpanded="True" Margin="0,0,0,10"
-                                                  Visibility="{Binding SelectedSubtasks.Count, Converter={StaticResource CountToVisibility}}">
-                                            <ItemsControl ItemsSource="{Binding SelectedSubtasks}" Margin="0,6,0,0">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <DockPanel Margin="0,3">
-                                                            <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Margin="0,0,8,0"
-                                                                     Fill="{Binding Status, Converter={StaticResource StatusToBrush}}" />
-                                                            <TextBlock DockPanel.Dock="Right" Text="{Binding StatusLabel}" FontSize="12" Style="{StaticResource Muted}" />
-                                                            <TextBlock TextTrimming="CharacterEllipsis">
-                                                                <Run Text="{Binding Assignee, Mode=OneWay}" FontWeight="SemiBold" />
-                                                                <Run Text=" — " />
-                                                                <Run Text="{Binding Title, Mode=OneWay}" />
-                                                            </TextBlock>
-                                                        </DockPanel>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </Expander>
-
-                                        <TextBox Text="{Binding SelectedDetail.Result, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
-                                                 VerticalScrollBarVisibility="Auto" FontFamily="Segoe UI" BorderThickness="0"
-                                                 Background="Transparent" />
-                                    </DockPanel>
-                                </Grid>
-                            </Border>
-                        </Grid>
-                    </Grid>
-                </TabItem>
-
-                <!-- ===== Inbox ===== -->
-                <TabItem>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="28,24" MaxWidth="900" HorizontalAlignment="Left">
-                            <TextBlock Text="Inbox" Style="{StaticResource PageTitle}" />
-                            <TextBlock Style="{StaticResource PageSubtitle}"
-                                       Text="Only things that genuinely need you end up here. Answer and the work continues automatically." />
-                            <Border Style="{StaticResource Card}"
-                                    Visibility="{Binding Inbox.Count, Converter={StaticResource ZeroToVisibility}}">
-                                <TextBlock Text="🎉  Inbox zero. Your staff have everything they need." />
-                            </Border>
-                            <ItemsControl ItemsSource="{Binding Inbox}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
-                                            <StackPanel>
-                                                <TextBlock Style="{StaticResource Muted}" FontSize="12">
-                                                    <Run Text="{Binding EmployeeName, Mode=OneWay}" FontWeight="SemiBold" />
-                                                    <Run Text=" asked · " />
-                                                    <Run Text="{Binding Asked, Mode=OneWay}" />
-                                                </TextBlock>
-                                                <TextBlock Text="{Binding Item.Question}" FontSize="15" TextWrapping="Wrap" Margin="0,6,0,10" />
-                                                <DockPanel>
-                                                    <Button DockPanel.Dock="Right" Content="Send" Style="{StaticResource AccentButton}" Margin="10,0,0,0"
-                                                            Command="{Binding SendCommand}" VerticalAlignment="Top" />
-                                                    <TextBox Text="{Binding AnswerText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
-                                                             TextWrapping="Wrap" MinHeight="40" />
-                                                </DockPanel>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </ScrollViewer>
-                </TabItem>
-
-                <!-- ===== Routines ===== -->
-                <TabItem>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="28,24" MaxWidth="900" HorizontalAlignment="Left">
-                            <TextBlock Text="Routines" Style="{StaticResource PageTitle}" />
-                            <TextBlock Style="{StaticResource PageSubtitle}"
-                                       Text="Standing orders your staff carry out on a schedule — set them once and they get done every day, even when this window is closed." />
-
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,18">
-                                <StackPanel>
-                                    <TextBlock Text="New routine" Style="{StaticResource SectionTitle}" />
-                                    <TextBox Text="{Binding RoutineTitle, UpdateSourceTrigger=PropertyChanged}"
-                                             ToolTip="e.g. Morning briefing: plan my day from my notes" />
-                                    <TextBox Text="{Binding RoutineDescription, UpdateSourceTrigger=PropertyChanged}" Margin="0,8,0,0"
-                                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56"
-                                             ToolTip="Exactly what should be done each time, and what a great result looks like." />
-                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                        <ComboBox ItemsSource="{Binding RoutineKinds}" SelectedIndex="{Binding RoutineKind}" Width="170" />
-                                        <TextBlock Text="at" VerticalAlignment="Center" Margin="10,0" />
-                                        <TextBox Text="{Binding RoutineTime, UpdateSourceTrigger=PropertyChanged}" Width="80" ToolTip="24h time, e.g. 09:00" />
-                                        <TextBlock Text="or every" VerticalAlignment="Center" Margin="10,0" />
-                                        <TextBox Text="{Binding RoutineEveryMinutes, UpdateSourceTrigger=PropertyChanged}" Width="70" />
-                                        <TextBlock Text="min" VerticalAlignment="Center" Margin="6,0,16,0" />
-                                        <Button Content="Add routine" Style="{StaticResource AccentButton}" Command="{Binding CreateRoutineCommand}" />
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <ItemsControl ItemsSource="{Binding Routines}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                                            <DockPanel>
-                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <CheckBox IsChecked="{Binding Enabled}" Content="On" Margin="0,0,12,0" />
-                                                    <Button Content="Delete" Command="{Binding DeleteCommand}" />
-                                                </StackPanel>
-                                                <StackPanel>
-                                                    <TextBlock Text="{Binding Routine.Title}" FontWeight="SemiBold" FontSize="15" />
-                                                    <TextBlock Text="{Binding When}" Margin="0,2,0,0" />
-                                                    <TextBlock FontSize="12" Style="{StaticResource Muted}" Margin="0,2,0,0">
-                                                        <Run Text="{Binding NextRun, Mode=OneWay}" />
-                                                        <Run Text="  ·  " />
-                                                        <Run Text="{Binding LastRun, Mode=OneWay}" />
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </DockPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </ScrollViewer>
-                </TabItem>
-
-                <!-- ===== Memory ===== -->
-                <TabItem>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="28,24" MaxWidth="900" HorizontalAlignment="Left">
-                            <TextBlock Text="Memory" Style="{StaticResource PageTitle}" />
-                            <TextBlock Style="{StaticResource PageSubtitle}"
-                                       Text="What your staff know about you: preferences, people, projects. They learn as they work, and you can teach them directly. Every employee sees this." />
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
-                                <DockPanel>
-                                    <Button DockPanel.Dock="Right" Content="Remember" Style="{StaticResource AccentButton}" Margin="10,0,0,0"
-                                            Command="{Binding AddMemoryCommand}" />
-                                    <TextBox Text="{Binding NewMemory, UpdateSourceTrigger=PropertyChanged}"
-                                             ToolTip="e.g. I write in British English and sign emails as 'Sam'." />
-                                </DockPanel>
-                            </Border>
-                            <TextBlock Style="{StaticResource Muted}" Text="Nothing remembered yet."
-                                       Visibility="{Binding Memories.Count, Converter={StaticResource ZeroToVisibility}}" />
-                            <ItemsControl ItemsSource="{Binding Memories}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="14,10">
-                                            <DockPanel>
-                                                <Button DockPanel.Dock="Right" Content="Forget" Command="{Binding DeleteCommand}" VerticalAlignment="Center" />
-                                                <StackPanel>
-                                                    <TextBlock Text="{Binding Content}" TextWrapping="Wrap" />
-                                                    <TextBlock FontSize="12" Style="{StaticResource Muted}" Margin="0,3,0,0">
-                                                        <Run Text="{Binding Source, Mode=OneWay}" />
-                                                        <Run Text=" · " />
-                                                        <Run Text="{Binding Added, Mode=OneWay}" />
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </DockPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </ScrollViewer>
-                </TabItem>
-
-                <!-- ===== Activity ===== -->
-                <TabItem>
-                    <DockPanel Margin="28,24">
-                        <StackPanel DockPanel.Dock="Top">
-                            <TextBlock Text="Activity" Style="{StaticResource PageTitle}" />
-                            <TextBlock Style="{StaticResource PageSubtitle}" Text="Everything your office did, newest first." />
-                        </StackPanel>
-                        <ListView ItemsSource="{Binding Activity}" BorderThickness="0">
-                            <ListView.ItemTemplate>
-                                <DataTemplate>
-                                    <DockPanel Margin="0,2">
-                                        <TextBlock DockPanel.Dock="Left" Width="120" FontSize="12" Style="{StaticResource Muted}"
-                                                   Text="{Binding CreatedAt, StringFormat='{}{0:ddd HH:mm:ss}'}" />
-                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
-                                    </DockPanel>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
-                    </DockPanel>
-                </TabItem>
-
-                <!-- ===== Settings ===== -->
-                <TabItem>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="28,24" MaxWidth="760" HorizontalAlignment="Left">
-                            <TextBlock Text="Settings" Style="{StaticResource PageTitle}" />
-                            <TextBlock Style="{StaticResource PageSubtitle}" Text="Everything stays on this PC. Keys are encrypted with Windows DPAPI and never shown again." />
-
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,14" DataContext="{Binding Ai}">
-                                <StackPanel>
-                                    <TextBlock Text="AI provider" Style="{StaticResource SectionTitle}" />
-                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12"
-                                               Text="Choose the AI your staff work with. Saving restarts them with the new setup." />
-
-                                    <TextBlock Text="Provider" FontWeight="SemiBold" Margin="0,0,0,4" />
-                                    <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding SelectedProvider}">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{Binding Name}" />
-                                                    <TextBlock Text="  ✓ connected" Foreground="{StaticResource MintBrush}"
-                                                               Visibility="{Binding Configured, Converter={StaticResource BoolToVisibility}}" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                    <TextBlock Text="{Binding SelectedProvider.Description}" Style="{StaticResource Muted}" FontSize="12" Margin="0,6,0,12" />
-
-                                    <StackPanel Visibility="{Binding SelectedProvider.NeedsKey, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,12">
-                                        <TextBlock FontWeight="SemiBold" Margin="0,0,0,4">
-                                            <Run Text="API key" />
-                                            <Run Text="{Binding SelectedProvider.SecretName, Mode=OneWay}" FontWeight="Normal" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                                        </TextBlock>
-                                        <DockPanel>
-                                            <Button DockPanel.Dock="Right" Content="Save key" Margin="10,0,0,0" Click="SaveApiKey_Click" />
-                                            <PasswordBox x:Name="ApiKeyBox" />
-                                        </DockPanel>
-                                        <TextBlock Text="Stored encrypted on this PC and never shown again." Style="{StaticResource Muted}" FontSize="12" Margin="0,4,0,0" />
-                                    </StackPanel>
-
-                                    <StackPanel Visibility="{Binding SelectedProvider.BaseUrlEditable, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,12">
-                                        <TextBlock Text="Server URL" FontWeight="SemiBold" Margin="0,0,0,4" />
-                                        <TextBox Text="{Binding BaseUrl, UpdateSourceTrigger=PropertyChanged}" />
-                                    </StackPanel>
-
-                                    <TextBlock Text="Model" FontWeight="SemiBold" Margin="0,0,0,4" />
-                                    <DockPanel>
-                                        <Button DockPanel.Dock="Right" Content="Test connection" Margin="10,0,0,0" Command="{Binding TestConnectionCommand}" />
-                                        <ComboBox IsEditable="True" ItemsSource="{Binding Models}" Text="{Binding Model, UpdateSourceTrigger=PropertyChanged}" />
-                                    </DockPanel>
-                                    <TextBlock Text="{Binding ConnectionStatus}" FontSize="12" Margin="0,6,0,12" TextWrapping="Wrap"
-                                               Visibility="{Binding ConnectionStatus, Converter={StaticResource NullToVisibility}}" />
-
-                                    <Grid Margin="0,0,0,12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="16" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="Effort" FontWeight="SemiBold" Margin="0,0,0,4" />
-                                            <ComboBox ItemsSource="{Binding Efforts}" SelectedItem="{Binding Effort}"
-                                                      ToolTip="Higher effort means more careful work but more tokens. Used by Claude models." />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2">
-                                            <TextBlock Text="Daily token budget" FontWeight="SemiBold" Margin="0,0,0,4" />
-                                            <TextBox Text="{Binding DailyBudget, UpdateSourceTrigger=PropertyChanged}"
-                                                     ToolTip="Work pauses when today's usage reaches this. 0 = unlimited, empty = default." />
-                                        </StackPanel>
-                                    </Grid>
-
-                                    <TextBlock Text="Your name" FontWeight="SemiBold" Margin="0,0,0,4" />
-                                    <TextBox Text="{Binding OwnerName, UpdateSourceTrigger=PropertyChanged}" ToolTip="How your staff address you." Margin="0,0,0,12" />
-
-                                    <CheckBox IsChecked="{Binding WebAccess}" Content="Allow web search and browsing" Margin="0,0,0,14" />
-
-                                    <Button Content="Save AI settings" Style="{StaticResource AccentButton}" HorizontalAlignment="Left"
-                                            Command="{Binding SaveCommand}" />
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                                <StackPanel>
-                                    <TextBlock Text="Background" Style="{StaticResource SectionTitle}" />
-                                    <CheckBox IsChecked="{Binding StartWithWindows}" Content="Start Cubicle when I sign in to Windows (runs quietly in the tray)" />
-                                    <TextBlock Style="{StaticResource Muted}" Margin="0,8,0,0"
-                                               Text="Closing this window keeps your staff working. Use the tray icon → 'Stop staff and quit' to stop everything." />
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                                <StackPanel>
-                                    <TextBlock Text="Data" Style="{StaticResource SectionTitle}" />
-                                    <TextBlock Text="{Binding DataFolder}" Style="{StaticResource Muted}" Margin="0,0,0,10" />
-                                    <StackPanel Orientation="Horizontal">
-                                        <Button Content="Open data folder" Command="{Binding OpenDataFolderCommand}" Margin="0,0,10,0" />
-                                        <Button Content="Resume paused work" Command="{Binding ResetBreakerCommand}" />
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource Card}">
-                                <StackPanel>
-                                    <TextBlock Text="About" Style="{StaticResource SectionTitle}" />
-                                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
-                                               Text="Cubicle is free and open source (MIT). Star it, report bugs, or hire new kinds of employees on GitHub." />
-                                    <Button Content="Open GitHub repository" Command="{Binding OpenRepoCommand}" HorizontalAlignment="Left" />
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </ScrollViewer>
-                </TabItem>
+                <TabItem><pages:TodayPage /></TabItem>
+                <TabItem><pages:InboxPage /></TabItem>
+                <TabItem><pages:RoutinesPage /></TabItem>
+                <TabItem><pages:MemoryPage /></TabItem>
+                <TabItem><pages:ActivityPage /></TabItem>
+                <TabItem><pages:SettingsPage /></TabItem>
             </TabControl>
         </DockPanel>
     </Grid>

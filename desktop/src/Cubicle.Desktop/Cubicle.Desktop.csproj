@@ -36,6 +36,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\cubicle.ico" />
+    <Resource Include="Assets\cubicle-256.png" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,59 @@
+<UserControl x:Class="Cubicle.Desktop.Views.Pages.InboxPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Cubicle.Desktop.ViewModels"
+             xmlns:controls="clr-namespace:Cubicle.Desktop.Controls"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="32,28" MaxWidth="860" HorizontalAlignment="Stretch">
+            <TextBlock Text="Inbox" Style="{StaticResource PageTitle}" />
+            <TextBlock Style="{StaticResource PageSubtitle}"
+                       Text="Your staff only ask when they genuinely need you. Answer, and the work continues automatically." />
+
+            <Border Style="{StaticResource EmptyState}" Visibility="{Binding Inbox.Count, Converter={StaticResource ZeroToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="18" Foreground="{DynamicResource SuccessBrush}" Margin="0,0,12,0" />
+                    <TextBlock Text="Inbox zero. Your staff have everything they need." VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
+
+            <ItemsControl ItemsSource="{Binding Inbox}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                            <DockPanel>
+                                <Grid DockPanel.Dock="Left" Width="36" Height="36" Margin="0,0,14,0" VerticalAlignment="Top">
+                                    <Ellipse Fill="{Binding Item.EmployeeId, Converter={StaticResource AvatarBrush}}" />
+                                    <TextBlock Text="{Binding EmployeeName, Converter={StaticResource Initial}}" Foreground="White"
+                                               FontWeight="SemiBold" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Grid>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Caption}">
+                                        <Run Text="{Binding EmployeeName, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        <Run Text=" asked · " />
+                                        <Run Text="{Binding Asked, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Item.Question}" FontSize="15" TextWrapping="Wrap" TextTrimming="None" Margin="0,6,0,12" />
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Margin="10,0,0,0"
+                                                Command="{Binding SendCommand}" VerticalAlignment="Bottom">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Reply" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
+                                                <TextBlock Style="{StaticResource Icon}" Text="&#xE72A;" FontSize="12" Margin="8,0,0,0" Foreground="{DynamicResource TextOnAccentBrush}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <TextBox Text="{Binding AnswerText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True"
+                                                 TextWrapping="Wrap" MinHeight="40" controls:Placeholder.Text="Type your answer…" />
+                                    </DockPanel>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

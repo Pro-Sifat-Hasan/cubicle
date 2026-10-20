@@ -26,11 +26,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Raised for things worth a desktop notification (title, message).</summary>
     public event Action<string, string>? Notify;
 
-    public MainViewModel()
+    public MainViewModel(string theme = ThemeService.SystemMode)
     {
         var url = Environment.GetEnvironmentVariable("CUBICLE_GATEWAY_URL");
         _gatewayUri = new Uri(string.IsNullOrWhiteSpace(url) ? CubiclePaths.DefaultGatewayUrl : url);
         _startWithWindows = AutoStart.IsEnabled;
+        _theme = theme;
         Ai = new AiSettingsViewModel(() => _client, message => ErrorText = message, (title, message) => Notify?.Invoke(title, message));
     }
 
@@ -56,6 +57,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string? _errorText;
 
     public int OpenQuestions => Inbox.Count;
+
+    [ObservableProperty] private int _activeCount;
+    [ObservableProperty] private int _doneCount;
+
+    public string Greeting
+    {
+        get
+        {
+            var hour = DateTime.Now.Hour;
+            var part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+            var name = Ai.OwnerName.Trim();
+            return string.IsNullOrEmpty(name) ? part : $"{part}, {name}";
+        }
+    }
+
+    public string VersionText { get; } =
+        $"Cubicle {typeof(MainViewModel).Assembly.GetName().Version?.ToString(3)} · MIT licensed";
 
     // ---- assignment composer ----
 
@@ -87,9 +105,40 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _routineTime = "09:00";
     [ObservableProperty] private string _routineEveryMinutes = "60";
 
-    // ---- settings ----
+    // ---- settings & layout ----
 
     [ObservableProperty] private bool _startWithWindows;
+
+    /// <summary>Appearance: "System", "Light" or "Dark".</summary>
+    [ObservableProperty] private string _theme;
+
+    /// <summary>True when the window is narrow: the navigation rail collapses to icons.</summary>
+    [ObservableProperty] private bool _isCompact;
+
+    partial void OnThemeChanged(string value)
+    {
+        ThemeService.Apply(value);
+        new UiPreferences(value).Save();
+        OnPropertyChanged(nameof(ThemeGlyph));
+        OnPropertyChanged(nameof(ThemeTooltip));
+    }
+
+    public string ThemeGlyph => Theme switch
+    {
+        ThemeService.LightMode => "",
+        ThemeService.DarkMode => "",
+        _ => "",
+    };
+
+    public string ThemeTooltip => $"Theme: {Theme} (click to change)";
+
+    [RelayCommand]
+    private void CycleTheme() => Theme = Theme switch
+    {
+        ThemeService.LightMode => ThemeService.DarkMode,
+        ThemeService.DarkMode => ThemeService.SystemMode,
+        _ => ThemeService.LightMode,
+    };
 
     public string DataFolder => CubiclePaths.Home;
 
@@ -195,6 +244,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         var status = statusTask.Result;
         BreakerOpen = status.BreakerOpen;
+        ActiveCount = assignmentsTask.Result.Count(t => !t.IsFinished && t.Status != "waiting_human");
+        DoneCount = assignmentsTask.Result.Count(t => t.Status == "done");
+        OnPropertyChanged(nameof(Greeting));
         UsageText = status.DailyTokenBudget > 0
             ? $"{status.TokensToday:N0} / {status.DailyTokenBudget:N0} tokens today"
             : $"{status.TokensToday:N0} tokens today";

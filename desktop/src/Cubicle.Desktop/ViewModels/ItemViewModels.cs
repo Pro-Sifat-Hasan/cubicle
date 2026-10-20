@@ -66,7 +66,10 @@ public sealed class SubtaskViewModel(TaskItem task, string assigneeName)
 {
     public TaskItem Task { get; } = task;
     public string Title => Task.Title;
-    public string Assignee { get; } = assigneeName;
+
+    // Id/Name feed the shared avatar template (colour by id, initial from name).
+    public string Id => Task.Assignee;
+    public string Name { get; } = assigneeName;
     public string Status => Task.Status;
     public string StatusLabel => StatusText.For(Task.Status);
     public string? Result => Task.Result;

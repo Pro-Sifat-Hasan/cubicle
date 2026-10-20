@@ -5,16 +5,14 @@ namespace Cubicle.Desktop.Views;
 
 public partial class MainWindow : Window
 {
+    private const double CompactWidth = 1080;
+
     public MainWindow() => InitializeComponent();
 
-    // PasswordBox does not support binding by design; hand the key to the
-    // view model directly and clear the box immediately afterwards.
-    private async void SaveApiKey_Click(object sender, RoutedEventArgs e)
+    // Collapse the navigation rail to icons on narrow windows.
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm)
-            return;
-        var key = ApiKeyBox.Password;
-        ApiKeyBox.Clear();
-        await vm.Ai.SaveKeyAsync(key);
+        if (DataContext is MainViewModel vm)
+            vm.IsCompact = e.NewSize.Width < CompactWidth;
     }
 }
