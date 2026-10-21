@@ -117,6 +117,37 @@ public sealed class GatewayClient : IDisposable
     public Task DeleteRoutineAsync(string id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, $"/api/v1/routines/{Uri.EscapeDataString(id)}", null, ct);
 
+    // ---- onboarding and profile ----
+
+    /// <summary>The passion and profession packs, and whether onboarding is done.</summary>
+    public Task<OnboardingPacks> GetOnboardingAsync(CancellationToken ct = default) =>
+        GetAsync<OnboardingPacks>("/api/v1/onboarding", ct);
+
+    public Task<ProfileInfo> GetProfileAsync(CancellationToken ct = default) =>
+        GetAsync<ProfileInfo>("/api/v1/profile", ct);
+
+    /// <summary>Names and voices the main agent, hires the profession's team and sets up its routines.</summary>
+    public Task<OnboardingResult> CompleteOnboardingAsync(OnboardingRequest request, CancellationToken ct = default) =>
+        SendAsync<OnboardingResult>(HttpMethod.Post, "/api/v1/onboarding", new
+        {
+            agent_name = request.AgentName,
+            owner_name = request.OwnerName,
+            profession = request.Profession,
+            passion = request.Passion,
+            custom_passion = request.CustomPassion,
+            persona = request.Persona,
+            stack = request.Stack ?? [],
+        }, ct);
+
+    /// <summary>Asks the main agent to write a persona for a passion the owner typed; returns the task id to poll.</summary>
+    public async Task<string> StartPersonaAsync(string passion, CancellationToken ct = default) =>
+        (await SendAsync<PersonaTask>(HttpMethod.Post, "/api/v1/persona", new { passion }, ct)).TaskId;
+
+    public Task<PersonaStatus> GetPersonaAsync(string taskId, CancellationToken ct = default) =>
+        GetAsync<PersonaStatus>($"/api/v1/persona/{Uri.EscapeDataString(taskId)}", ct);
+
+    private sealed record PersonaTask(string TaskId);
+
     // ---- secrets (write-only) ----
 
     public Task<List<string>> GetSecretNamesAsync(CancellationToken ct = default) =>

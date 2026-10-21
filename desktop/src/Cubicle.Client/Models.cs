@@ -331,5 +331,84 @@ public sealed record ConversationDetail(
     bool Busy,
     IReadOnlyList<ChatMessage> Messages);
 
+// ---- onboarding and profile ----
+
+/// <summary>The voice and look a passion gives the main agent. Built-in passions are JSON packs in the gateway;
+/// a custom passion's persona is written by the model.</summary>
+public sealed record Persona(
+    string Id,
+    string Title,
+    string Emoji,
+    string SystemPromptStyle,
+    IReadOnlyList<string> GreetingTemplates,
+    IReadOnlyList<string> DailyFeedQueries,
+    string AccentColor,
+    IReadOnlyList<string> AvatarSet)
+{
+    public const string CustomId = "custom";
+
+    /// <summary>A greeting with {name} (the owner) and {agent} filled in; <paramref name="seed"/> picks which one.</summary>
+    public string Greet(string owner, string agent, int seed)
+    {
+        if (GreetingTemplates.Count == 0)
+            return $"Hello, {owner}.";
+        var template = GreetingTemplates[Math.Abs(seed) % GreetingTemplates.Count];
+        return template.Replace("{name}", owner, StringComparison.Ordinal).Replace("{agent}", agent, StringComparison.Ordinal);
+    }
+}
+
+public sealed record Teammate(string Id, string Name, string Title, string Avatar, string Description);
+
+public sealed record PackRoutine(string Title, string Schedule, string Agent, bool Enabled);
+
+/// <summary>A profession decides the team, routines and starter missions.</summary>
+public sealed record Profession(
+    string Id,
+    string Title,
+    string Emoji,
+    string Description,
+    IReadOnlyList<Teammate> Team,
+    IReadOnlyList<PackRoutine> Routines,
+    IReadOnlyList<string> StarterMissions,
+    IReadOnlyList<string> StackSuggestions);
+
+public sealed record OwnerProfile(
+    bool Onboarded,
+    string AgentName,
+    string Profession,
+    Persona? Passion,
+    string? CustomPassion,
+    IReadOnlyList<string>? Stack);
+
+public sealed record OnboardingPacks(
+    OwnerProfile Profile,
+    IReadOnlyList<Persona> Passions,
+    IReadOnlyList<Profession> Professions);
+
+public sealed record ProfileInfo(OwnerProfile Profile, IReadOnlyList<string> StarterMissions);
+
+/// <summary>What the owner chose in onboarding. For a custom passion, <see cref="Persona"/> is the generated one (optional).</summary>
+public sealed record OnboardingRequest(
+    string AgentName,
+    string OwnerName,
+    string Profession,
+    string Passion,
+    string? CustomPassion = null,
+    Persona? Persona = null,
+    IReadOnlyList<string>? Stack = null);
+
+public sealed record OnboardingResult(
+    OwnerProfile Profile,
+    IReadOnlyList<Agent> Hired,
+    IReadOnlyList<Routine> Routines,
+    IReadOnlyList<string> StarterMissions);
+
+/// <summary>Progress of a persona the main agent is writing for a custom passion.</summary>
+public sealed record PersonaStatus(string Status, Persona? Persona, string? Error)
+{
+    public bool IsDone => Status == "done" && Persona is not null;
+    public bool IsFailed => Status is "failed" or "cancelled";
+}
+
 /// <summary>A live event from the gateway's SSE stream.</summary>
 public sealed record GatewayEvent(string Type, JsonElement Data, DateTimeOffset At);
