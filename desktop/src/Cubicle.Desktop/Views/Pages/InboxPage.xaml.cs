@@ -43,7 +43,7 @@ public partial class InboxPage : UserControl
     // A scroll by the owner (not content growing) decides whether new messages pull the view down.
     private void ThreadScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (e.ExtentHeightChange == 0 && e.ViewportHeightChange == 0)
+        if (Math.Abs(e.ExtentHeightChange) < 0.5 && Math.Abs(e.ViewportHeightChange) < 0.5)
             _atBottom = ThreadScroll.VerticalOffset >= ThreadScroll.ScrollableHeight - 24;
     }
 

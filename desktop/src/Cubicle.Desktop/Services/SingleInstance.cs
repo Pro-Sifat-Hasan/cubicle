@@ -28,22 +28,33 @@ public sealed class SingleInstance : IDisposable
     {
         var mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
         EventWaitHandle? showEvent = null;
+        var handedOver = false; // the SingleInstance owns both handles from then on
         try
         {
             showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
             if (createdNew)
-                return new SingleInstance(mutex, showEvent, onShowRequested);
+            {
+                var instance = new SingleInstance(mutex, showEvent, onShowRequested);
+                handedOver = true;
+                return instance;
+            }
             showEvent.Set(); // ask the running instance to show itself
+            return null;
         }
-        catch
+        finally
         {
-            showEvent?.Dispose();
-            mutex.Dispose();
-            throw;
+            if (!handedOver)
+            {
+                try
+                {
+                    showEvent?.Dispose();
+                }
+                finally
+                {
+                    mutex.Dispose();
+                }
+            }
         }
-        showEvent.Dispose();
-        mutex.Dispose();
-        return null;
     }
 
     public void Dispose()

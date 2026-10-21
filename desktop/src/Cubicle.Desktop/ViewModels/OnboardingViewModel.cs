@@ -221,9 +221,8 @@ public sealed partial class OnboardingViewModel : ObservableObject
             custom ? CustomPassionText.Trim() : null, custom ? CustomPersona : null, ParseStack(StackText));
 
         var call = Task.Run(() => client.CompleteOnboardingAsync(request));
-        foreach (var line in Script(profession))
+        foreach (var item in Script(profession).Select(line => new HireLine(line)))
         {
-            var item = new HireLine(line);
             HireLines.Add(item);
             await Task.Delay(650);
             item.IsDone = true;

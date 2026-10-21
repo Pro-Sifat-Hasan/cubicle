@@ -59,6 +59,7 @@ func securityHeaders(next http.Handler) http.Handler {
 // logSafe strips line breaks and other control characters from client-supplied
 // text, so it cannot forge log lines.
 func logSafe(s string) string {
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\n", ""), "\r", "")
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
 			return -1

@@ -210,16 +210,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 }
 
                 _client?.Dispose();
-                _client = new GatewayClient(_gatewayUri, token);
-                _catalog = await _client.GetCatalogAsync(ct);
-                await RefreshAllAsync();
-                await Ai.LoadAsync();
-                await LoadProfileAsync(ct);
-                IsConnected = true;
-                ConnectionText = "Office open";
+                var client = new GatewayClient(_gatewayUri, token);
+                _client = client;
+                try
+                {
+                    _catalog = await client.GetCatalogAsync(ct);
+                    await RefreshAllAsync();
+                    await Ai.LoadAsync();
+                    await LoadProfileAsync(ct);
+                    IsConnected = true;
+                    ConnectionText = "Office open";
 
-                await foreach (var evt in _client.StreamEventsAsync(ct))
-                    HandleEvent(evt);
+                    await foreach (var evt in client.StreamEventsAsync(ct))
+                        HandleEvent(evt);
+                }
+                catch
+                {
+                    client.Dispose(); // the loop connects again with a fresh client
+                    if (ReferenceEquals(_client, client))
+                        _client = null;
+                    throw;
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

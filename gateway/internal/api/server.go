@@ -191,7 +191,7 @@ func (s *Server) storeErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrConflict):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
-		s.log.Error("store error", "err", err)
+		s.log.Error("store error", "err", logSafe(err.Error()))
 		writeErr(w, http.StatusInternalServerError, "internal error")
 	}
 }
