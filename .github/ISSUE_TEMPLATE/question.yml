@@ -1,0 +1,18 @@
+name: Question or help
+description: Ask how to do something in Cubicle
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: Please check the [README](../blob/main/README.md) and the [docs](../tree/main/docs) first. **Never paste API keys or tokens.**
+  - type: textarea
+    id: question
+    attributes:
+      label: What do you want to do?
+      description: What are you trying to achieve, and what have you tried?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Cubicle version

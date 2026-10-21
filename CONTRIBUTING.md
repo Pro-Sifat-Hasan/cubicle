@@ -41,6 +41,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before making larger changes.
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - Optional: [Inno Setup 6](https://jrsoftware.org/isinfo.php) to build the installer
 - Optional: [pre-commit](https://pre-commit.com) for local secret scanning and formatting (`pre-commit install`)
+- Recommended: run `./scripts/install-hooks.ps1` once. Every `git push` then checks the commits for secrets and API keys (gitleaks), refuses `.env`, database and key files, audits Go, Python and .NET dependencies for known vulnerabilities, and runs the linters and tests. Cubicle is public, so a leak cannot be undone; `git push --no-verify` skips it, and CI scans again.
 
 ## Everyday commands
 
