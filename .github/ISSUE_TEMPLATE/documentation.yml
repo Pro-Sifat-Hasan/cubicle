@@ -1,0 +1,21 @@
+name: Documentation problem
+description: Something in the docs is missing, unclear or wrong
+labels: [documentation]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Which page or section?
+      placeholder: "docs/ARCHITECTURE.md, Chat"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: What would you like it to say?

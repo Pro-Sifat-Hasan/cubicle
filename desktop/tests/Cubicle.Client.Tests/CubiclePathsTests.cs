@@ -8,7 +8,7 @@ public class CubiclePathsTests
         var dir = Directory.CreateTempSubdirectory();
         try
         {
-            var file = Path.Combine(dir.FullName, "admin.token");
+            var file = Path.Join(dir.FullName, "admin.token");
             Assert.Null(CubiclePaths.TryReadAdminToken(file));
 
             File.WriteAllText(file, "short");

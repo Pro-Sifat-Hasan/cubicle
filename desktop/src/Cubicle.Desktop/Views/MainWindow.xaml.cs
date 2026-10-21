@@ -1,20 +1,39 @@
+using System.ComponentModel;
 using System.Windows;
+using System.Windows.Media.Animation;
 using Cubicle.Desktop.ViewModels;
 
 namespace Cubicle.Desktop.Views;
 
 public partial class MainWindow : Window
 {
-    public MainWindow() => InitializeComponent();
+    private const double CompactWidth = 1008; // Microsoft's "large" breakpoint: below it the rail shows icons only
 
-    // PasswordBox does not support binding by design; hand the key to the
-    // view model directly and clear the box immediately afterwards.
-    private async void SaveApiKey_Click(object sender, RoutedEventArgs e)
+    public MainWindow()
     {
-        if (DataContext is not MainViewModel vm)
+        InitializeComponent();
+        DataContextChanged += (_, e) =>
+        {
+            if (e.NewValue is MainViewModel vm)
+                vm.PropertyChanged += OnViewModelChanged;
+        };
+    }
+
+    // Collapse the navigation rail to icons on narrow windows.
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+            vm.IsCompact = e.NewSize.Width < CompactWidth;
+    }
+
+    /// <summary>A short fade when the page changes, so switching feels like moving rather than a flash.</summary>
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainViewModel.SelectedSection) || !IsVisible || !SystemParameters.ClientAreaAnimation)
             return;
-        var key = ApiKeyBox.Password;
-        ApiKeyBox.Clear();
-        await vm.Ai.SaveKeyAsync(key);
+        Pages.BeginAnimation(OpacityProperty, new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(160))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        });
     }
 }

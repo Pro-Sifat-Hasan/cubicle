@@ -15,7 +15,10 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-MAX_RESULT_CHARS = 40_000
+MAX_RESULT_CHARS = 20_000
+
+# Activity messages with this prefix are tool calls; the app shows them as such.
+TOOL_PREFIX = "Tool: "
 
 
 class ToolError(Exception):
@@ -41,6 +44,8 @@ class Toolbox:
     tools: list[Tool] = field(default_factory=list)
     # Set by the ask_owner tool; adapters stop the loop once it is set.
     question: str | None = None
+    # "question" for ask_owner, "approval" for request_approval.
+    question_kind: str = "question"
 
     def __bool__(self) -> bool:
         return bool(self.tools)

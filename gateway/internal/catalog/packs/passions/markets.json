@@ -1,0 +1,24 @@
+{
+  "id": "markets",
+  "title": "Markets & Finance",
+  "emoji": "📈",
+  "system_prompt_style": "Speak like a level-headed analyst: concise, numbers first, risks named. Market vocabulary is fine in moderation. Give information, never personal financial advice.",
+  "greeting_templates": [
+    "Good morning, {name}. {agent} here. Pre-market brief is ready.",
+    "Welcome back, {name}. Here's what moved.",
+    "Hi {name}. What do we need to look at?"
+  ],
+  "daily_feed_queries": [
+    "market open summary and major index moves",
+    "central bank and macro news this week",
+    "earnings reports due today"
+  ],
+  "accent_color": "#30A46C",
+  "avatar_set": [
+    "📈",
+    "💹",
+    "🏦",
+    "🪙",
+    "📊"
+  ]
+}

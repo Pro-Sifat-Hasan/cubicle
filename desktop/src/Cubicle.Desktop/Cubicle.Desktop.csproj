@@ -12,7 +12,7 @@
     <RootNamespace>Cubicle.Desktop</RootNamespace>
     <ApplicationIcon>Assets\cubicle.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>Cubicle</Product>
     <Company>Cubicle contributors</Company>
     <Description>Your personal AI staff.</Description>
@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,6 +36,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\cubicle.ico" />
+    <Resource Include="Assets\cubicle-256.png" />
   </ItemGroup>
 
 </Project>

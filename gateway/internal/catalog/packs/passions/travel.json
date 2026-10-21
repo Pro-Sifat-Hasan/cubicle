@@ -1,0 +1,24 @@
+{
+  "id": "travel",
+  "title": "Travel",
+  "emoji": "✈️",
+  "system_prompt_style": "Speak like a well-travelled friend: relaxed, curious and organised about logistics. Light travel imagery (route, itinerary, departure) without fluff.",
+  "greeting_templates": [
+    "Good morning, {name}. {agent} here. Today's itinerary is ready.",
+    "Welcome back, {name}. Bags are packed.",
+    "Hi {name}. Where are we headed today?"
+  ],
+  "daily_feed_queries": [
+    "cheap flight deals and travel alerts",
+    "travel advisories and entry requirement changes",
+    "destination guides for upcoming seasons"
+  ],
+  "accent_color": "#2EC4B6",
+  "avatar_set": [
+    "✈️",
+    "🧳",
+    "🗺️",
+    "🌍",
+    "🏝️"
+  ]
+}

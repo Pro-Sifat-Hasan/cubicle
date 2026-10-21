@@ -6,8 +6,11 @@ namespace Cubicle.Desktop.Services;
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
-    private const string MutexName = @"Local\Cubicle.Desktop";
-    private const string ShowEventName = @"Local\Cubicle.Desktop.Show";
+    // CUBICLE_INSTANCE (set by portable mode or for development) gives a separate lock,
+    // so that copy can run next to the installed app. Read on use, after startup set it.
+    private static string Suffix => Environment.GetEnvironmentVariable("CUBICLE_INSTANCE") is { Length: > 0 } s ? "." + s : "";
+    private static string MutexName => @"Local\Cubicle.Desktop" + Suffix;
+    private static string ShowEventName => @"Local\Cubicle.Desktop.Show" + Suffix;
 
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _showEvent;
@@ -24,15 +27,34 @@ public sealed class SingleInstance : IDisposable
     public static SingleInstance? TryAcquire(Action onShowRequested)
     {
         var mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
-        var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
-        if (!createdNew)
+        EventWaitHandle? showEvent = null;
+        var handedOver = false; // the SingleInstance owns both handles from then on
+        try
         {
-            showEvent.Set();
-            showEvent.Dispose();
-            mutex.Dispose();
+            showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            if (createdNew)
+            {
+                var instance = new SingleInstance(mutex, showEvent, onShowRequested);
+                handedOver = true;
+                return instance;
+            }
+            showEvent.Set(); // ask the running instance to show itself
             return null;
         }
-        return new SingleInstance(mutex, showEvent, onShowRequested);
+        finally
+        {
+            if (!handedOver)
+            {
+                try
+                {
+                    showEvent?.Dispose();
+                }
+                finally
+                {
+                    mutex.Dispose();
+                }
+            }
+        }
     }
 
     public void Dispose()

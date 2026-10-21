@@ -50,7 +50,7 @@ func TestFireDueRoutinesCollapsesMissedRuns(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 10, 20, 8, 0, 0, 0, time.Local)
 	st.SetClock(func() time.Time { return start })
-	if _, err := st.CreateRoutine(ctx, "Morning brief", "Summarise my day", "daily@09:00"); err != nil {
+	if _, err := st.CreateRoutine(ctx, store.RoutineInput{Title: "Morning brief", Description: "Summarise my day", Schedule: "daily@09:00"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -77,7 +77,7 @@ func TestDisabledRoutineDoesNotFire(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 10, 20, 8, 0, 0, 0, time.Local)
 	st.SetClock(func() time.Time { return start })
-	rt, err := st.CreateRoutine(ctx, "Brief", "", "daily@09:00")
+	rt, err := st.CreateRoutine(ctx, store.RoutineInput{Title: "Brief", Schedule: "daily@09:00"})
 	if err != nil {
 		t.Fatal(err)
 	}

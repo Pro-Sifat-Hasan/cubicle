@@ -16,13 +16,14 @@ Set `CUBICLE_HOME` to use a different folder. Its contents are:
 
 | Path | Contents |
 |---|---|
-| `cubicle.db` | Tasks, routines, inbox, memory, settings and encrypted secrets (SQLite) |
+| `cubicle.db` | Agents, MCP servers, skills, plugins, chats, tasks, automations, inbox, memory, settings and encrypted secrets (SQLite) |
 | `admin.token`, `worker.token` | API credentials, created on first start |
 | `master.key` | Encryption key for secrets (wrapped with DPAPI on Windows) |
-| `workspace/<assignment>/` | Files your staff produced |
-| `staff.json` | Optional custom roster (`cubicle-agents init-staff` creates one) |
+| `workspace/<assignment or chat>/` | Files your staff produced |
+| `staff.json` | Read once, on first start, if present: a roster from an earlier release |
 | `config.json` | Optional gateway settings (below) |
 | `logs/gateway.log` | Gateway and agent logs |
+| `logs/mcp-<id>.log` | Messages from each stdio MCP server, for troubleshooting |
 
 ## Gateway settings
 
@@ -42,12 +43,16 @@ Settings are applied in this order: defaults, then `config.json`, then environme
 The gateway refuses to listen on a non-loopback address without TLS unless
 `allow_insecure_remote` is set. Only set it behind a TLS-terminating reverse proxy.
 
-## Staff
+## Agents
 
-Run `cubicle-agents init-staff` to write the default roster to `staff.json`. In that file you can
-rename employees, change their skills and personas, give each one its own `model`, or add new
-specialists. The roster must contain exactly one employee with `"role": "manager"`. Restart
-Cubicle after editing it.
+Manage agents on the **Agents** page (or through the [HTTP API](API.md)): add them from templates,
+edit their instructions, model, tools, MCP servers, skills and team, and choose the main agent.
+Changes apply without a restart. An office upgraded from a release that used `staff.json` imports
+that roster once, on first start.
+
+MCP servers that run locally (stdio) need their command on this PC, typically Node.js (`npx`) or
+uv (`uvx`). Store the secrets they need on the **Tools & skills** page; secret values are encrypted
+and only passed to the server that declares them.
 
 ## Desktop app
 
@@ -56,6 +61,20 @@ Cubicle after editing it.
 | `--background` | Start in the tray without opening the window (used by "Start with Windows") |
 | `CUBICLE_GATEWAY_URL` | Connect to a gateway other than `http://127.0.0.1:7878` |
 | `CUBICLE_GATEWAY_EXE` | Gateway binary to launch when none is running |
+| `CUBICLE_INSTANCE` | Run a second, independent copy (for example, a development build next to the installed app) |
+
+The appearance (Light, Dark or System) is saved in `desktop.json` in the data folder.
+
+## Portable mode
+
+The `Cubicle-Portable-<version>-win-x64.zip` release asset runs without installing. Unzip it
+anywhere and start `Cubicle.exe`. While `portable.txt` sits next to the exe, Cubicle:
+
+- keeps all its data in the `data` folder beside the exe,
+- serves the office on port `7879`, and
+- uses its own instance lock, so it runs alongside an installed copy without touching it.
+
+Delete `portable.txt` to make that copy use the normal data folder and port.
 
 ## Windows service
 

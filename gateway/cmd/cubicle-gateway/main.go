@@ -121,8 +121,8 @@ func serve(ctx context.Context, serviceMode bool) error {
 			}, log)
 			sup.OnExit = func(error) { _ = st.MarkAllOffline(context.Background()); hub.Publish("employees.offline", nil) }
 			srv.OnConfigChanged = sup.Restart
-			srv.ListModels = func(ctx context.Context, env []string) ([]string, error) {
-				return listModels(ctx, command, wargs, env)
+			srv.RunWorker = func(ctx context.Context, args, env []string, out any) error {
+				return runWorkerJSON(ctx, command, wargs, args, env, out)
 			}
 			go sup.Run(ctx)
 		}

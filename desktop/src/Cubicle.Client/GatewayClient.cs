@@ -52,11 +52,27 @@ public sealed class GatewayClient : IDisposable
     public Task<OfficeStatus> GetStatusAsync(CancellationToken ct = default) =>
         GetAsync<OfficeStatus>("/api/v1/status", ct);
 
-    public Task<List<Employee>> GetEmployeesAsync(CancellationToken ct = default) =>
-        GetAsync<List<Employee>>("/api/v1/employees", ct);
+    public Task<Catalog> GetCatalogAsync(CancellationToken ct = default) =>
+        GetAsync<Catalog>("/api/v1/catalog", ct);
 
     public Task<List<ActivityItem>> GetActivityAsync(int limit = 100, CancellationToken ct = default) =>
         GetAsync<List<ActivityItem>>($"/api/v1/activity?limit={limit}", ct);
+
+    /// <summary>The trail of every reply in one chat, oldest first (group by <see cref="ActivityItem.TaskId"/>).</summary>
+    public Task<List<ActivityItem>> GetConversationActivityAsync(string conversationId, int limit = 1000, CancellationToken ct = default) =>
+        GetAsync<List<ActivityItem>>($"/api/v1/activity?conversation_id={Uri.EscapeDataString(conversationId)}&limit={limit}", ct);
+
+    /// <summary>One assignment's trail (its subtasks included), oldest first. Messages starting with "Tool: " are tool calls.</summary>
+    public Task<List<ActivityItem>> GetTaskActivityAsync(string taskId, int limit = 500, CancellationToken ct = default) =>
+        GetAsync<List<ActivityItem>>($"/api/v1/activity?task_id={Uri.EscapeDataString(taskId)}&limit={limit}", ct);
+
+    /// <summary>What agents did in every reply of one chat (thoughts, remarks, tool calls with input and output), oldest first.</summary>
+    public Task<List<AgentStep>> GetConversationStepsAsync(string conversationId, CancellationToken ct = default) =>
+        GetAsync<List<AgentStep>>($"/api/v1/steps?conversation_id={Uri.EscapeDataString(conversationId)}", ct);
+
+    /// <summary>What agents did on one task and its subtasks, oldest first.</summary>
+    public Task<List<AgentStep>> GetTaskStepsAsync(string taskId, CancellationToken ct = default) =>
+        GetAsync<List<AgentStep>>($"/api/v1/steps?task_id={Uri.EscapeDataString(taskId)}", ct);
 
     public Task ResetBreakerAsync(CancellationToken ct = default) => SendAsync(HttpMethod.Post, "/api/v1/breaker/reset", null, ct);
 
@@ -77,8 +93,16 @@ public sealed class GatewayClient : IDisposable
     public Task<TaskDetail> GetTaskAsync(string id, CancellationToken ct = default) =>
         GetAsync<TaskDetail>($"/api/v1/tasks/{Uri.EscapeDataString(id)}", ct);
 
-    public Task<TaskItem> CreateAssignmentAsync(string title, string description, CancellationToken ct = default) =>
-        SendAsync<TaskItem>(HttpMethod.Post, "/api/v1/assignments", new { title, description }, ct);
+    /// <summary>Creates an assignment for the main agent, or for <paramref name="agentId"/> to do alone.</summary>
+    public Task<TaskItem> CreateAssignmentAsync(string title, string description, string? agentId = null, CancellationToken ct = default) =>
+        SendAsync<TaskItem>(HttpMethod.Post, "/api/v1/assignments", new { title, description, agent_id = agentId ?? "" }, ct);
+
+    /// <summary>
+    /// Starts an assignment for the main agent to write a report from what the staff really did.
+    /// <paramref name="period"/> is today, yesterday, week, last_week or month.
+    /// </summary>
+    public Task<TaskItem> CreateReportAsync(string period, CancellationToken ct = default) =>
+        SendAsync<TaskItem>(HttpMethod.Post, "/api/v1/reports", new { period }, ct);
 
     public Task CancelTaskAsync(string id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"/api/v1/tasks/{Uri.EscapeDataString(id)}/cancel", null, ct);
@@ -88,22 +112,87 @@ public sealed class GatewayClient : IDisposable
     public Task<List<InboxItem>> GetInboxAsync(string? status = "open", CancellationToken ct = default) =>
         GetAsync<List<InboxItem>>(string.IsNullOrEmpty(status) ? "/api/v1/inbox" : $"/api/v1/inbox?status={status}", ct);
 
-    public Task AnswerAsync(string inboxId, string answer, CancellationToken ct = default) =>
-        SendAsync(HttpMethod.Post, $"/api/v1/inbox/{Uri.EscapeDataString(inboxId)}/answer", new { answer }, ct);
+    /// <summary>Answers a question, or decides an approval (<paramref name="decision"/> is "approve" or "decline"; the answer is then an optional note).</summary>
+    public Task AnswerAsync(string inboxId, string answer, string? decision = null, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, $"/api/v1/inbox/{Uri.EscapeDataString(inboxId)}/answer", new { answer, decision }, ct);
 
     // ---- routines ----
 
     public Task<List<Routine>> GetRoutinesAsync(CancellationToken ct = default) =>
         GetAsync<List<Routine>>("/api/v1/routines", ct);
 
-    public Task<Routine> CreateRoutineAsync(string title, string description, string schedule, CancellationToken ct = default) =>
-        SendAsync<Routine>(HttpMethod.Post, "/api/v1/routines", new { title, description, schedule }, ct);
+    /// <summary>Creates an automation. An empty <paramref name="agentId"/> sends it to the main agent.</summary>
+    public Task<Routine> CreateRoutineAsync(string title, string description, string schedule, string agentId = "", CancellationToken ct = default) =>
+        SendAsync<Routine>(HttpMethod.Post, "/api/v1/routines", new { title, description, schedule, agent_id = agentId }, ct);
+
+    public Task<Routine> UpdateRoutineAsync(string id, string title, string description, string schedule, string agentId = "", CancellationToken ct = default) =>
+        SendAsync<Routine>(HttpMethod.Put, $"/api/v1/routines/{Uri.EscapeDataString(id)}", new { title, description, schedule, agent_id = agentId }, ct);
+
+    /// <summary>Runs an automation now without changing its schedule.</summary>
+    public Task<TaskItem> RunRoutineNowAsync(string id, CancellationToken ct = default) =>
+        SendAsync<TaskItem>(HttpMethod.Post, $"/api/v1/routines/{Uri.EscapeDataString(id)}/run", null, ct);
+
+    public Task<List<TaskItem>> GetRoutineRunsAsync(string id, int limit = 20, CancellationToken ct = default) =>
+        GetAsync<List<TaskItem>>($"/api/v1/routines/{Uri.EscapeDataString(id)}/runs?limit={limit}", ct);
 
     public Task SetRoutineEnabledAsync(string id, bool enabled, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"/api/v1/routines/{Uri.EscapeDataString(id)}/{(enabled ? "enable" : "disable")}", null, ct);
 
     public Task DeleteRoutineAsync(string id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, $"/api/v1/routines/{Uri.EscapeDataString(id)}", null, ct);
+
+    // ---- onboarding and profile ----
+
+    /// <summary>The passion and profession packs, and whether onboarding is done.</summary>
+    public Task<OnboardingPacks> GetOnboardingAsync(CancellationToken ct = default) =>
+        GetAsync<OnboardingPacks>("/api/v1/onboarding", ct);
+
+    public Task<ProfileInfo> GetProfileAsync(CancellationToken ct = default) =>
+        GetAsync<ProfileInfo>("/api/v1/profile", ct);
+
+    /// <summary>Names and voices the main agent, hires the profession's team and sets up its routines.</summary>
+    public Task<OnboardingResult> CompleteOnboardingAsync(OnboardingRequest request, CancellationToken ct = default) =>
+        SendAsync<OnboardingResult>(HttpMethod.Post, "/api/v1/onboarding", new
+        {
+            agent_name = request.AgentName,
+            owner_name = request.OwnerName,
+            profession = request.Profession,
+            passion = request.Passion,
+            custom_passion = request.CustomPassion,
+            persona = request.Persona,
+            stack = request.Stack ?? [],
+        }, ct);
+
+    /// <summary>Asks the main agent to write a persona for a passion the owner typed; returns the task id to poll.</summary>
+    public async Task<string> StartPersonaAsync(string passion, CancellationToken ct = default) =>
+        (await SendAsync<PersonaTask>(HttpMethod.Post, "/api/v1/persona", new { passion }, ct)).TaskId;
+
+    public Task<PersonaStatus> GetPersonaAsync(string taskId, CancellationToken ct = default) =>
+        GetAsync<PersonaStatus>($"/api/v1/persona/{Uri.EscapeDataString(taskId)}", ct);
+
+    private sealed record PersonaTask(string TaskId);
+
+    // ---- integrations and skills from skills.sh ----
+
+    /// <summary>Connects an app in one step: stores the owner's keys, adds the server, and gives it to the chosen agents.</summary>
+    public Task<ConnectResult> ConnectIntegrationAsync(string templateId, IReadOnlyDictionary<string, string> values,
+        IReadOnlyList<string> agentIds, CancellationToken ct = default) =>
+        SendAsync<ConnectResult>(HttpMethod.Post, $"/api/v1/integrations/{Uri.EscapeDataString(templateId)}/connect",
+            new { values, agent_ids = agentIds }, ct);
+
+    /// <summary>Reads a skills.sh link, an "npx skills add" command, owner/repo or a GitHub link and lists the skills it names.</summary>
+    public Task<FoundSkills> DiscoverSkillsAsync(string source, CancellationToken ct = default) =>
+        SendRawAsync<FoundSkills>("/api/v1/skills/discover", new { source }, TimeSpan.FromSeconds(60), ct);
+
+    /// <summary>Installs skills found by <see cref="DiscoverSkillsAsync"/>; an empty <paramref name="paths"/> installs them all.</summary>
+    public Task<InstalledSkills> InstallSkillsAsync(string source, IReadOnlyList<string> paths, CancellationToken ct = default) =>
+        SendRawAsync<InstalledSkills>("/api/v1/skills/install", new { source, paths }, TimeSpan.FromSeconds(90), ct);
+
+    private async Task<T> SendRawAsync<T>(string path, object body, TimeSpan timeout, CancellationToken ct)
+    {
+        using var resp = await SendRaw(HttpMethod.Post, path, body, ct, timeout).ConfigureAwait(false);
+        return (await resp.Content.ReadFromJsonAsync<T>(Json, ct).ConfigureAwait(false))!;
+    }
 
     // ---- secrets (write-only) ----
 
@@ -136,6 +225,26 @@ public sealed class GatewayClient : IDisposable
         return GetAsync<ModelList>(path, ct, TimeSpan.FromSeconds(60));
     }
 
+    // ---- messages the staff looked at, and alerts outside the app ----
+
+    public Task<List<TriageItem>> GetTriageAsync(int limit = 100, CancellationToken ct = default) =>
+        GetAsync<List<TriageItem>>($"/api/v1/triage?limit={limit}", ct);
+
+    public Task<AlertSettings> GetAlertsAsync(CancellationToken ct = default) =>
+        GetAsync<AlertSettings>("/api/v1/alerts", ct);
+
+    /// <summary>Saves the alert choices. A null or empty webhook or password keeps the stored one.</summary>
+    public Task<AlertSettings> SaveAlertsAsync(AlertSettings settings, string? discordWebhook, string? smtpPassword, CancellationToken ct = default) =>
+        SendAsync<AlertSettings>(HttpMethod.Put, "/api/v1/alerts", new
+        {
+            settings.Waiting, settings.Done, settings.Discord, settings.Email, settings.EmailTo, settings.SmtpHost, settings.SmtpPort,
+            settings.SmtpUser, email_from = settings.EmailFrom, discord_webhook = discordWebhook ?? "", smtp_password = smtpPassword ?? "",
+        }, ct);
+
+    /// <summary>Sends one test message ("discord" or "email"); fails with the reason when it cannot.</summary>
+    public Task TestAlertAsync(string channel, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, "/api/v1/alerts/test", new { channel }, ct);
+
     // ---- memory ----
 
     public Task<List<Memory>> GetMemoriesAsync(CancellationToken ct = default) =>
@@ -144,8 +253,116 @@ public sealed class GatewayClient : IDisposable
     public Task<Memory> AddMemoryAsync(string content, CancellationToken ct = default) =>
         SendAsync<Memory>(HttpMethod.Post, "/api/v1/memories", new { content }, ct);
 
+    /// <summary>Replaces the owner's profile; empty text clears it.</summary>
+    public Task SetProfileAsync(string content, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Put, "/api/v1/memories/profile", new { content }, ct);
+
     public Task DeleteMemoryAsync(string id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, $"/api/v1/memories/{Uri.EscapeDataString(id)}", null, ct);
+
+    // ---- agents ----
+
+    public Task<List<Agent>> GetAgentsAsync(CancellationToken ct = default) =>
+        GetAsync<List<Agent>>("/api/v1/agents", ct);
+
+    public Task<Agent> CreateAgentAsync(AgentDraft draft, bool joinTeam = true, CancellationToken ct = default) =>
+        SendAsync<Agent>(HttpMethod.Post, "/api/v1/agents", AgentBody(draft, joinTeam), ct);
+
+    /// <summary>Adds an agent from a role template in one click; it joins the main agent's team.</summary>
+    public Task<Agent> CreateAgentFromTemplateAsync(string templateId, bool joinTeam = true, CancellationToken ct = default) =>
+        SendAsync<Agent>(HttpMethod.Post, "/api/v1/agents", new { template_id = templateId, join_team = joinTeam }, ct);
+
+    public Task<Agent> UpdateAgentAsync(string id, AgentDraft draft, CancellationToken ct = default) =>
+        SendAsync<Agent>(HttpMethod.Put, $"/api/v1/agents/{Uri.EscapeDataString(id)}", AgentBody(draft, null), ct);
+
+    public Task DeleteAgentAsync(string id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"/api/v1/agents/{Uri.EscapeDataString(id)}", null, ct);
+
+    /// <summary>Makes the agent the main agent (it receives assignments and plans them with its team).</summary>
+    public Task<Agent> SetMainAgentAsync(string id, CancellationToken ct = default) =>
+        SendAsync<Agent>(HttpMethod.Post, $"/api/v1/agents/{Uri.EscapeDataString(id)}/main", null, ct);
+
+    private static object AgentBody(AgentDraft d, bool? joinTeam) => new
+    {
+        name = d.Name, title = d.Title, avatar = d.Avatar, description = d.Description, instructions = d.Instructions,
+        model = d.Model, effort = d.Effort, tools = d.Tools, mcp_servers = d.McpServers, skills = d.Skills, team = d.Team,
+        enabled = d.Enabled, join_team = joinTeam,
+    };
+
+    // ---- MCP servers ----
+
+    public Task<List<McpServer>> GetMcpServersAsync(CancellationToken ct = default) =>
+        GetAsync<List<McpServer>>("/api/v1/mcp-servers", ct);
+
+    public Task<McpServer> CreateMcpServerAsync(McpServerDraft draft, CancellationToken ct = default) =>
+        SendAsync<McpServer>(HttpMethod.Post, "/api/v1/mcp-servers", draft, ct);
+
+    /// <summary>Adds a preset MCP server, optionally with your own arguments (e.g. the folders it may use).</summary>
+    public Task<McpServer> CreateMcpServerFromTemplateAsync(string templateId, IReadOnlyList<string>? args = null, CancellationToken ct = default) =>
+        SendAsync<McpServer>(HttpMethod.Post, "/api/v1/mcp-servers", new { template_id = templateId, args }, ct);
+
+    public Task<McpServer> UpdateMcpServerAsync(string id, McpServerDraft draft, CancellationToken ct = default) =>
+        SendAsync<McpServer>(HttpMethod.Put, $"/api/v1/mcp-servers/{Uri.EscapeDataString(id)}", draft, ct);
+
+    public Task DeleteMcpServerAsync(string id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"/api/v1/mcp-servers/{Uri.EscapeDataString(id)}", null, ct);
+
+    /// <summary>Starts or connects to the server and lists its tools. Can take a while on first use.</summary>
+    public async Task<McpTestResult> TestMcpServerAsync(string id, CancellationToken ct = default)
+    {
+        using var cts = WithTimeout(ct, TimeSpan.FromSeconds(120));
+        using var resp = await SendRaw(HttpMethod.Post, $"/api/v1/mcp-servers/{Uri.EscapeDataString(id)}/test", null, cts.Token, TimeSpan.FromSeconds(120)).ConfigureAwait(false);
+        return (await resp.Content.ReadFromJsonAsync<McpTestResult>(Json, cts.Token).ConfigureAwait(false))!;
+    }
+
+    // ---- skills ----
+
+    public Task<List<Skill>> GetSkillsAsync(CancellationToken ct = default) =>
+        GetAsync<List<Skill>>("/api/v1/skills", ct);
+
+    public Task<Skill> CreateSkillAsync(SkillDraft draft, CancellationToken ct = default) =>
+        SendAsync<Skill>(HttpMethod.Post, "/api/v1/skills", draft, ct);
+
+    public Task<Skill> CreateSkillFromTemplateAsync(string templateId, CancellationToken ct = default) =>
+        SendAsync<Skill>(HttpMethod.Post, "/api/v1/skills", new { template_id = templateId }, ct);
+
+    public Task<Skill> UpdateSkillAsync(string id, SkillDraft draft, CancellationToken ct = default) =>
+        SendAsync<Skill>(HttpMethod.Put, $"/api/v1/skills/{Uri.EscapeDataString(id)}", draft, ct);
+
+    public Task DeleteSkillAsync(string id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"/api/v1/skills/{Uri.EscapeDataString(id)}", null, ct);
+
+    // ---- plugins ----
+
+    public Task<List<Plugin>> GetPluginsAsync(CancellationToken ct = default) =>
+        GetAsync<List<Plugin>>("/api/v1/plugins", ct);
+
+    public Task<Plugin> InstallPluginAsync(string catalogId, CancellationToken ct = default) =>
+        SendAsync<Plugin>(HttpMethod.Post, "/api/v1/plugins", new { catalog_id = catalogId }, ct);
+
+    public Task<Plugin> InstallPluginBundleAsync(PluginBundle bundle, CancellationToken ct = default) =>
+        SendAsync<Plugin>(HttpMethod.Post, "/api/v1/plugins", new { bundle }, ct);
+
+    public Task UninstallPluginAsync(string id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"/api/v1/plugins/{Uri.EscapeDataString(id)}", null, ct);
+
+    // ---- chat ----
+
+    public Task<List<Conversation>> GetConversationsAsync(CancellationToken ct = default) =>
+        GetAsync<List<Conversation>>("/api/v1/conversations", ct);
+
+    public Task<Conversation> CreateConversationAsync(string agentId, string title = "", CancellationToken ct = default) =>
+        SendAsync<Conversation>(HttpMethod.Post, "/api/v1/conversations", new { agent_id = agentId, title }, ct);
+
+    public Task<ConversationDetail> GetConversationAsync(string id, CancellationToken ct = default) =>
+        GetAsync<ConversationDetail>($"/api/v1/conversations/{Uri.EscapeDataString(id)}", ct);
+
+    /// <summary>Sends your message; the agent's reply arrives later (watch for conversation.updated events).</summary>
+    public Task<ChatMessage> SendMessageAsync(string conversationId, string content, CancellationToken ct = default) =>
+        SendAsync<ChatMessage>(HttpMethod.Post, $"/api/v1/conversations/{Uri.EscapeDataString(conversationId)}/messages", new { content }, ct);
+
+    public Task DeleteConversationAsync(string id, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"/api/v1/conversations/{Uri.EscapeDataString(id)}", null, ct);
 
     // ---- live events ----
 
@@ -182,9 +399,9 @@ public sealed class GatewayClient : IDisposable
         using var resp = await SendRaw(method, path, body, ct).ConfigureAwait(false);
     }
 
-    private async Task<HttpResponseMessage> SendRaw(HttpMethod method, string path, object? body, CancellationToken ct)
+    private async Task<HttpResponseMessage> SendRaw(HttpMethod method, string path, object? body, CancellationToken ct, TimeSpan? timeout = null)
     {
-        using var cts = WithTimeout(ct);
+        using var cts = WithTimeout(ct, timeout);
         using var req = new HttpRequestMessage(method, path);
         if (body is not null)
             req.Content = JsonContent.Create(body, options: Json);
@@ -211,7 +428,10 @@ public sealed class GatewayClient : IDisposable
             if (!string.IsNullOrWhiteSpace(err?.Error))
                 message = err.Error;
         }
-        catch (JsonException) { }
+        catch (JsonException)
+        {
+            message = resp.ReasonPhrase ?? message; // the body was not our error JSON
+        }
         resp.Dispose();
         throw new GatewayException(resp.StatusCode, message);
     }

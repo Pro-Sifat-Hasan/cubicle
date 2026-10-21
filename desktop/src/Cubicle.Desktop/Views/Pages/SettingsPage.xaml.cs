@@ -1,0 +1,21 @@
+using System.Windows;
+using System.Windows.Controls;
+using Cubicle.Desktop.ViewModels;
+
+namespace Cubicle.Desktop.Views.Pages;
+
+public partial class SettingsPage : UserControl
+{
+    public SettingsPage() => InitializeComponent();
+
+    // PasswordBox does not support binding by design; hand the key to the
+    // view model directly and clear the box immediately afterwards.
+    private async void SaveApiKey_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+        var key = ApiKeyBox.Password;
+        ApiKeyBox.Clear();
+        await vm.Ai.SaveKeyAsync(key);
+    }
+}

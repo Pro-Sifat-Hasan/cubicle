@@ -12,16 +12,16 @@ public static class CubiclePaths
             var env = Environment.GetEnvironmentVariable("CUBICLE_HOME");
             if (!string.IsNullOrWhiteSpace(env))
                 return env;
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cubicle");
+            return Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Cubicle");
         }
     }
 
-    public static string AdminTokenFile => Path.Combine(Home, "admin.token");
+    public static string AdminTokenFile => Path.Join(Home, "admin.token");
 
-    public static string LogsDirectory => Path.Combine(Home, "logs");
+    public static string LogsDirectory => Path.Join(Home, "logs");
 
     /// <summary>Files the staff produce, one folder per assignment id.</summary>
-    public static string WorkspaceDirectory => Path.Combine(Home, "workspace");
+    public static string WorkspaceDirectory => Path.Join(Home, "workspace");
 
     /// <summary>Reads the owner token the gateway generated on first start, or null if it does not exist yet.</summary>
     public static string? TryReadAdminToken(string? path = null)

@@ -1,28 +1,32 @@
 """Command-line entry point.
 
-    cubicle-agents [run]          clock in the staff and start working (default)
-    cubicle-agents models --json  list the configured provider's models (used by the gateway)
-    cubicle-agents roster         print the staff roster
-    cubicle-agents init-staff     write the default roster to <home>/staff.json for editing
+    cubicle-agents [run]             clock in the staff and start working (default)
+    cubicle-agents models --json     list the configured provider's models (used by the gateway)
+    cubicle-agents mcp-tools --json  connect to the MCP server in CUBICLE_MCP_SERVER and list its tools
 """
 
 from __future__ import annotations
 
-import argparse
-import asyncio
-import contextlib
-import json
-import logging
-import signal
-import sys
+import os
 
-from cubicle_agents import __version__
-from cubicle_agents.core.gateway import GatewayClient
-from cubicle_agents.core.settings import KIND_OPENAI_COMPATIBLE, LLMSettings, Settings, default_home
-from cubicle_agents.llm import LLMConfigError, make_llm
-from cubicle_agents.office.handlers import OfficeContext
-from cubicle_agents.office.office import Office
-from cubicle_agents.staff.roster import load_roster, write_default_roster
+# Pydantic AI prints a banner to stdout on first use; the gateway reads our stdout as JSON.
+os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
+
+import argparse  # noqa: E402
+import asyncio  # noqa: E402
+import contextlib  # noqa: E402
+import json  # noqa: E402
+import logging  # noqa: E402
+import signal  # noqa: E402
+import sys  # noqa: E402
+
+from cubicle_agents import __version__  # noqa: E402
+from cubicle_agents.core.gateway import GatewayClient  # noqa: E402
+from cubicle_agents.core.settings import KIND_ANTHROPIC, KIND_OPENAI_COMPATIBLE, LLMSettings, Settings  # noqa: E402
+from cubicle_agents.llm import LLMConfigError, make_llm  # noqa: E402
+from cubicle_agents.office.handlers import OfficeContext  # noqa: E402
+from cubicle_agents.office.office import Office  # noqa: E402
+from cubicle_agents.staff.roster import McpServer, Roster  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,34 +37,24 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("run", help="clock in the staff and start working (default)")
     models = sub.add_parser("models", help="list models available from the configured provider")
     models.add_argument("--json", action="store_true", help="print a single JSON object")
-    sub.add_parser("roster", help="print the current staff roster")
-    sub.add_parser("init-staff", help="write the default roster to <home>/staff.json for editing")
+    mcp = sub.add_parser("mcp-tools", help="list the tools of the MCP server described in CUBICLE_MCP_SERVER")
+    mcp.add_argument("--json", action="store_true", help="print a single JSON object")
     args = parser.parse_args(argv)
 
+    one_off = args.command in ("models", "mcp-tools")
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        stream=sys.stderr if args.command == "models" else sys.stdout,
+        stream=sys.stderr if one_off else sys.stdout,
     )
     # Never log request bodies/headers from HTTP libraries (they can carry tokens).
-    for noisy in ("httpx", "httpcore", "anthropic", "openai"):
+    for noisy in ("httpx", "httpcore", "anthropic", "openai", "mcp", "fastmcp", "pydantic_ai"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     if args.command == "models":
         return asyncio.run(_models(as_json=args.json))
-    if args.command == "roster":
-        for e in load_roster(default_home()):
-            print(f"{e.avatar} {e.name:<8} {e.title:<20} [{e.id}] {e.skills}")
-        return 0
-    if args.command == "init-staff":
-        path = default_home() / "staff.json"
-        if path.exists():
-            print(f"{path} already exists; edit it directly.")
-            return 1
-        path.parent.mkdir(parents=True, exist_ok=True)
-        write_default_roster(path)
-        print(f"Wrote {path}. Edit it, then restart Cubicle.")
-        return 0
+    if args.command == "mcp-tools":
+        return asyncio.run(_mcp_tools(as_json=args.json))
     return asyncio.run(_run())
 
 
@@ -80,22 +74,48 @@ async def _models(*, as_json: bool) -> int:
     return 1 if error else 0
 
 
+async def _mcp_tools(*, as_json: bool) -> int:
+    from cubicle_agents.tools.mcp import MCPUnavailableError, list_tools
+
+    tools: list[dict[str, str]] = []
+    error = ""
+    try:
+        server = McpServer.from_json(json.loads(os.environ.get("CUBICLE_MCP_SERVER") or "{}"))
+        tools = await asyncio.wait_for(list_tools(server), timeout=80)
+    except (KeyError, json.JSONDecodeError):
+        error = "No MCP server was given."
+    except MCPUnavailableError as exc:
+        error = str(exc)
+    except TimeoutError:
+        error = "The server did not answer in time. The first start can be slow while packages download; try again."
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"[:500]
+    if as_json:
+        print(json.dumps({"tools": tools, "error": error} if error else {"tools": tools}))
+    else:
+        print(error or "\n".join(f"{t['name']}: {t['description']}" for t in tools))
+    return 1 if error else 0
+
+
 async def _run() -> int:
     settings = Settings.from_env()
     gateway = GatewayClient(settings.gateway_url, settings.worker_token)
+    llm = settings.llm
     ctx = OfficeContext(
         gateway=gateway,
-        llm=make_llm(settings.llm),
-        roster=load_roster(settings.home),
-        default_model=settings.llm.model,
+        llm=make_llm(llm),
+        roster=Roster(),
+        default_model=llm.model,
         owner=settings.owner_name,
         workspace_root=settings.workspace,
-        web_access=settings.llm.web_access,
-        client_web_fetch=settings.llm.web_access and settings.llm.kind == KIND_OPENAI_COMPATIBLE,
+        web_access=llm.web_access,
+        # Claude has its own fetch tool; every other API provider gets Cubicle's guarded one.
+        client_web_fetch=llm.web_access and llm.kind == KIND_OPENAI_COMPATIBLE,
     )
     logging.getLogger("cubicle").info(
-        "cubicle-agents %s | provider=%s model=%s staff=%d web=%s",
-        __version__, settings.llm.provider, settings.llm.model or "(default)", len(ctx.roster), ctx.web_access,
+        "cubicle-agents %s | provider=%s model=%s web=%s engine=%s",
+        __version__, llm.provider, llm.model or "(default)", ctx.web_access,
+        "pydantic-ai" if llm.kind in (KIND_ANTHROPIC, KIND_OPENAI_COMPATIBLE) else llm.kind,
     )
 
     stop = asyncio.Event()

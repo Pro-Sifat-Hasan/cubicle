@@ -1,0 +1,46 @@
+name: An agent did something wrong
+description: An agent gave a bad answer, used a tool badly, ignored an instruction or got stuck
+labels: [agent-behaviour]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for telling us. **Never paste API keys, tokens or private data.** Describe or blank them out first.
+  - type: textarea
+    id: asked
+    attributes:
+      label: What did you ask?
+      description: The message or assignment you gave the agent, as close to word for word as you can.
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What did the agent do?
+      description: "Open **How it was done** under the reply and describe the steps: which tools it used, what went wrong, what it said at the end."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should it have done?
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: AI provider
+      options: [Claude Code, Claude API, OpenAI, Gemini, OpenRouter, Ollama, Other compatible server, Demo]
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: "sonnet, gpt-5, llama3.3 ..."
+  - type: input
+    id: version
+    attributes:
+      label: Cubicle version
+    validations:
+      required: true

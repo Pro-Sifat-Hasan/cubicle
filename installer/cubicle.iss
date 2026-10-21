@@ -1,14 +1,14 @@
 ; Cubicle Windows installer (Inno Setup 6).
-; Built by scripts/build.ps1:  ISCC /DAppVersion=0.1.0 /DStageDir=..\dist\stage installer\cubicle.iss
+; Built by scripts/build.ps1:  ISCC /DAppVersion=0.2.0 /DStageDir=..\build\package\stage installer\cubicle.iss
 ;
 ; Per-user install: no administrator prompt, installs in seconds, and the
 ; office runs under your own account (your data stays in %LOCALAPPDATA%\Cubicle).
 
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.2.0"
 #endif
 #ifndef StageDir
-  #define StageDir "..\dist\stage"
+  #define StageDir "..\build\package\stage"
 #endif
 
 #define AppName "Cubicle"
@@ -64,18 +64,23 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Open Cubicle now"; Flags: nowait postinstall skipifsilent
 
-[UninstallRun]
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#AppExe}"; Flags: runhidden; RunOnceId: "KillApp"
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /T /IM cubicle-gateway.exe"; Flags: runhidden; RunOnceId: "KillGateway"
-
 [Code]
-// Stop a running office before files are replaced during an upgrade.
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+// Stops Cubicle processes running from this install folder only, so a portable
+// copy or a development build elsewhere keeps running.
+procedure StopOfficeIn(Dir: String);
 var
   ResultCode: Integer;
 begin
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM Cubicle.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM cubicle-gateway.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process Cubicle,cubicle-gateway,cubicle-agents -ErrorAction SilentlyContinue | ' +
+    'Where-Object { $_.Path -like ''' + Dir + '\*'' } | Stop-Process -Force"',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+// Stop a running office before files are replaced during an upgrade.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  StopOfficeIn(ExpandConstant('{app}'));
   Result := '';
 end;
 
@@ -84,6 +89,8 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir: String;
 begin
+  if CurUninstallStep = usUninstall then
+    StopOfficeIn(ExpandConstant('{app}'));
   if CurUninstallStep = usPostUninstall then
   begin
     DataDir := ExpandConstant('{localappdata}\Cubicle');

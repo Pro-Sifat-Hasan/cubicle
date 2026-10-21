@@ -18,12 +18,16 @@ class TaskConflictError(Exception):
 
 @dataclass
 class Claim:
-    """A task plus everything the employee needs to work on it."""
+    """A task plus everything the agent needs to work on it."""
 
     task: dict[str, Any]
     parent: dict[str, Any] | None = None
     dependency_results: list[dict[str, Any]] = field(default_factory=list)
     human_answers: list[dict[str, Any]] = field(default_factory=list)
+    # Earlier messages of the conversation, for chat tasks (oldest first).
+    history: list[dict[str, Any]] = field(default_factory=list)
+    # A chat's first message: the chat has no title yet and the agent's model names it.
+    title_pending: bool = False
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Claim:
@@ -32,23 +36,92 @@ class Claim:
             parent=data.get("parent"),
             dependency_results=data.get("dependency_results") or [],
             human_answers=data.get("human_answers") or [],
+            history=data.get("history") or [],
+            title_pending=bool(data.get("title_pending")),
         )
+
+
+@dataclass(frozen=True)
+class RosterUpdate:
+    revision: int
+    agents: list[dict[str, Any]]
 
 
 class Gateway(Protocol):
     """What the office needs from the gateway; implemented by GatewayClient and test fakes."""
 
-    async def sync_employees(self, employees: list[dict[str, Any]]) -> None: ...
-    async def set_status(self, employee_id: str, status: str, task_id: str = "") -> None: ...
-    async def claim(self, employee_ids: list[str]) -> Claim | None: ...
-    async def delegate(self, task_id: str, subtasks: list[dict[str, Any]], synthesis: dict[str, Any]) -> None: ...
-    async def complete(self, task_id: str, result: str) -> None: ...
-    async def fail(self, task_id: str, error: str) -> None: ...
-    async def ask(self, task_id: str, employee_id: str, question: str) -> None: ...
-    async def report_usage(self, task_id: str, employee_id: str, input_tokens: int, output_tokens: int) -> None: ...
-    async def log(self, employee_id: str, task_id: str, message: str) -> None: ...
-    async def list_memories(self, limit: int = 50) -> list[str]: ...
-    async def add_memory(self, content: str, employee_id: str) -> None: ...
+    async def start_worker(self) -> None:
+        """Tell the gateway this worker started."""
+
+    async def roster(self, after: int | None = None) -> RosterUpdate | None:
+        """The agent roster; with `after`, wait for a newer revision (None on timeout)."""
+
+    async def set_status(self, agent_id: str, status: str, task_id: str = "") -> None:
+        """Report what an agent is doing."""
+
+    async def claim(self, agent_ids: list[str], lane: str) -> Claim | None:
+        """Long-poll for the next runnable task for these agents."""
+
+    async def delegate(self, task_id: str, subtasks: list[dict[str, Any]], synthesis: dict[str, Any]) -> None:
+        """Split a task into subtasks plus a wrap-up."""
+
+    async def complete(self, task_id: str, result: str) -> None:
+        """Finish a task with its result."""
+
+    async def fail(self, task_id: str, error: str) -> None:
+        """Fail a task with a reason."""
+
+    async def ask(self, task_id: str, agent_id: str, question: str, kind: str = "question") -> None:
+        """Park a task and ask the owner a question, or for approval (kind=\"approval\")."""
+
+    async def progress(self, task_id: str, status: str = "", text: str = "") -> None:
+        """Stream live progress for a task."""
+
+    async def create_assignment(self, title: str, description: str, agent_id: str,
+                                source_task_id: str = "") -> dict[str, Any]:
+        """Start a new assignment (from a chat reply, `source_task_id`)."""
+
+    async def report_usage(self, task_id: str, agent_id: str, input_tokens: int, output_tokens: int) -> None:
+        """Report the tokens a model call used."""
+
+    async def save_step(self, task_id: str, agent_id: str, step: dict[str, Any]) -> None:
+        """Record (or update, by id) something an agent did while working: a thought, a remark or a tool call."""
+
+    async def set_conversation_title(self, conversation_id: str, title: str) -> None:
+        """Name a chat that has no title yet (ignored when it already has one)."""
+
+    async def work_log(self, period: str) -> str:
+        """What the staff did in a period (today, yesterday, week, last_week, month), as readable text."""
+
+    async def log(self, agent_id: str, task_id: str, message: str) -> None:
+        """Add a line to the activity log."""
+
+    async def list_memories(self, limit: int = 50) -> list[str]:
+        """Facts the office remembers about the owner."""
+
+    async def add_memory(self, content: str, agent_id: str) -> None:
+        """Save a durable fact about the owner."""
+
+    async def forget_memory(self, fact: str) -> bool:
+        """Delete the remembered fact that best matches `fact`; False when nothing matches."""
+
+    async def get_profile(self) -> str:
+        """The one record describing the owner in full ('' when there is none)."""
+
+    async def set_profile(self, content: str, agent_id: str) -> None:
+        """Replace the owner's profile; empty content clears it."""
+
+    async def triage_new(self, keys: list[str]) -> list[str]:
+        """Which of these message keys have not been looked at before."""
+
+    async def triage_record(self, items: list[dict[str, Any]]) -> None:
+        """Save what happened to messages: key, source, summary, status (proposed, approved, done, dismissed)."""
+
+    async def list_projects(self) -> list[dict[str, Any]]:
+        """The projects the owner works on: id, name, path, notes."""
+
+    async def save_project(self, name: str, path: str = "", notes: str = "") -> dict[str, Any]:
+        """Add a project or update the one with this name; an empty path or notes keeps what is stored."""
 
 
 class GatewayClient:
@@ -56,7 +129,7 @@ class GatewayClient:
         self._http = httpx.AsyncClient(
             base_url=base_url,
             headers={"Authorization": f"Bearer {token}", "User-Agent": "cubicle-agents"},
-            # Claims long-poll for up to 25s on the server.
+            # Claims and roster updates long-poll for up to 25s on the server.
             timeout=httpx.Timeout(10.0, read=40.0),
         )
 
@@ -72,22 +145,29 @@ class GatewayClient:
         resp.raise_for_status()
         return resp
 
-    async def sync_employees(self, employees: list[dict[str, Any]]) -> None:
-        await self._send("PUT", "/internal/v1/employees", employees)
+    async def start_worker(self) -> None:
+        await self._send("POST", "/internal/v1/worker/start")
 
-    async def set_status(self, employee_id: str, status: str, task_id: str = "") -> None:
-        await self._send("PATCH", f"/internal/v1/employees/{employee_id}",
-                         {"status": status, "current_task_id": task_id})
+    async def roster(self, after: int | None = None) -> RosterUpdate | None:
+        """The agents and their configuration. With `after`, waits for a change (None = no change yet)."""
+        path = "/internal/v1/agents" if after is None else f"/internal/v1/agents?after={after}"
+        resp = await self._send("GET", path)
+        if resp.status_code == 204:
+            return None
+        data = resp.json()
+        return RosterUpdate(int(data["revision"]), data.get("agents") or [])
 
-    async def claim(self, employee_ids: list[str]) -> Claim | None:
-        resp = await self._send("POST", "/internal/v1/tasks/claim", {"employee_ids": employee_ids})
+    async def set_status(self, agent_id: str, status: str, task_id: str = "") -> None:
+        await self._send("PATCH", f"/internal/v1/agents/{agent_id}/status", {"status": status, "current_task_id": task_id})
+
+    async def claim(self, agent_ids: list[str], lane: str) -> Claim | None:
+        resp = await self._send("POST", "/internal/v1/tasks/claim", {"agent_ids": agent_ids, "lane": lane})
         if resp.status_code == 204:
             return None
         return Claim.from_json(resp.json())
 
     async def delegate(self, task_id: str, subtasks: list[dict[str, Any]], synthesis: dict[str, Any]) -> None:
-        await self._send("POST", f"/internal/v1/tasks/{task_id}/delegate",
-                         {"subtasks": subtasks, "synthesis": synthesis})
+        await self._send("POST", f"/internal/v1/tasks/{task_id}/delegate", {"subtasks": subtasks, "synthesis": synthesis})
 
     async def complete(self, task_id: str, result: str) -> None:
         await self._send("POST", f"/internal/v1/tasks/{task_id}/complete", {"result": result})
@@ -95,23 +175,75 @@ class GatewayClient:
     async def fail(self, task_id: str, error: str) -> None:
         await self._send("POST", f"/internal/v1/tasks/{task_id}/fail", {"error": error})
 
-    async def ask(self, task_id: str, employee_id: str, question: str) -> None:
+    async def ask(self, task_id: str, agent_id: str, question: str, kind: str = "question") -> None:
         await self._send("POST", f"/internal/v1/tasks/{task_id}/ask",
-                         {"employee_id": employee_id, "question": question})
+                         {"employee_id": agent_id, "question": question, "kind": kind})
 
-    async def report_usage(self, task_id: str, employee_id: str, input_tokens: int, output_tokens: int) -> None:
+    async def progress(self, task_id: str, status: str = "", text: str = "") -> None:
+        await self._send("POST", f"/internal/v1/tasks/{task_id}/progress", {"status": status[:300], "text": text})
+
+    async def create_assignment(self, title: str, description: str, agent_id: str,
+                                source_task_id: str = "") -> dict[str, Any]:
+        resp = await self._send("POST", "/internal/v1/assignments",
+                                {"title": title[:300], "description": description[:20000], "agent_id": agent_id,
+                                 "source_task_id": source_task_id})
+        return resp.json()
+
+    async def report_usage(self, task_id: str, agent_id: str, input_tokens: int, output_tokens: int) -> None:
         await self._send("POST", "/internal/v1/usage", {
-            "task_id": task_id, "employee_id": employee_id,
+            "task_id": task_id, "employee_id": agent_id,
             "input_tokens": input_tokens, "output_tokens": output_tokens,
         })
 
-    async def log(self, employee_id: str, task_id: str, message: str) -> None:
+    async def work_log(self, period: str) -> str:
+        resp = await self._send("GET", f"/internal/v1/work-log?period={period}")
+        return str(resp.json().get("markdown", ""))
+
+    async def set_conversation_title(self, conversation_id: str, title: str) -> None:
+        await self._send("PUT", f"/internal/v1/conversations/{conversation_id}/title", {"title": title[:200]})
+
+    async def save_step(self, task_id: str, agent_id: str, step: dict[str, Any]) -> None:
+        await self._send("POST", f"/internal/v1/tasks/{task_id}/steps", {"agent_id": agent_id, **step})
+
+    async def log(self, agent_id: str, task_id: str, message: str) -> None:
         await self._send("POST", "/internal/v1/activity",
-                         {"employee_id": employee_id, "task_id": task_id, "message": message[:2000]})
+                         {"employee_id": agent_id, "task_id": task_id, "message": message[:2000]})
 
     async def list_memories(self, limit: int = 50) -> list[str]:
         resp = await self._send("GET", f"/internal/v1/memories?limit={limit}")
-        return [m["content"] for m in resp.json()]
+        return [m["content"] for m in resp.json() if m.get("kind") != "profile"]
 
-    async def add_memory(self, content: str, employee_id: str) -> None:
-        await self._send("POST", "/internal/v1/memories", {"content": content[:1000], "employee_id": employee_id})
+    async def get_profile(self) -> str:
+        resp = await self._send("GET", "/internal/v1/memories?limit=1")
+        return next((m["content"] for m in resp.json() if m.get("kind") == "profile"), "")
+
+    async def set_profile(self, content: str, agent_id: str) -> None:
+        await self._send("PUT", "/internal/v1/memories/profile", {"content": content[:3000], "employee_id": agent_id})
+
+    async def add_memory(self, content: str, agent_id: str) -> None:
+        await self._send("POST", "/internal/v1/memories", {"content": content[:1000], "employee_id": agent_id})
+
+    async def forget_memory(self, fact: str) -> bool:
+        wanted = " ".join(fact.lower().split())
+        resp = await self._send("GET", "/internal/v1/memories?limit=300")
+        items = [m for m in resp.json() if m.get("kind") != "profile" and " ".join(m["content"].lower().split())]
+        match = next((m for m in items if " ".join(m["content"].lower().split()) == wanted), None) or next(
+            (m for m in items if wanted in " ".join(m["content"].lower().split())), None)
+        if match is None:
+            return False
+        await self._send("DELETE", f"/internal/v1/memories/{match['id']}")
+        return True
+
+    async def triage_new(self, keys: list[str]) -> list[str]:
+        resp = await self._send("POST", "/internal/v1/triage/check", {"keys": keys})
+        return list(resp.json().get("new") or [])
+
+    async def triage_record(self, items: list[dict[str, Any]]) -> None:
+        await self._send("POST", "/internal/v1/triage/record", {"items": items})
+
+    async def list_projects(self) -> list[dict[str, Any]]:
+        return (await self._send("GET", "/internal/v1/projects")).json()
+
+    async def save_project(self, name: str, path: str = "", notes: str = "") -> dict[str, Any]:
+        body = {"name": name[:60], "path": path[:500], "notes": notes[:4000]}
+        return (await self._send("PUT", "/internal/v1/projects", body)).json()

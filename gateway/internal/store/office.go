@@ -4,116 +4,39 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
-type Employee struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Title         string    `json:"title"`
-	Role          string    `json:"role"`
-	Avatar        string    `json:"avatar"`
-	Model         string    `json:"model"`
-	Skills        string    `json:"skills"`
-	Status        string    `json:"status"`
-	CurrentTaskID string    `json:"current_task_id,omitempty"`
-	UpdatedAt     time.Time `json:"updated_at"`
-}
-
-// SyncEmployees upserts the roster reported by a worker. Employees that the
-// worker no longer reports are marked offline but kept for history.
-func (s *Store) SyncEmployees(ctx context.Context, list []Employee) error {
-	return s.withTx(ctx, func(tx *sql.Tx) error {
-		now := s.ms()
-		if _, err := tx.ExecContext(ctx, `UPDATE employees SET status = 'offline', current_task_id = '', updated_at = ?`, now); err != nil {
-			return err
-		}
-		for _, e := range list {
-			if e.Status == "" {
-				e.Status = "idle"
-			}
-			_, err := tx.ExecContext(ctx, `INSERT INTO employees (id, name, title, role, avatar, model, skills, status, current_task_id, updated_at)
-				VALUES (?,?,?,?,?,?,?,?,'',?)
-				ON CONFLICT(id) DO UPDATE SET name=excluded.name, title=excluded.title, role=excluded.role,
-					avatar=excluded.avatar, model=excluded.model, skills=excluded.skills, status=excluded.status,
-					current_task_id='', updated_at=excluded.updated_at`,
-				e.ID, e.Name, e.Title, e.Role, e.Avatar, e.Model, e.Skills, e.Status, now)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func (s *Store) SetEmployeeStatus(ctx context.Context, id, status, taskID string) (*Employee, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE employees SET status = ?, current_task_id = ?, updated_at = ? WHERE id = ?`,
-		status, taskID, s.ms(), id)
-	if err != nil {
-		return nil, err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return nil, ErrNotFound
-	}
-	list, err := s.listEmployees(ctx, `WHERE id = ?`, id)
-	if err != nil || len(list) == 0 {
-		return nil, err
-	}
-	return list[0], nil
-}
-
-// MarkAllOffline is called when the worker process disconnects or exits.
-func (s *Store) MarkAllOffline(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE employees SET status = 'offline', current_task_id = '', updated_at = ?`, s.ms())
-	return err
-}
-
-func (s *Store) ListEmployees(ctx context.Context) ([]*Employee, error) {
-	return s.listEmployees(ctx, ``)
-}
-
-func (s *Store) EmployeeExists(ctx context.Context, id string) (bool, error) {
-	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM employees WHERE id = ?`, id).Scan(&n)
-	return n > 0, err
-}
-
-func (s *Store) listEmployees(ctx context.Context, where string, args ...any) ([]*Employee, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, title, role, avatar, model, skills, status, current_task_id, updated_at
-		FROM employees `+where+` ORDER BY CASE role WHEN 'manager' THEN 0 ELSE 1 END, name`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []*Employee{}
-	for rows.Next() {
-		var e Employee
-		var updated int64
-		if err := rows.Scan(&e.ID, &e.Name, &e.Title, &e.Role, &e.Avatar, &e.Model, &e.Skills, &e.Status, &e.CurrentTaskID, &updated); err != nil {
-			return nil, err
-		}
-		e.UpdatedAt = fromMS(updated)
-		out = append(out, &e)
-	}
-	return out, rows.Err()
-}
-
 // ---- Inbox ("Ask me") ----
 
+// Inbox item kinds. An approval is a yes/no request to do something with side effects.
+const (
+	InboxQuestion = "question"
+	InboxApproval = "approval"
+)
+
 type InboxItem struct {
-	ID         string    `json:"id"`
-	TaskID     string    `json:"task_id"`
-	EmployeeID string    `json:"employee_id"`
-	Question   string    `json:"question"`
-	Answer     string    `json:"answer,omitempty"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
-	AnsweredAt time.Time `json:"answered_at,omitempty"`
+	ID         string `json:"id"`
+	TaskID     string `json:"task_id"`
+	EmployeeID string `json:"employee_id"`
+	Kind       string `json:"kind"`
+	Question   string `json:"question"`
+	// ConversationID and TaskTitle say where the request came from: a chat, or an assignment.
+	ConversationID string    `json:"conversation_id,omitempty"`
+	TaskTitle      string    `json:"task_title,omitempty"`
+	Answer         string    `json:"answer,omitempty"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"created_at"`
+	AnsweredAt     time.Time `json:"answered_at,omitempty"`
 }
 
 // Ask parks an in-progress task until a human answers the question.
-func (s *Store) Ask(ctx context.Context, taskID, employeeID, question string) (*InboxItem, error) {
-	item := &InboxItem{ID: newID("ask"), TaskID: taskID, EmployeeID: employeeID, Question: question, Status: "open"}
+func (s *Store) Ask(ctx context.Context, taskID, employeeID, kind, question string) (*InboxItem, error) {
+	if kind != InboxApproval {
+		kind = InboxQuestion
+	}
+	item := &InboxItem{ID: newID("ask"), TaskID: taskID, EmployeeID: employeeID, Kind: kind, Question: question, Status: "open"}
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		now := s.ms()
 		res, err := tx.ExecContext(ctx, `UPDATE tasks SET status = ?, updated_at = ? WHERE id = ? AND status = ?`,
@@ -125,14 +48,45 @@ func (s *Store) Ask(ctx context.Context, taskID, employeeID, question string) (*
 			return ErrConflict
 		}
 		item.CreatedAt = fromMS(now)
-		_, err = tx.ExecContext(ctx, `INSERT INTO inbox (id, task_id, employee_id, question, status, created_at) VALUES (?,?,?,?,?,?)`,
-			item.ID, taskID, employeeID, question, "open", now)
+		_, err = tx.ExecContext(ctx, `INSERT INTO inbox (id, task_id, employee_id, kind, question, status, created_at) VALUES (?,?,?,?,?,?,?)`,
+			item.ID, taskID, employeeID, kind, question, "open", now)
 		return err
 	})
 	return item, err
 }
 
-// Answer records the human's reply and re-queues the task.
+// Decisions on an approval.
+const (
+	DecisionApprove = "approve"
+	DecisionDecline = "decline"
+)
+
+// ApprovalAnswer is the text an agent reads for a decision; a note from the owner may follow it.
+func ApprovalAnswer(decision, note string) string {
+	text := "Declined. Do not do this."
+	if decision == DecisionApprove {
+		text = "Approved. You may do exactly what you asked about."
+	}
+	if note = strings.TrimSpace(note); note != "" {
+		text += " Note from the owner: " + note
+	}
+	return text
+}
+
+// GetInboxItem returns one request.
+func (s *Store) GetInboxItem(ctx context.Context, id string) (*InboxItem, error) {
+	items, err := s.listInbox(ctx, `WHERE inbox.id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, ErrNotFound
+	}
+	return items[0], nil
+}
+
+// Answer records the human's reply and re-queues the task. For an approval, answer is the
+// final text (see ApprovalAnswer).
 func (s *Store) Answer(ctx context.Context, id, answer string) (*InboxItem, error) {
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		var taskID, status string
@@ -156,27 +110,27 @@ func (s *Store) Answer(ctx context.Context, id, answer string) (*InboxItem, erro
 	if err != nil {
 		return nil, err
 	}
-	items, err := s.listInbox(ctx, `WHERE id = ?`, id)
-	if err != nil || len(items) == 0 {
-		return nil, err
-	}
-	return items[0], nil
+	return s.GetInboxItem(ctx, id)
 }
 
 func (s *Store) ListInbox(ctx context.Context, status string) ([]*InboxItem, error) {
 	if status == "" {
 		return s.listInbox(ctx, ``)
 	}
-	return s.listInbox(ctx, `WHERE status = ?`, status)
+	return s.listInbox(ctx, `WHERE inbox.status = ?`, status)
 }
 
 func (s *Store) InboxForTask(ctx context.Context, taskID string) ([]*InboxItem, error) {
-	return s.listInbox(ctx, `WHERE task_id = ?`, taskID)
+	return s.listInbox(ctx, `WHERE inbox.task_id = ?`, taskID)
 }
 
 func (s *Store) listInbox(ctx context.Context, where string, args ...any) ([]*InboxItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, task_id, employee_id, question, answer, status, created_at, answered_at
-		FROM inbox `+where+` ORDER BY created_at ASC LIMIT 500`, args...)
+	rows, err := s.db.QueryContext(ctx, `SELECT inbox.id, inbox.task_id, inbox.employee_id, inbox.kind, inbox.question,
+		inbox.answer, inbox.status, inbox.created_at, inbox.answered_at,
+		COALESCE((SELECT conversation_id FROM tasks t WHERE t.id = inbox.task_id), ''),
+		COALESCE((SELECT CASE WHEN t.kind = 'chat' THEN '' ELSE COALESCE(NULLIF(p.title, ''), t.title) END
+			FROM tasks t LEFT JOIN tasks p ON p.id = t.parent_id WHERE t.id = inbox.task_id), '')
+		FROM inbox `+where+` ORDER BY inbox.created_at ASC LIMIT 500`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +139,8 @@ func (s *Store) listInbox(ctx context.Context, where string, args ...any) ([]*In
 	for rows.Next() {
 		var it InboxItem
 		var created, answered int64
-		if err := rows.Scan(&it.ID, &it.TaskID, &it.EmployeeID, &it.Question, &it.Answer, &it.Status, &created, &answered); err != nil {
+		if err := rows.Scan(&it.ID, &it.TaskID, &it.EmployeeID, &it.Kind, &it.Question, &it.Answer, &it.Status, &created, &answered,
+			&it.ConversationID, &it.TaskTitle); err != nil {
 			return nil, err
 		}
 		it.CreatedAt, it.AnsweredAt = fromMS(created), fromMS(answered)
@@ -220,6 +175,54 @@ func (s *Store) ListActivity(ctx context.Context, limit int) ([]*Activity, error
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT id, employee_id, task_id, message, created_at FROM activity ORDER BY id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*Activity{}
+	for rows.Next() {
+		var a Activity
+		var created int64
+		if err := rows.Scan(&a.ID, &a.EmployeeID, &a.TaskID, &a.Message, &created); err != nil {
+			return nil, err
+		}
+		a.CreatedAt = fromMS(created)
+		out = append(out, &a)
+	}
+	return out, rows.Err()
+}
+
+// ListTaskActivity returns the activity of a task and of its subtasks, oldest first.
+func (s *Store) ListTaskActivity(ctx context.Context, taskID string, limit int) ([]*Activity, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, employee_id, task_id, message, created_at FROM activity
+		WHERE task_id = ? OR task_id IN (SELECT id FROM tasks WHERE parent_id = ?) ORDER BY id ASC LIMIT ?`, taskID, taskID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*Activity{}
+	for rows.Next() {
+		var a Activity
+		var created int64
+		if err := rows.Scan(&a.ID, &a.EmployeeID, &a.TaskID, &a.Message, &created); err != nil {
+			return nil, err
+		}
+		a.CreatedAt = fromMS(created)
+		out = append(out, &a)
+	}
+	return out, rows.Err()
+}
+
+// ListConversationActivity returns the activity of every reply task in a chat, oldest first.
+func (s *Store) ListConversationActivity(ctx context.Context, conversationID string, limit int) ([]*Activity, error) {
+	if limit <= 0 || limit > 2000 {
+		limit = 1000
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, employee_id, task_id, message, created_at FROM activity
+		WHERE task_id IN (SELECT id FROM tasks WHERE conversation_id = ?) ORDER BY id ASC LIMIT ?`, conversationID, limit)
 	if err != nil {
 		return nil, err
 	}

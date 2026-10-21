@@ -12,39 +12,85 @@ namespace Cubicle.Desktop.ViewModels;
 /// <summary>
 /// State for the whole window. Keeps a live connection to the gateway: initial
 /// load, then incremental refreshes driven by the gateway's event stream.
-/// All members run on the UI thread.
+/// Each page with its own logic has a view model (Agents, Tools, Chat,
+/// Automations, AI settings); this one connects them. All members run on the UI thread.
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     public const string RepoUrl = "https://github.com/Pro-Sifat-Hasan/cubicle";
 
+    // Navigation rail order (MainWindow.xaml).
+    public const int TodaySection = 0, InboxSection = 1, AgentsSection = 2, AutomationsSection = 3,
+        ToolsSection = 4, MemorySection = 5, ActivitySection = 6, SettingsSection = 7;
+
     private readonly Uri _gatewayUri;
     private readonly CancellationTokenSource _life = new();
     private GatewayClient? _client;
+    private Catalog? _catalog;
     private bool _refreshQueued;
 
-    /// <summary>Raised for things worth a desktop notification (title, message).</summary>
-    public event Action<string, string>? Notify;
+    /// <summary>Raised for things worth a desktop notification (title, message, the page it is about).</summary>
+    public event Action<string, string, int>? Notify;
 
-    public MainViewModel()
+    public MainViewModel(string theme = ThemeService.SystemMode)
     {
         var url = Environment.GetEnvironmentVariable("CUBICLE_GATEWAY_URL");
         _gatewayUri = new Uri(string.IsNullOrWhiteSpace(url) ? CubiclePaths.DefaultGatewayUrl : url);
         _startWithWindows = AutoStart.IsEnabled;
-        Ai = new AiSettingsViewModel(() => _client, message => ErrorText = message, (title, message) => Notify?.Invoke(title, message));
+        _theme = theme;
+        _notificationsOn = UiPreferences.Load().Notifications;
+        void ShowError(string message) => ErrorText = message;
+        void Notice(string title, string message) => Notify?.Invoke(title, message, TodaySection);
+        Ai = new AiSettingsViewModel(() => _client, ShowError, Notice);
+        Alerts = new AlertsViewModel(() => _client, ShowError, Notice);
+        AgentsPage = new AgentsViewModel(() => _client, ShowError, Notice);
+        Tools = new ToolsViewModel(() => _client, ShowError, Notice);
+        Chat = new ChatViewModel(() => _client, ShowError);
+        Automations = new AutomationsViewModel(() => _client, ShowError, Notice);
+        Onboarding = new OnboardingViewModel(() => _client, ShowError);
+        Chat.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ChatViewModel.Selected) && Chat.Selected is not null)
+                ShowRequests = false;
+        };
+        Onboarding.Finished += profile => _ = FinishOnboardingAsync(profile);
+        Onboarding.MissionChosen += title => _ = RunMissionAsync(title);
+        AgentsPage.Changed += QueueRefresh;
+        Tools.Changed += QueueRefresh;
+        Automations.Changed += QueueRefresh;
+        AgentsPage.ChatRequested += id =>
+        {
+            SelectedSection = InboxSection;
+            _ = Chat.OpenChatWithAsync(id);
+        };
     }
 
     public AiSettingsViewModel Ai { get; }
+    public AlertsViewModel Alerts { get; }
 
-    public ObservableCollection<Employee> Staff { get; } = [];
+    /// <summary>Messages the staff looked at and what became of them (newest first).</summary>
+    public ObservableCollection<TriageViewModel> MessagesSeen { get; } = [];
+
+    /// <summary>The Activity page shows the "log" of everything done, or the "messages" the staff went through.</summary>
+    [ObservableProperty] private string _activityView = "log";
+    public AgentsViewModel AgentsPage { get; }
+    public ToolsViewModel Tools { get; }
+    public ChatViewModel Chat { get; }
+    public AutomationsViewModel Automations { get; }
+    public OnboardingViewModel Onboarding { get; }
+
+    public ObservableCollection<Agent> Staff { get; } = [];
     public ObservableCollection<AssignmentViewModel> Assignments { get; } = [];
     public ObservableCollection<SubtaskViewModel> SelectedSubtasks { get; } = [];
+    public ObservableCollection<ActivityLine> SelectedActivity { get; } = [];
     public ObservableCollection<InboxItemViewModel> Inbox { get; } = [];
-    public ObservableCollection<RoutineViewModel> Routines { get; } = [];
     public ObservableCollection<ActivityItem> Activity { get; } = [];
+    public ObservableCollection<RequestHistoryViewModel> RequestHistory { get; } = [];
     public ObservableCollection<MemoryViewModel> Memories { get; } = [];
+    public ObservableCollection<AgentChoice> AssignTargets { get; } = [];
 
-    public IReadOnlyList<string> RoutineKinds { get; } = ["Every weekday", "Every day", "Every N minutes"];
+    /// <summary>One-tap missions for the owner's profession, shown while there is no work yet.</summary>
+    public ObservableCollection<string> StarterMissions { get; } = [];
 
     // ---- connection / status ----
 
@@ -55,7 +101,39 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _selectedSection;
     [ObservableProperty] private string? _errorText;
 
+    /// <summary>True while first-run setup covers the window.</summary>
+    [ObservableProperty] private bool _showOnboarding;
+
+    /// <summary>Who the owner is and how they set up their staff; null until the gateway answers.</summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Greeting))]
+    private OwnerProfile? _profile;
+
     public int OpenQuestions => Inbox.Count;
+
+    [ObservableProperty] private int _activeCount;
+    [ObservableProperty] private int _doneCount;
+
+    public string Greeting
+    {
+        get
+        {
+            var hour = DateTime.Now.Hour;
+            var part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+            var name = Ai.OwnerName.Trim();
+            if (Profile is { Onboarded: true, Passion: { } persona })
+            {
+                var text = persona.Greet(string.IsNullOrEmpty(name) ? "there" : name, Profile.AgentName, DateTime.Now.DayOfYear);
+                const string morning = "Good morning";
+                return text.StartsWith(morning, StringComparison.Ordinal) ? part + text[morning.Length..] : text;
+            }
+            return string.IsNullOrEmpty(name) ? part : $"{part}, {name}";
+        }
+    }
+
+    public string MainAgentName => Staff.FirstOrDefault(a => a.IsMain)?.Name ?? "Your main agent";
+
+    public string VersionText { get; } =
+        $"Cubicle {typeof(MainViewModel).Assembly.GetName().Version?.ToString(3)} · MIT licensed";
 
     // ---- assignment composer ----
 
@@ -65,31 +143,72 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private string _newDescription = "";
 
+    /// <summary>Who gets the assignment: the main agent (empty id) or one agent directly.</summary>
+    [ObservableProperty] private AgentChoice? _assignTo;
+
     // ---- memory composer ----
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddMemoryCommand))]
     private string _newMemory = "";
 
+    // ---- the owner's profile: one record the staff keep up to date ----
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SaveProfileCommand))]
+    private string _profileText = "";
+
+    [ObservableProperty] private string _profileInfo = "";
+    private string _profileSaved = "";
+
+    private bool CanSaveProfile() => ProfileText.Trim() != _profileSaved;
+
+    [RelayCommand(CanExecute = nameof(CanSaveProfile))]
+    private Task SaveProfileAsync() => SafeAsync(async () =>
+    {
+        await _client!.SetProfileAsync(ProfileText.Trim());
+        await RefreshAllAsync();
+    });
+
     // ---- selected assignment ----
 
     [ObservableProperty] private AssignmentViewModel? _selectedAssignment;
     [ObservableProperty] private TaskDetail? _selectedDetail;
 
-    // ---- routine composer ----
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(CreateRoutineCommand))]
-    private string _routineTitle = "";
-
-    [ObservableProperty] private string _routineDescription = "";
-    [ObservableProperty] private int _routineKind;
-    [ObservableProperty] private string _routineTime = "09:00";
-    [ObservableProperty] private string _routineEveryMinutes = "60";
-
-    // ---- settings ----
+    // ---- settings & layout ----
 
     [ObservableProperty] private bool _startWithWindows;
+
+    /// <summary>Appearance: "System", "Light" or "Dark".</summary>
+    [ObservableProperty] private string _theme;
+
+    /// <summary>True when the window is narrow: the navigation rail collapses to icons.</summary>
+    [ObservableProperty] private bool _isCompact;
+
+    partial void OnThemeChanged(string value)
+    {
+        ThemeService.Apply(value);
+        UiPreferences.Update(p => p with { Theme = value });
+        OnPropertyChanged(nameof(ThemeGlyph));
+        OnPropertyChanged(nameof(ThemeTooltip));
+    }
+
+    public string ThemeGlyph => Theme switch
+    {
+        ThemeService.LightMode => "",
+        ThemeService.DarkMode => "",
+        _ => "",
+    };
+
+    public string ThemeTooltip => $"Theme: {Theme} (click to change)";
+
+    [RelayCommand]
+    private void CycleTheme() => Theme = Theme switch
+    {
+        ThemeService.LightMode => ThemeService.DarkMode,
+        ThemeService.DarkMode => ThemeService.SystemMode,
+        _ => ThemeService.LightMode,
+    };
 
     public string DataFolder => CubiclePaths.Home;
 
@@ -118,14 +237,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 }
 
                 _client?.Dispose();
-                _client = new GatewayClient(_gatewayUri, token);
-                await RefreshAllAsync();
-                await Ai.LoadAsync();
-                IsConnected = true;
-                ConnectionText = "Office open";
+                var client = new GatewayClient(_gatewayUri, token);
+                _client = client;
+                try
+                {
+                    _catalog = await client.GetCatalogAsync(ct);
+                    await RefreshAllAsync();
+                    await Ai.LoadAsync();
+                    await Alerts.LoadAsync();
+                    await LoadProfileAsync(ct);
+                    IsConnected = true;
+                    ConnectionText = "Office open";
 
-                await foreach (var evt in _client.StreamEventsAsync(ct))
-                    HandleEvent(evt);
+                    await foreach (var evt in client.StreamEventsAsync(ct))
+                        HandleEvent(evt);
+                }
+                catch
+                {
+                    client.Dispose(); // the loop connects again with a fresh client
+                    if (ReferenceEquals(_client, client))
+                        _client = null;
+                    throw;
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -145,14 +278,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         switch (evt.Type)
         {
+            case "task.progress":
+                Chat.OnProgress(evt.Data);
+                return; // frequent and cosmetic: no full refresh
+            case "task.step":
+                Chat.OnStep(evt.Data);
+                return; // likewise: it only changes the timeline of the open chat
+            case "conversation.updated":
+                Chat.OnConversationUpdated(evt.Data);
+                break;
             case "assignment.done":
-                Notify?.Invoke("Done ✅", evt.Data.GetProperty("title").GetString() ?? "An assignment is finished.");
+                Notify?.Invoke("Done ✅", evt.Data.GetProperty("title").GetString() ?? "An assignment is finished.", TodaySection);
                 break;
             case "inbox.new":
-                Notify?.Invoke("Your staff have a question", evt.Data.GetProperty("question").GetString() ?? "");
+                Notify?.Invoke(evt.Data.TryGetProperty("kind", out var kind) && kind.GetString() == InboxItem.ApprovalKind
+                    ? "Your staff need your approval" : "Your staff have a question",
+                    (evt.Data.GetProperty("question").GetString() ?? "").Replace("**", ""), InboxSection);
                 break;
             case "breaker.tripped":
-                Notify?.Invoke("Work paused", "Daily token budget reached. Open Cubicle to resume.");
+                Notify?.Invoke("Work paused", "Daily token budget reached. Open Cubicle to resume.", TodaySection);
                 break;
         }
         QueueRefresh();
@@ -181,70 +325,249 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task RefreshAllAsync()
     {
-        if (_client is null)
+        if (_client is null || _catalog is null)
             return;
         var c = _client;
         var statusTask = c.GetStatusAsync();
-        var staffTask = c.GetEmployeesAsync();
+        var agentsTask = c.GetAgentsAsync();
         var assignmentsTask = c.GetAssignmentsAsync(100);
-        var inboxTask = c.GetInboxAsync("open");
+        var inboxTask = c.GetInboxAsync(null); // open requests, and the answered ones for the history
         var routinesTask = c.GetRoutinesAsync();
         var activityTask = c.GetActivityAsync(150);
         var memoriesTask = c.GetMemoriesAsync();
-        await Task.WhenAll(statusTask, staffTask, assignmentsTask, inboxTask, routinesTask, activityTask, memoriesTask);
+        var triageTask = c.GetTriageAsync(100);
+        var conversationsTask = c.GetConversationsAsync();
+        var serversTask = c.GetMcpServersAsync();
+        var skillsTask = c.GetSkillsAsync();
+        var pluginsTask = c.GetPluginsAsync();
+        var secretsTask = c.GetSecretNamesAsync();
+        await Task.WhenAll(statusTask, agentsTask, assignmentsTask, inboxTask, routinesTask, activityTask, memoriesTask,
+            triageTask, conversationsTask, serversTask, skillsTask, pluginsTask, secretsTask);
 
         var status = statusTask.Result;
         BreakerOpen = status.BreakerOpen;
+        ActiveCount = assignmentsTask.Result.Count(t => !t.IsFinished && t.Status != "waiting_human");
+        DoneCount = assignmentsTask.Result.Count(t => t.Status == "done");
+        OnPropertyChanged(nameof(Greeting));
         UsageText = status.DailyTokenBudget > 0
             ? $"{status.TokensToday:N0} / {status.DailyTokenBudget:N0} tokens today"
             : $"{status.TokensToday:N0} tokens today";
 
-        Replace(Staff, staffTask.Result);
-        var names = staffTask.Result.ToDictionary(e => e.Id, e => e.Name);
+        var agents = agentsTask.Result;
+        Replace(Staff, agents);
+        OnPropertyChanged(nameof(MainAgentName));
+        var names = agents.ToDictionary(e => e.Id, e => e.Name);
+        UpdateAssignTargets(agents);
+
+        AgentsPage.Load(agents, _catalog, serversTask.Result, skillsTask.Result);
+        Tools.Load(_catalog, serversTask.Result, skillsTask.Result, pluginsTask.Result, agents, secretsTask.Result);
+        Chat.Load(conversationsTask.Result, agents);
+        Automations.Load(routinesTask.Result, agents);
 
         var selectedId = SelectedAssignment?.Task.Id;
-        Replace(Assignments, assignmentsTask.Result.Select(t => new AssignmentViewModel(t)));
-        SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == selectedId) ?? SelectedAssignment;
+        _restoringSelection = true; // refilling the list clears the list's selection; that is not the owner closing the panel
+        try
+        {
+            Replace(Assignments, assignmentsTask.Result.OrderByDescending(t => t.CreatedAt)
+                .Select(t => new AssignmentViewModel(t, names.GetValueOrDefault(t.Assignee, t.Assignee))));
+            SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == selectedId) ?? SelectedAssignment;
+        }
+        finally
+        {
+            _restoringSelection = false;
+        }
+        OnPropertyChanged(nameof(Summary));
 
         // Keep half-typed answers when the inbox refreshes.
         var drafts = Inbox.ToDictionary(i => i.Item.Id, i => i.AnswerText);
-        Replace(Inbox, inboxTask.Result.Select(i => new InboxItemViewModel(i, names.GetValueOrDefault(i.EmployeeId, i.EmployeeId), SendAnswerAsync)
+        Replace(Inbox, inboxTask.Result.Where(i => i.Status == "open").Select(i => new InboxItemViewModel(i, names.GetValueOrDefault(i.EmployeeId, i.EmployeeId), SendAnswerAsync)
         {
             AnswerText = drafts.GetValueOrDefault(i.Id, ""),
         }));
+        Replace(RequestHistory, inboxTask.Result.Where(i => i.Status == "answered").OrderByDescending(i => i.CreatedAt).Take(25)
+            .Select(i => new RequestHistoryViewModel(i, names.GetValueOrDefault(i.EmployeeId, i.EmployeeId))));
+        Chat.SetRequests(Inbox.ToList());
+        Chat.RefreshLive();
         OnPropertyChanged(nameof(OpenQuestions));
+        OnPropertyChanged(nameof(Summary));
 
-        Replace(Routines, routinesTask.Result.Select(r => new RoutineViewModel(r, ToggleRoutineAsync, DeleteRoutineAsync)));
         Replace(Activity, activityTask.Result);
-        Replace(Memories, memoriesTask.Result.Select(m => new MemoryViewModel(m,
-            string.IsNullOrEmpty(m.EmployeeId) ? "Added by you" : $"Learned by {names.GetValueOrDefault(m.EmployeeId, m.EmployeeId)}",
-            DeleteMemoryAsync)));
+        Replace(MessagesSeen, triageTask.Result.Select(t => new TriageViewModel(t)));
+        string Source(Memory m) => string.IsNullOrEmpty(m.EmployeeId) ? "Added by you" : $"Learned by {names.GetValueOrDefault(m.EmployeeId, m.EmployeeId)}";
+        Replace(Memories, memoriesTask.Result.Where(m => !m.IsProfile).Select(m => new MemoryViewModel(m, Source(m), DeleteMemoryAsync)));
+        var profile = memoriesTask.Result.FirstOrDefault(m => m.IsProfile);
+        var wasEdited = ProfileText.Trim() != _profileSaved; // keep what the owner is typing
+        _profileSaved = profile?.Content ?? "";
+        if (!wasEdited) ProfileText = _profileSaved;
+        ProfileInfo = profile is null ? "" : $"{Source(profile).Replace("Added by you", "Written by you")} · {profile.CreatedAt.ToLocalTime():dd MMM yyyy}";
+        SaveProfileCommand.NotifyCanExecuteChanged();
 
         if (SelectedAssignment is not null)
-            await LoadDetailAsync(SelectedAssignment.Task.Id, names);
+            await LoadDetailAsync(SelectedAssignment.Task.Id);
     }
+
+    private void UpdateAssignTargets(IReadOnlyList<Agent> agents)
+    {
+        var pick = AssignTo?.Id ?? "";
+        var main = agents.FirstOrDefault(a => a.IsMain);
+        AssignTargets.Clear();
+        AssignTargets.Add(new AgentChoice("", $"{main?.Name ?? "Main agent"} · plans it with the team"));
+        foreach (var a in agents.Where(a => a.Enabled && !a.IsMain))
+            AssignTargets.Add(new AgentChoice(a.Id, $"{a.Name} · {(string.IsNullOrEmpty(a.Title) ? "Agent" : a.Title)} (alone)"));
+        AssignTo = AssignTargets.FirstOrDefault(t => t.Id == pick) ?? AssignTargets[0];
+    }
+
+    private bool _restoringSelection;
+    private readonly HashSet<string> _expandedSteps = [];
 
     partial void OnSelectedAssignmentChanged(AssignmentViewModel? value)
     {
         if (value is null)
         {
-            SelectedDetail = null;
-            SelectedSubtasks.Clear();
+            if (!_restoringSelection)
+            {
+                IsDetailOpen = false;
+                SelectedDetail = null;
+                SelectedSubtasks.Clear();
+                SelectedActivity.Clear();
+            }
             return;
         }
-        _ = SafeAsync(async () => await LoadDetailAsync(value.Task.Id, Staff.ToDictionary(e => e.Id, e => e.Name)));
+        IsDetailOpen = true;
+        _ = SafeAsync(() => LoadDetailAsync(value.Task.Id));
     }
 
-    private async Task LoadDetailAsync(string id, Dictionary<string, string> names)
+    /// <summary>Whether the assignment panel is shown. Closing it clears the selection, so clicking an assignment opens it again.</summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowDetail))]
+    private bool _isDetailOpen;
+
+    public bool ShowDetail => IsDetailOpen && SelectedDetail is not null;
+
+    partial void OnSelectedDetailChanged(TaskDetail? value) => OnPropertyChanged(nameof(ShowDetail));
+
+    [RelayCommand]
+    private void CloseDetail() => SelectedAssignment = null;
+
+    /// <summary>The plan and the activity trail start collapsed; the result is what matters first.</summary>
+    [ObservableProperty] private bool _planExpanded;
+
+    [ObservableProperty] private bool _activityExpanded;
+
+    public string PlanSummary
+    {
+        get
+        {
+            var total = SelectedSubtasks.Count;
+            if (total == 0)
+                return "";
+            var done = SelectedSubtasks.Count(s => s.Status == "done");
+            return $"{total} step{(total == 1 ? "" : "s")} · {done} done";
+        }
+    }
+
+    public string ActivitySummary
+    {
+        get
+        {
+            var tools = SelectedActivity.Count(a => a.IsTool);
+            return tools == 0 ? $"{SelectedActivity.Count} update{(SelectedActivity.Count == 1 ? "" : "s")}"
+                : $"{tools} tool call{(tools == 1 ? "" : "s")} · {SelectedActivity.Count} updates";
+        }
+    }
+
+    public string DetailMeta => SelectedAssignment is null ? "" : SelectedAssignment.When;
+
+    private async Task LoadDetailAsync(string id)
     {
         if (_client is null)
             return;
-        var detail = await _client.GetTaskAsync(id);
+        var detailTask = _client.GetTaskAsync(id);
+        var activityTask = _client.GetTaskActivityAsync(id);
+        await Task.WhenAll(detailTask, activityTask);
+        var detail = detailTask.Result;
+        var agents = Staff.ToDictionary(e => e.Id);
+        string Who(string? agentId) => agentId is not null && agents.TryGetValue(agentId, out var a) ? a.Name : "";
+
+        var lines = activityTask.Result.Select(a => (a.TaskId, Line: ActivityLine.From(a, Who(a.EmployeeId)))).ToList();
         SelectedDetail = detail;
+        Replace(SelectedActivity, lines.Select(l => l.Line));
         Replace(SelectedSubtasks, detail.Children
             .OrderBy(t => t.CreatedAt)
-            .Select(t => new SubtaskViewModel(t, names.GetValueOrDefault(t.Assignee, t.Assignee))));
+            .Select(t => new SubtaskViewModel(t, agents.GetValueOrDefault(t.Assignee),
+                lines.Where(l => l.TaskId == t.Id).Select(l => l.Line).ToList(), _expandedSteps.Contains(t.Id),
+                (stepId, open) => _ = open ? _expandedSteps.Add(stepId) : _expandedSteps.Remove(stepId))));
+        OnPropertyChanged(nameof(PlanSummary));
+        OnPropertyChanged(nameof(ActivitySummary));
+        OnPropertyChanged(nameof(DetailMeta));
     }
+
+    /// <summary>The line under the greeting: today's date and what the staff are up to.</summary>
+    public string Summary
+    {
+        get
+        {
+            var parts = new List<string> { DateTime.Now.ToString("dddd, d MMMM") };
+            if (ActiveCount > 0)
+                parts.Add($"{ActiveCount} in progress");
+            if (OpenQuestions > 0)
+                parts.Add($"{OpenQuestions} need{(OpenQuestions == 1 ? "s" : "")} you");
+            return string.Join(" · ", parts);
+        }
+    }
+
+    // ---- profile and onboarding ----
+
+    private OnboardingPacks? _packs;
+
+    private async Task LoadProfileAsync(CancellationToken ct)
+    {
+        var packs = await _client!.GetOnboardingAsync(ct);
+        ApplyPacks(packs);
+        if (!packs.Profile.Onboarded && !ShowOnboarding)
+        {
+            Onboarding.Begin(packs, Ai.OwnerName);
+            ShowOnboarding = true;
+        }
+    }
+
+    private void ApplyPacks(OnboardingPacks packs)
+    {
+        _packs = packs;
+        Profile = packs.Profile;
+        Replace(StarterMissions, packs.Professions.FirstOrDefault(p => p.Id == packs.Profile.Profession)?.StarterMissions ?? []);
+        OnPropertyChanged(nameof(MainAgentName));
+    }
+
+    private Task FinishOnboardingAsync(OwnerProfile? profile) => SafeAsync(async () =>
+    {
+        ShowOnboarding = false;
+        if (profile is not null)
+            await Ai.LoadAsync(); // the owner's name may have changed
+        await LoadProfileAsync(_life.Token);
+        await RefreshAllAsync();
+        SelectedSection = TodaySection;
+    });
+
+    private Task RunMissionAsync(string mission) => SafeAsync(async () =>
+    {
+        var task = await _client!.CreateAssignmentAsync(mission, "");
+        await RefreshAllAsync();
+        SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == task.Id);
+    });
+
+    /// <summary>One-tap mission from the Today screen's empty state.</summary>
+    [RelayCommand]
+    private Task StartMission(string mission) => RunMissionAsync(mission);
+
+    /// <summary>Runs first-run setup again, for example to pick another passion.</summary>
+    [RelayCommand]
+    private Task RunSetupAgain() => SafeAsync(async () =>
+    {
+        var packs = await _client!.GetOnboardingAsync();
+        Onboarding.Begin(packs, Ai.OwnerName);
+        Onboarding.AgentName = MainAgentName is "Your main agent" ? "" : MainAgentName;
+        ShowOnboarding = true;
+    });
 
     // ---- commands ----
 
@@ -253,8 +576,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanAssign))]
     private Task AssignAsync() => SafeAsync(async () =>
     {
-        var task = await _client!.CreateAssignmentAsync(NewTitle.Trim(), NewDescription.Trim());
+        var target = string.IsNullOrEmpty(AssignTo?.Id) ? null : AssignTo.Id;
+        var task = await _client!.CreateAssignmentAsync(NewTitle.Trim(), NewDescription.Trim(), target);
         NewTitle = NewDescription = "";
+        await RefreshAllAsync();
+        SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == task.Id);
+    });
+
+    /// <summary>Asks the main agent for a daily or weekly report of what the staff did.</summary>
+    [RelayCommand]
+    private Task WriteReportAsync(string period) => SafeAsync(async () =>
+    {
+        var task = await _client!.CreateReportAsync(period);
         await RefreshAllAsync();
         SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == task.Id);
     });
@@ -266,46 +599,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             await _client!.CancelTaskAsync(a.Task.Id);
     });
 
-    private Task SendAnswerAsync(InboxItemViewModel item) => SafeAsync(async () =>
+    private Task SendAnswerAsync(InboxItemViewModel item, string? decision) => SafeAsync(async () =>
     {
-        await _client!.AnswerAsync(item.Item.Id, item.AnswerText.Trim());
+        await _client!.AnswerAsync(item.Item.Id, item.AnswerText.Trim(), decision);
         Inbox.Remove(item);
+        Chat.SetRequests(Inbox.ToList());
         OnPropertyChanged(nameof(OpenQuestions));
-    });
-
-    private bool CanCreateRoutine() => !string.IsNullOrWhiteSpace(RoutineTitle);
-
-    [RelayCommand(CanExecute = nameof(CanCreateRoutine))]
-    private Task CreateRoutineAsync() => SafeAsync(async () =>
-    {
-        string schedule;
-        if (RoutineKind == 2)
-        {
-            if (!int.TryParse(RoutineEveryMinutes, out var minutes) || minutes < 5)
-                throw new FormatException("Interval must be a whole number of minutes, at least 5.");
-            schedule = Schedules.Every(TimeSpan.FromMinutes(minutes));
-        }
-        else
-        {
-            if (!TimeOnly.TryParse(RoutineTime, out var at))
-                throw new FormatException("Time must look like 09:00.");
-            schedule = RoutineKind == 0 ? Schedules.Weekdays(at) : Schedules.Daily(at);
-        }
-        await _client!.CreateRoutineAsync(RoutineTitle.Trim(), RoutineDescription.Trim(), schedule);
-        RoutineTitle = RoutineDescription = "";
-        await RefreshAllAsync();
-    });
-
-    private Task ToggleRoutineAsync(RoutineViewModel r, bool enabled) => SafeAsync(async () =>
-    {
-        await _client!.SetRoutineEnabledAsync(r.Routine.Id, enabled);
-        await RefreshAllAsync();
-    });
-
-    private Task DeleteRoutineAsync(RoutineViewModel r) => SafeAsync(async () =>
-    {
-        await _client!.DeleteRoutineAsync(r.Routine.Id);
-        Routines.Remove(r);
+        OnPropertyChanged(nameof(Summary));
     });
 
     private bool CanAddMemory() => !string.IsNullOrWhiteSpace(NewMemory);
@@ -330,17 +630,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void OpenDataFolder() => Open(CubiclePaths.Home);
 
-    /// <summary>Opens the folder where the staff saved files for the selected assignment.</summary>
+    // ---- inbox: the "Needs you" thread ----
+
+    /// <summary>True while the Inbox shows the requests thread (questions and approvals) instead of a chat.</summary>
+    [ObservableProperty] private bool _showRequests;
+
     [RelayCommand]
-    private void OpenAssignmentFiles()
+    private void OpenRequests()
     {
-        if (SelectedAssignment is null)
-            return;
-        var folder = Path.Combine(CubiclePaths.WorkspaceDirectory, SelectedAssignment.Task.Id);
-        if (Directory.Exists(folder))
-            Open(folder);
-        else
-            ErrorText = "No files were saved for this assignment.";
+        Chat.Selected = null;
+        ShowRequests = true;
     }
 
     [RelayCommand]
@@ -350,6 +649,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void Navigate(string index) => SelectedSection = int.Parse(index);
 
     partial void OnStartWithWindowsChanged(bool value) => AutoStart.Set(value);
+
+    /// <summary>Desktop notifications (a popup above the taskbar when something finishes or needs you).</summary>
+    [ObservableProperty] private bool _notificationsOn;
+
+    partial void OnNotificationsOnChanged(bool value) => UiPreferences.Update(p => p with { Notifications = value });
+
+    /// <summary>What the tray tooltip says: what needs the owner and what is running.</summary>
+    public string TrayStatus
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (OpenQuestions > 0)
+                parts.Add($"{OpenQuestions} need{(OpenQuestions == 1 ? "s" : "")} you");
+            if (ActiveCount > 0)
+                parts.Add($"{ActiveCount} in progress");
+            if (!IsConnected)
+                parts.Add("starting…");
+            return parts.Count > 0 ? string.Join(" · ", parts) : "Your staff are ready";
+        }
+    }
 
     [RelayCommand]
     private void DismissError() => ErrorText = null;

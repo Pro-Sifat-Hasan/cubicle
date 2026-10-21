@@ -1,50 +1,74 @@
-"""Assembles the toolbox an employee gets for one task."""
+"""Assembles the toolbox an agent gets for one run, from the tools the owner enabled."""
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 from cubicle_agents.core.gateway import Gateway
-from cubicle_agents.tools.base import Tool, Toolbox, require_str
+from cubicle_agents.staff.memory import is_duplicate, looks_secret
+from cubicle_agents.staff.roster import TOOL_ASSIGNMENTS, TOOL_FILES, TOOL_MEMORY, TOOL_TERMINAL, TOOL_WEB, Employee
+from cubicle_agents.tools.base import TOOL_PREFIX, Tool, Toolbox, ToolError, require_str
+from cubicle_agents.tools.terminal import terminal_tool
+from cubicle_agents.tools.triage import triage_tools
 from cubicle_agents.tools.web import WEB_FETCH
 from cubicle_agents.tools.workspace import Workspace
+
+# The file tools that only look.
+READ_ONLY_TOOLS = frozenset({"read_file", "list_files", "find_files", "grep_files"})
+
+# consult(teammate_id, request) -> the teammate's answer
+ConsultFunc = Callable[[str, str], Awaitable[str]]
 
 
 def build_toolbox(
     *,
+    employee: Employee,
     workspace: Path,
     gateway: Gateway,
-    employee_id: str,
     may_ask: bool,
     client_web_fetch: bool,
+    may_approve: bool = False,
+    task_id: str = "",
+    approved_actions: tuple[str, ...] = (),
+    web_access: bool = True,
+    team: list[Employee] | None = None,
+    consult: ConsultFunc | None = None,
+    allow_assignments: bool = False,
+    read_only_files: bool = False,
 ) -> Toolbox:
-    """Tools for one task.
+    """Tools for one run.
 
     client_web_fetch adds our own guarded web_fetch; providers with a built-in
-    web tool (Claude) pass False and use theirs instead.
+    web tool (Claude, OpenAI) pass False and use theirs instead. read_only_files
+    keeps only the tools that look at files: a main agent that leads a team hands
+    the building to a teammate.
     """
     toolbox = Toolbox()
-    toolbox.tools.extend(Workspace(workspace).tools())
+    if employee.has_tool(TOOL_FILES):
+        toolbox.tools.extend(t for t in Workspace(workspace).tools() if not read_only_files or t.name in READ_ONLY_TOOLS)
+    if employee.has_tool(TOOL_TERMINAL):
+        async def log_command(message: str) -> None:
+            await gateway.log(employee.id, task_id, f"{TOOL_PREFIX}{message}")
 
-    async def remember(args: dict[str, Any]) -> str:
-        fact = require_str(args, "fact", max_len=1000)
-        await gateway.add_memory(fact.strip(), employee_id)
-        return "Saved to the office memory."
-
-    toolbox.tools.append(Tool(
-        name="remember",
-        description="Save a durable fact about the owner, their preferences, people or projects so the whole "
-        "staff remembers it in future tasks. Only save things that will still be true and useful later.",
-        parameters={
-            "type": "object",
-            "properties": {"fact": {"type": "string", "description": "One short, self-contained sentence."}},
-            "required": ["fact"],
-            "additionalProperties": False,
-        },
-        handler=remember,
-    ))
-
+        toolbox.tools.append(terminal_tool(workspace, log_command, approved_actions))
+    if employee.has_tool(TOOL_MEMORY):
+        toolbox.tools.append(_remember(gateway, employee.id))
+        toolbox.tools.append(_forget(gateway))
+        toolbox.tools.append(_update_profile(gateway, employee.id))
+        toolbox.tools.append(_compact_memory(gateway, employee.id))
+        toolbox.tools.append(_save_project(gateway, toolbox, may_approve, approved_actions))
+    if employee.mcp:  # an agent with connected apps can go through the owner's messages
+        toolbox.tools.extend(triage_tools(gateway, toolbox, may_approve))
+    if employee.skills:
+        toolbox.tools.append(_load_skill(employee))
+    if team and consult is not None:
+        toolbox.tools.append(_ask_teammate(team, consult))
+    if allow_assignments and employee.has_tool(TOOL_ASSIGNMENTS):
+        toolbox.tools.append(_start_assignment(gateway, employee.id, task_id))
+    if employee.has_tool(TOOL_ASSIGNMENTS):
+        toolbox.tools.append(_work_log(gateway))
     if may_ask:
         async def ask_owner(args: dict[str, Any]) -> str:
             toolbox.question = require_str(args, "question", max_len=2000).strip()
@@ -62,7 +86,301 @@ def build_toolbox(
             },
             handler=ask_owner,
         ))
+    if may_approve:
+        async def request_approval(args: dict[str, Any]) -> str:
+            action = require_str(args, "action", max_len=600).strip()
+            details = args.get("details") if isinstance(args.get("details"), str) else ""
+            toolbox.question = f"**{action}**" + (f"\n\n{details.strip()[:3000]}" if details.strip() else "")
+            toolbox.question_kind = "approval"
+            return "Approval requested. Stop working now; do nothing else until the owner decides."
 
-    if client_web_fetch:
+        toolbox.tools.append(Tool(
+            name="request_approval",
+            description="Ask the owner to approve ONE specific action before you do it. Required before anything with "
+            "consequences outside your workspace: sending or publishing something, deleting or overwriting data, "
+            "spending money, changing accounts or settings, or using a tool that changes something. State exactly what "
+            "you will do (who, what, where) in `action`, and put the full draft or details in `details`. Ends your turn.",
+            parameters={
+                "type": "object",
+                "properties": {"action": {"type": "string"}, "details": {"type": "string"}},
+                "required": ["action"],
+                "additionalProperties": False,
+            },
+            handler=request_approval,
+        ))
+    if client_web_fetch and web_access and employee.has_tool(TOOL_WEB):
         toolbox.tools.append(WEB_FETCH)
     return toolbox
+
+
+def _remember(gateway: Gateway, agent_id: str) -> Tool:
+    async def remember(args: dict[str, Any]) -> str:
+        fact = require_str(args, "fact", max_len=FACT_MAX_CHARS).strip()
+        if looks_secret(fact):
+            raise ToolError("That looks like a key, password or token. Never store those; the owner keeps them in "
+                            "Settings or Integrations.")
+        if is_duplicate(fact, await gateway.list_memories(300)):
+            return "Already in the office memory; nothing to save."
+        await gateway.add_memory(fact, agent_id)
+        return "Saved to the office memory."
+
+    return Tool(
+        name="remember",
+        description="Save a durable fact about the owner (who they are, their work, preferences, people, projects, "
+        "decisions) so the whole staff remembers it. Save it as soon as you learn it, without being asked. One short "
+        "sentence that stands alone, e.g. 'Sam prefers short emails and works in UTC+1.' Not task details, "
+        "not guesses, never secrets.",
+        parameters={
+            "type": "object",
+            "properties": {"fact": {"type": "string", "description": "One short, self-contained sentence."}},
+            "required": ["fact"],
+            "additionalProperties": False,
+        },
+        handler=remember,
+    )
+
+
+FACT_MAX_CHARS = 300  # one fact is a short sentence; anything longer belongs in the profile or a project's notes
+PROFILE_MAX_CHARS = 1500
+
+
+def _update_profile(gateway: Gateway, agent_id: str) -> Tool:
+    async def update_profile(args: dict[str, Any]) -> str:
+        profile = require_str(args, "profile", max_len=PROFILE_MAX_CHARS).strip()
+        if looks_secret(profile):
+            raise ToolError("That looks like a key, password or token. Never store those.")
+        await gateway.set_profile(profile, agent_id)
+        return "Profile updated."
+
+    return Tool(
+        name="update_profile",
+        description="Write the owner's profile: ONE record that says who they are, in full and compactly (name, role, "
+        "what they work on and with, location and language, working style, preferences, people, goals). It REPLACES the "
+        "old profile, so start from the current one in your prompt, merge in what you just learned, drop what is no "
+        "longer true, and send the whole text, third person, under 1500 characters. Use it for who the owner is; use "
+        "remember for a separate fact. Never store secrets.",
+        parameters={
+            "type": "object",
+            "properties": {"profile": {"type": "string", "description": "The complete new profile."}},
+            "required": ["profile"],
+            "additionalProperties": False,
+        },
+        handler=update_profile,
+    )
+
+
+REVIEW_CHARS = 6000
+
+
+def _compact_memory(gateway: Gateway, agent_id: str) -> Tool:
+    async def compact_memory(args: dict[str, Any]) -> str:
+        remove = args.get("remove") if isinstance(args.get("remove"), list) else []
+        merged = args.get("replace_with")
+        if not remove and merged is None:  # review: show what is stored so the agent can choose
+            lines, used = [], 0
+            for fact in await gateway.list_memories(300):
+                if used + len(fact) > REVIEW_CHARS:
+                    lines.append("[more not shown]")
+                    break
+                lines.append(f"- {fact}")
+                used += len(fact)
+            return "\n".join(lines) or "No facts are stored."
+        merged = merged.strip() if isinstance(merged, str) else ""
+        if merged and looks_secret(merged):
+            raise ToolError("That looks like a key, password or token. Never store those.")
+        removed = 0
+        for fact in remove[:40]:
+            if isinstance(fact, str) and await gateway.forget_memory(fact):
+                removed += 1
+        if merged:
+            await gateway.add_memory(merged[:FACT_MAX_CHARS], agent_id)
+        return f"Removed {removed} fact(s)" + (" and saved the merged one." if merged else ".")
+
+    return Tool(
+        name="compact_memory",
+        description="Keep the office memory short and true. Called with no arguments it lists the stored facts. Then "
+        "merge facts that overlap or repeat each other: pass the exact facts to `remove` and one short sentence in "
+        "`replace_with` that keeps everything that is still true. Also remove facts that are outdated or wrong. Facts "
+        "about who the owner is belong in the profile (update_profile), not here.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "remove": {"type": "array", "items": {"type": "string"}, "description": "Facts to delete, quoted closely."},
+                "replace_with": {"type": "string", "description": "One short sentence that replaces them."},
+            },
+            "additionalProperties": False,
+        },
+        handler=compact_memory,
+    )
+
+
+def _forget(gateway: Gateway) -> Tool:
+    async def forget(args: dict[str, Any]) -> str:
+        fact = require_str(args, "fact", max_len=1000).strip()
+        if await gateway.forget_memory(fact):
+            return "Removed from the office memory."
+        raise ToolError("No remembered fact matches that. Quote it as closely as you can.")
+
+    return Tool(
+        name="forget",
+        description="Remove a remembered fact that is wrong or out of date. When the owner corrects something, call "
+        "forget for the old fact and remember for the new one, so memory never contradicts itself.",
+        parameters={
+            "type": "object",
+            "properties": {"fact": {"type": "string", "description": "The remembered fact to remove, quoted closely."}},
+            "required": ["fact"],
+            "additionalProperties": False,
+        },
+        handler=forget,
+    )
+
+
+def project_approval(name: str, path: str) -> str:
+    return f"Register project folder: {name} = {path}"
+
+
+def _save_project(gateway: Gateway, toolbox: Toolbox, may_approve: bool, approved_actions: tuple[str, ...]) -> Tool:
+    async def save_project(args: dict[str, Any]) -> str:
+        name = require_str(args, "name", max_len=60).strip()
+        path = args.get("path").strip() if isinstance(args.get("path"), str) else ""
+        notes = args.get("notes").strip() if isinstance(args.get("notes"), str) else ""
+        if not path and not notes:
+            raise ToolError("Give a 'path' (the project's folder) and/or 'notes' (what to know about it).")
+        if looks_secret(notes):
+            raise ToolError("That looks like a key, password or token. Never store those in project notes.")
+        if path:
+            # Work happens inside a project's folder, so the owner approves each new folder once.
+            known = next((p for p in await gateway.list_projects() if p["name"].lower() == name.lower()), None)
+            wanted = " ".join(project_approval(name, path).lower().split())
+            approved = any(wanted in " ".join(a.replace("*", "").split()).lower() for a in approved_actions)
+            if not approved and not (known and known.get("path") == path):
+                if not may_approve:
+                    raise ToolError("The owner has not approved that folder; mention it in your answer instead.")
+                toolbox.question = (f"**{project_approval(name, path)}**\n\nThe staff will read and change files in "
+                                    "this folder when you ask for work on this project.")
+                toolbox.question_kind = "approval"
+                return "Approval requested. Stop working now; save the project once the owner approves."
+        try:
+            await gateway.save_project(name, path, notes)
+        except Exception as e:  # a bad folder or too many projects: tell the agent, never crash the run
+            raise ToolError(f"Could not save the project: {e}") from e
+        return f"Saved project {name}."
+
+    return Tool(
+        name="save_project",
+        description="Keep a project the owner works on, so later requests about it need no explanation. Call it as "
+        "soon as the owner tells you about a project (its name and folder) and whenever you learn something lasting "
+        "about it: what it is, the stack, where things live (e.g. UI in src/components), conventions, how to run and "
+        "test it, decisions. `notes` REPLACES the stored notes, so send the full, compact set (under 1500 characters; "
+        "read the current ones in your prompt first). A new folder needs the owner's approval, which this tool asks for. "
+        "Never store secrets.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The project's name as the owner says it, e.g. AbroadMate."},
+                "path": {"type": "string", "description": "Absolute folder path; leave out when it is already saved."},
+                "notes": {"type": "string", "description": "Compact notes about the project; replaces the old ones."},
+            },
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+        handler=save_project,
+    )
+
+
+def _load_skill(employee: Employee) -> Tool:
+    skills = {s.name: s for s in employee.skills}
+
+    async def load_skill(args: dict[str, Any]) -> str:
+        name = require_str(args, "name", max_len=100).strip()
+        skill = skills.get(name)
+        if skill is None:
+            raise ToolError(f"No skill named {name!r}. Available: {', '.join(sorted(skills))}.")
+        return f"# Skill: {skill.name}\n\n{skill.content}"
+
+    return Tool(
+        name="load_skill",
+        description="Load the full instructions of one of your skills. Do this before work that matches the skill's "
+        "description, then follow the instructions.",
+        parameters={
+            "type": "object",
+            "properties": {"name": {"type": "string", "enum": sorted(skills)}},
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+        handler=load_skill,
+    )
+
+
+def _ask_teammate(team: list[Employee], consult: ConsultFunc) -> Tool:
+    ids = [m.id for m in team]
+
+    async def ask_teammate(args: dict[str, Any]) -> str:
+        teammate = require_str(args, "teammate", max_len=64).strip()
+        if teammate not in ids:
+            raise ToolError(f"Unknown teammate {teammate!r}. Choose one of: {', '.join(ids)}.")
+        return await consult(teammate, require_str(args, "request", max_len=20_000))
+
+    return Tool(
+        name="ask_teammate",
+        description="Ask a teammate to do part of the work or answer a question in their area of expertise. "
+        "Describe exactly what you need and the format you want back. Returns their answer.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "teammate": {"type": "string", "enum": ids, "description": "The teammate's id."},
+                "request": {"type": "string", "description": "A self-contained request with all needed context."},
+            },
+            "required": ["teammate", "request"],
+            "additionalProperties": False,
+        },
+        handler=ask_teammate,
+    )
+
+
+WORK_LOG_PERIODS = ["today", "yesterday", "week", "last_week", "month", "last_month"]
+
+
+def _work_log(gateway: Gateway) -> Tool:
+    async def work_log(args: dict[str, Any]) -> str:
+        period = require_str(args, "period", max_len=20).strip()
+        if period not in WORK_LOG_PERIODS:
+            raise ToolError(f"'period' must be one of: {', '.join(WORK_LOG_PERIODS)}.")
+        return await gateway.work_log(period)
+
+    return Tool(
+        name="work_log",
+        description="Read what the whole staff did in a period: assignments with their outcomes, chats, each "
+        "agent's finished tasks, tool calls and tokens, questions and approvals, new things learned about the owner "
+        "and files produced. Use it to write a daily or weekly report, or to answer 'what did we do today/this week'. "
+        "Report only what it says.",
+        parameters={
+            "type": "object",
+            "properties": {"period": {"type": "string", "enum": WORK_LOG_PERIODS}},
+            "required": ["period"],
+            "additionalProperties": False,
+        },
+        handler=work_log,
+    )
+
+
+def _start_assignment(gateway: Gateway, agent_id: str, source_task_id: str = "") -> Tool:
+    async def start_assignment(args: dict[str, Any]) -> str:
+        title = require_str(args, "title", max_len=300).strip()
+        description = args.get("description") if isinstance(args.get("description"), str) else ""
+        task = await gateway.create_assignment(title, description, agent_id, source_task_id)
+        return (f"Assignment started (id {task.get('id', '?')}). The team is working on it; its plan and "
+                "result show in this chat and on the Today page.")
+
+    return Tool(
+        name="start_assignment",
+        description="Start a background assignment that the main agent plans and the team carries out. Use for "
+        "bigger jobs with several parts; include every detail the team needs in the description.",
+        parameters={
+            "type": "object",
+            "properties": {"title": {"type": "string"}, "description": {"type": "string"}},
+            "required": ["title", "description"],
+            "additionalProperties": False,
+        },
+        handler=start_assignment,
+    )

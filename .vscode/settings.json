@@ -1,0 +1,16 @@
+{
+  // Use the real solution instead of a generated one (which picks up WPF's temporary *_wpftmp.csproj files).
+  "dotnet.defaultSolution": "desktop/Cubicle.slnx",
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true
+  },
+  "python.defaultInterpreterPath": "agents/.venv/Scripts/python.exe",
+  "python.testing.pytestEnabled": true,
+  "python.testing.cwd": "agents",
+  "go.toolsEnvVars": { "GOFLAGS": "-buildvcs=false" }
+}

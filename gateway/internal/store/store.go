@@ -1,5 +1,5 @@
-// Package store persists the office state (employees, tasks, inbox, activity,
-// usage, encrypted secrets) in a single SQLite file. It uses a pure-Go driver,
+// Package store persists the office state (agents, tasks, inbox, conversations,
+// extensions, activity, usage, encrypted secrets) in a single SQLite file. It uses a pure-Go driver,
 // so the gateway builds without cgo and ships as one static binary.
 package store
 
@@ -36,21 +36,11 @@ const (
 	KindAssignment = "assignment" // top-level request from a human, handled by the manager
 	KindSubtask    = "subtask"    // delegated piece of work for a specialist
 	KindSynthesis  = "synthesis"  // manager's final roll-up once all subtasks are done
+	KindChat       = "chat"       // one reply in a conversation with an agent
+	KindPersona    = "persona"    // the main agent invents a persona from a custom passion (onboarding)
 )
 
 const schema = `
-CREATE TABLE IF NOT EXISTS employees (
-	id TEXT PRIMARY KEY,
-	name TEXT NOT NULL,
-	title TEXT NOT NULL,
-	role TEXT NOT NULL,
-	avatar TEXT NOT NULL DEFAULT '',
-	model TEXT NOT NULL DEFAULT '',
-	skills TEXT NOT NULL DEFAULT '',
-	status TEXT NOT NULL DEFAULT 'offline',
-	current_task_id TEXT NOT NULL DEFAULT '',
-	updated_at INTEGER NOT NULL
-);
 CREATE TABLE IF NOT EXISTS tasks (
 	id TEXT PRIMARY KEY,
 	parent_id TEXT NOT NULL DEFAULT '',
@@ -76,6 +66,10 @@ CREATE TABLE IF NOT EXISTS inbox (
 	status TEXT NOT NULL DEFAULT 'open',
 	created_at INTEGER NOT NULL,
 	answered_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS task_sources (
+	assignment_id TEXT PRIMARY KEY,
+	source_task_id TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS activity (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,11 +108,91 @@ func Open(path string) (*Store, error) {
 	// One connection serialises writes and removes SQLITE_BUSY races; the
 	// workload (a handful of agents) is far below what this can sustain.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema + routinesSchema + settingsSchema + memoriesSchema); err != nil {
+	s := &Store{db: db, now: time.Now}
+	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	return &Store{db: db, now: time.Now}, nil
+	return s, nil
+}
+
+func (s *Store) migrate() error {
+	if _, err := s.db.Exec(schema + routinesSchema + settingsSchema + memoriesSchema + projectsSchema + triageSchema + agentsSchema +
+		extensionsSchema + chatSchema + stepsSchema); err != nil {
+		return err
+	}
+	// Columns added after the first release. SQLite has no ADD COLUMN IF NOT EXISTS.
+	for _, c := range []struct{ table, column, def string }{
+		{"tasks", "routine_id", "TEXT NOT NULL DEFAULT ''"},
+		{"tasks", "conversation_id", "TEXT NOT NULL DEFAULT ''"},
+		{"routines", "agent_id", "TEXT NOT NULL DEFAULT ''"},
+		{"inbox", "kind", "TEXT NOT NULL DEFAULT 'question'"},
+		{"conversations", "title_set", "INTEGER NOT NULL DEFAULT 1"},
+		{"memories", "kind", "TEXT NOT NULL DEFAULT 'fact'"},
+	} {
+		if err := s.addColumn(c.table, c.column, c.def); err != nil {
+			return err
+		}
+	}
+	_, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_routine ON tasks(routine_id);
+		CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id);
+		CREATE INDEX IF NOT EXISTS idx_activity_task ON activity(task_id);
+		CREATE INDEX IF NOT EXISTS idx_inbox_task ON inbox(task_id);
+		CREATE INDEX IF NOT EXISTS idx_inbox_status ON inbox(status)`)
+	return err
+}
+
+// Retention: the activity log and token usage are history, not state, so old rows are dropped.
+const (
+	activityKeepDays = 45
+	activityKeepRows = 30000
+	usageKeepDays    = 400
+)
+
+// Prune deletes old activity and usage rows. It returns how many rows it removed.
+func (s *Store) Prune(ctx context.Context) (int64, error) {
+	now := s.now()
+	var total int64
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`DELETE FROM activity WHERE created_at < ? AND id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT ?)`,
+			[]any{now.AddDate(0, 0, -activityKeepDays).UnixMilli(), activityKeepRows}},
+		{`DELETE FROM activity WHERE id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT ?)`, []any{activityKeepRows * 3}},
+		{`DELETE FROM steps WHERE created_at < ?`, []any{now.AddDate(0, 0, -activityKeepDays).UnixMilli()}},
+		{`DELETE FROM usage WHERE created_at < ?`, []any{now.AddDate(0, 0, -usageKeepDays).UnixMilli()}},
+	} {
+		res, err := s.db.ExecContext(ctx, q.sql, q.args...)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
+}
+
+func (s *Store) addColumn(table, column, def string) error {
+	rows, err := s.db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def)
+	return err
 }
 
 func (s *Store) Close() error { return s.db.Close() }

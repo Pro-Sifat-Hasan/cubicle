@@ -137,7 +137,7 @@ func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := map[string]any{"models": p.SuggestedModels, "live": false}
-	if s.ListModels == nil || p.Kind == providers.KindDemo {
+	if s.RunWorker == nil || p.Kind == providers.KindDemo {
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
@@ -156,11 +156,18 @@ func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 	env := append(s.secretEnv(r.Context()), providerEnv(p, baseURL)...)
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
-	models, err := s.ListModels(ctx, env)
-	if err != nil {
+	var res struct {
+		Models []string `json:"models"`
+		Error  string   `json:"error"`
+	}
+	err = s.RunWorker(ctx, []string{"models", "--json"}, env, &res)
+	switch {
+	case err != nil:
 		resp["error"] = err.Error()
-	} else if len(models) > 0 {
-		resp["models"], resp["live"] = models, true
+	case res.Error != "":
+		resp["error"] = res.Error
+	case len(res.Models) > 0:
+		resp["models"], resp["live"] = res.Models, true
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -211,6 +218,47 @@ func (s *Server) addMemory(w http.ResponseWriter, r *http.Request, fromWorker bo
 		s.logActivity(r.Context(), in.EmployeeID, "", "Remembered: "+truncate(m.Content, 200))
 	}
 	writeJSON(w, http.StatusCreated, m)
+}
+
+func (s *Server) handleOwnerSetProfile(w http.ResponseWriter, r *http.Request) {
+	s.setProfile(w, r, false)
+}
+
+func (s *Server) handleWorkerSetProfile(w http.ResponseWriter, r *http.Request) {
+	s.setProfile(w, r, true)
+}
+
+// setProfile replaces the one record that describes the owner in full. Empty content clears it.
+func (s *Server) setProfile(w http.ResponseWriter, r *http.Request, fromWorker bool) {
+	var in struct {
+		Content    string `json:"content"`
+		EmployeeID string `json:"employee_id"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	in.Content = strings.TrimSpace(in.Content)
+	if err := checkLen("content", in.Content, 3000, false); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !fromWorker {
+		in.EmployeeID = ""
+	}
+	m, err := s.store.SetProfile(r.Context(), in.Content, in.EmployeeID)
+	if err != nil {
+		s.storeErr(w, err)
+		return
+	}
+	s.hub.Publish("memory.added", m)
+	if fromWorker && m != nil {
+		s.logActivity(r.Context(), in.EmployeeID, "", "Updated the profile of the owner")
+	}
+	if m == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, http.StatusOK, m)
 }
 
 func (s *Server) handleDeleteMemory(w http.ResponseWriter, r *http.Request) {

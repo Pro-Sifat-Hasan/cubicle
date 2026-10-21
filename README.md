@@ -14,20 +14,27 @@
 </div>
 
 Cubicle is a free, open-source desktop app that gives you a small team of AI employees.
-You describe what you need. Your **Chief of Staff** plans the work, hands each part to the right
-specialist (researcher, writer, engineer, analyst, reviewer) and returns one finished result,
-with any files they produced saved for you.
+You describe what you need. Your **main agent** plans the work, hands each part to the right
+teammate and returns one finished result, with any files they produced saved for you. You decide
+who is on the team, how each agent works and which tools, apps and skills it can use, and you can
+chat with any of them in the Inbox.
 
-Set up **routines** such as "every weekday at 9:00, plan my day", and your staff do that work in
+Set up **automations** such as "every weekday at 9:00, plan my day", and your staff do that work in
 the background, even when the window is closed.
 
 ## Highlights
 
 - **A real team, not one chatbot.** Work is planned, split across specialists, reviewed and merged into one deliverable.
-- **Routines.** Recurring work runs daily, on weekdays or every few minutes. If your PC was asleep, a missed run happens once when it wakes.
+- **Your agents, your way.** Add agents from 18 role templates in one click or build your own: instructions, model, tools, team.
+- **Chat with your staff.** Talk to any agent in the Inbox and watch the reply stream in. Agents ask teammates for help when it is useful.
+- **MCP, skills and plugins.** Connect agents to GitHub, your files, a browser and more through MCP; teach them with SKILL.md skills; install bundles, including Claude Code plugins.
+- **Automations.** Recurring or one-off work for the whole team or one agent: daily, weekdays, chosen days, every few minutes, or once. If your PC was asleep, a missed run happens once when it wakes.
 - **Bring any AI.** Use Claude, OpenAI, Google Gemini, OpenRouter, a local model through Ollama, or **your existing Claude subscription** through Claude Code.
 - **Tools.** Your staff can search and read the web, save documents and code as files, and remember what they learn about you.
-- **Memory.** Preferences, people and projects carry over from task to task. You can see and edit everything they remember.
+- **A profile of you, and short facts.** One record describes who you are, written and kept current by your staff (and editable by you), next to short facts they save and merge on their own. Only what fits each request is sent, so it stays cheap.
+- **Your projects.** Tell an agent a project's name and folder once. Later, "fix the navbar in abroadmate" is enough: they work in that folder and follow the notes they kept.
+- **Your second self for messages.** Connect your email or Discord and your staff go through new messages every hour, find what needs you, and ask for approval once. They do only what you approve, draft replies in your voice, and ask again before anything is sent.
+- **Reaches you outside the app.** Get a Discord message or an email when something waits for you, so nothing sits unseen while Cubicle is in the tray.
 - **Asks only when needed.** If someone is genuinely blocked, the question lands in your Inbox. Answer it and the work continues.
 - **Private by default.** Everything runs on your PC. Keys are encrypted with Windows DPAPI and the service listens only on this machine.
 - **Spending guard.** Set a daily token budget, and work pauses when it is reached.
@@ -47,13 +54,16 @@ the background, even when the window is closed.
    then click **Assign**.
 3. **Watch it happen.** The plan, each employee's progress and the final result appear live.
    Use **Open files** to see any documents they saved.
-4. **Automate it.** Under **Routines**, add standing orders such as *"Every weekday at 08:30:
+4. **Shape your team.** Under **Agents**, add roles from templates, edit instructions, and choose
+   tools, MCP servers (from **Tools & skills**), skills and teammates. Chat with any agent in the **Inbox**.
+5. **Automate it.** Under **Automations**, add standing orders such as *"Every weekday at 08:30:
    summarise the tech news I care about"*.
-5. **Teach your staff.** Under **Memory**, add facts like *"I write in British English"*. They also
+6. **Teach your staff.** Under **Memory**, add facts like *"I write in British English"*. They also
    learn on their own while they work.
 
-Closing the window keeps your staff working in the background. To stop everything, right-click
-the tray icon and choose **Stop staff and quit**.
+Closing the window keeps your staff working in the background; click the tray icon to open it
+again. Cubicle opens where you left it and always on screen. Ctrl+1 to Ctrl+8 switch pages. To stop
+everything, right-click the tray icon and choose **Stop staff and quit**.
 
 ## Supported AI providers
 

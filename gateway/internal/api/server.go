@@ -15,11 +15,14 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/alerts"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/config"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/events"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/secrets"
+	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/skillsrc"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/store"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/version"
 )
@@ -35,27 +38,71 @@ type Server struct {
 	// supervisor can restart the worker with the new configuration.
 	OnConfigChanged func()
 
-	// ListModels runs the worker in "models" mode with the given environment and
-	// returns the model ids the provider offers. Nil when no worker is available.
-	ListModels func(ctx context.Context, env []string) ([]string, error)
+	// RunWorker runs a one-off worker command (e.g. "models --json") with the given
+	// environment and decodes the JSON object it prints last into out. Nil when no
+	// worker is available.
+	RunWorker func(ctx context.Context, args, env []string, out any) error
+
+	// SkillSource reads skills from GitHub repositories (skills.sh links). Tests replace it.
+	SkillSource *skillsrc.Client
 
 	// WorkspaceDir is where employees save files, one folder per assignment.
 	WorkspaceDir string
+
+	// revision counts configuration changes (agents, MCP servers, skills,
+	// plugins); the worker long-polls it to reload without restarting.
+	revision atomic.Int64
 
 	breakerMu      sync.Mutex
 	breakerOpen    bool
 	breakerResetAt time.Time
 	LongPollWait   time.Duration
+	// Alerts delivers messages outside the app (Discord, email); tests replace its HTTP client.
+	Alerts    *alerts.Sender
+	alertMu   sync.Mutex
+	alertSent map[string]time.Time
 }
 
 func New(cfg *config.Config, st *store.Store, hub *events.Hub, box *secrets.Box, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, store: st, hub: hub, secrets: box, log: log, LongPollWait: 25 * time.Second}
+	s := &Server{cfg: cfg, store: st, hub: hub, secrets: box, log: log, LongPollWait: 25 * time.Second, SkillSource: skillsrc.New(), Alerts: &alerts.Sender{}}
+	s.revision.Store(time.Now().UnixMilli())
+	if err := s.ensureOffice(context.Background()); err != nil {
+		log.Error("could not set up the starting team", "err", err)
+	}
+	return s
 }
 
 func (s *Server) Handler() http.Handler {
 	owner := http.NewServeMux()
 	owner.HandleFunc("GET /api/v1/status", s.handleStatus)
-	owner.HandleFunc("GET /api/v1/employees", s.handleListEmployees)
+	owner.HandleFunc("GET /api/v1/catalog", s.handleCatalog)
+	owner.HandleFunc("GET /api/v1/agents", s.handleListAgents)
+	owner.HandleFunc("POST /api/v1/agents", s.handleCreateAgent)
+	owner.HandleFunc("GET /api/v1/agents/{id}", s.handleGetAgent)
+	owner.HandleFunc("PUT /api/v1/agents/{id}", s.handleUpdateAgent)
+	owner.HandleFunc("DELETE /api/v1/agents/{id}", s.handleDeleteAgent)
+	owner.HandleFunc("POST /api/v1/agents/{id}/main", s.handleSetMain)
+	owner.HandleFunc("GET /api/v1/mcp-servers", s.handleListMCP)
+	owner.HandleFunc("POST /api/v1/mcp-servers", s.handleCreateMCP)
+	owner.HandleFunc("PUT /api/v1/mcp-servers/{id}", s.handleUpdateMCP)
+	owner.HandleFunc("DELETE /api/v1/mcp-servers/{id}", s.handleDeleteMCP)
+	owner.HandleFunc("POST /api/v1/mcp-servers/{id}/test", s.handleTestMCP)
+	owner.HandleFunc("GET /api/v1/skills", s.handleListSkills)
+	owner.HandleFunc("POST /api/v1/skills", s.handleCreateSkill)
+	owner.HandleFunc("GET /api/v1/skills/{id}", s.handleGetSkill)
+	owner.HandleFunc("PUT /api/v1/skills/{id}", s.handleUpdateSkill)
+	owner.HandleFunc("POST /api/v1/skills/discover", s.handleDiscoverSkills)
+	owner.HandleFunc("POST /api/v1/integrations/{id}/connect", s.handleConnectIntegration)
+	owner.HandleFunc("POST /api/v1/skills/install", s.handleInstallSkills)
+	owner.HandleFunc("DELETE /api/v1/skills/{id}", s.handleDeleteSkill)
+	owner.HandleFunc("GET /api/v1/plugins", s.handleListPlugins)
+	owner.HandleFunc("POST /api/v1/plugins", s.handleInstallPlugin)
+	owner.HandleFunc("DELETE /api/v1/plugins/{id}", s.handleUninstallPlugin)
+	owner.HandleFunc("GET /api/v1/conversations", s.handleListConversations)
+	owner.HandleFunc("POST /api/v1/conversations", s.handleCreateConversation)
+	owner.HandleFunc("GET /api/v1/conversations/{id}", s.handleGetConversation)
+	owner.HandleFunc("POST /api/v1/conversations/{id}/messages", s.handleSendMessage)
+	owner.HandleFunc("DELETE /api/v1/conversations/{id}", s.handleDeleteConversation)
 	owner.HandleFunc("GET /api/v1/tasks", s.handleListTasks)
 	owner.HandleFunc("GET /api/v1/tasks/{id}", s.handleGetTask)
 	owner.HandleFunc("POST /api/v1/tasks/{id}/cancel", s.handleCancelTask)
@@ -64,10 +111,16 @@ func (s *Server) Handler() http.Handler {
 	owner.HandleFunc("POST /api/v1/inbox/{id}/answer", s.handleAnswer)
 	owner.HandleFunc("GET /api/v1/routines", s.handleListRoutines)
 	owner.HandleFunc("POST /api/v1/routines", s.handleCreateRoutine)
+	owner.HandleFunc("PUT /api/v1/routines/{id}", s.handleUpdateRoutine)
+	owner.HandleFunc("POST /api/v1/routines/{id}/run", s.handleRunRoutine)
+	owner.HandleFunc("GET /api/v1/routines/{id}/runs", s.handleRoutineRuns)
 	owner.HandleFunc("POST /api/v1/routines/{id}/enable", s.handleRoutineEnable(true))
 	owner.HandleFunc("POST /api/v1/routines/{id}/disable", s.handleRoutineEnable(false))
 	owner.HandleFunc("DELETE /api/v1/routines/{id}", s.handleDeleteRoutine)
 	owner.HandleFunc("GET /api/v1/activity", s.handleListActivity)
+	owner.HandleFunc("GET /api/v1/steps", s.handleListSteps)
+	owner.HandleFunc("GET /api/v1/work-log", s.handleWorkLog)
+	owner.HandleFunc("POST /api/v1/reports", s.handleCreateReport)
 	owner.HandleFunc("GET /api/v1/secrets", s.handleListSecrets)
 	owner.HandleFunc("PUT /api/v1/secrets/{name}", s.handlePutSecret)
 	owner.HandleFunc("DELETE /api/v1/secrets/{name}", s.handleDeleteSecret)
@@ -77,13 +130,32 @@ func (s *Server) Handler() http.Handler {
 	owner.HandleFunc("PUT /api/v1/settings", s.handlePutSettings)
 	owner.HandleFunc("GET /api/v1/providers", s.handleListProviders)
 	owner.HandleFunc("GET /api/v1/providers/{id}/models", s.handleListModels)
+	owner.HandleFunc("GET /api/v1/onboarding", s.handleGetOnboarding)
+	owner.HandleFunc("POST /api/v1/onboarding", s.handleOnboard)
+	owner.HandleFunc("GET /api/v1/profile", s.handleGetProfile)
+	owner.HandleFunc("POST /api/v1/persona", s.handleCreatePersona)
+	owner.HandleFunc("GET /api/v1/persona/{id}", s.handleGetPersona)
 	owner.HandleFunc("GET /api/v1/memories", s.handleListMemories)
 	owner.HandleFunc("POST /api/v1/memories", s.handleOwnerAddMemory)
+	owner.HandleFunc("PUT /api/v1/memories/profile", s.handleOwnerSetProfile)
 	owner.HandleFunc("DELETE /api/v1/memories/{id}", s.handleDeleteMemory)
+	owner.HandleFunc("GET /api/v1/projects", s.handleListProjects)
+	owner.HandleFunc("GET /api/v1/triage", s.handleListTriage)
+	owner.HandleFunc("GET /api/v1/alerts", s.handleGetAlerts)
+	owner.HandleFunc("PUT /api/v1/alerts", s.handlePutAlerts)
+	owner.HandleFunc("POST /api/v1/alerts/test", s.handleTestAlert)
+	owner.HandleFunc("PUT /api/v1/projects", s.handleOwnerSaveProject)
+	owner.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
 
 	worker := http.NewServeMux()
-	worker.HandleFunc("PUT /internal/v1/employees", s.handleSyncEmployees)
-	worker.HandleFunc("PATCH /internal/v1/employees/{id}", s.handleEmployeeStatus)
+	worker.HandleFunc("POST /internal/v1/worker/start", s.handleWorkerStart)
+	worker.HandleFunc("GET /internal/v1/agents", s.handleWorkerAgents)
+	worker.HandleFunc("PATCH /internal/v1/agents/{id}/status", s.handleAgentStatus)
+	worker.HandleFunc("POST /internal/v1/assignments", s.handleWorkerAssignment)
+	worker.HandleFunc("POST /internal/v1/tasks/{id}/progress", s.handleProgress)
+	worker.HandleFunc("POST /internal/v1/tasks/{id}/steps", s.handleSaveStep)
+	worker.HandleFunc("PUT /internal/v1/conversations/{id}/title", s.handleSetTitle)
+	worker.HandleFunc("GET /internal/v1/work-log", s.handleWorkerWorkLog)
 	worker.HandleFunc("POST /internal/v1/tasks/claim", s.handleClaim)
 	worker.HandleFunc("GET /internal/v1/tasks/{id}", s.handleGetTask)
 	worker.HandleFunc("POST /internal/v1/tasks/{id}/delegate", s.handleDelegate)
@@ -94,6 +166,12 @@ func (s *Server) Handler() http.Handler {
 	worker.HandleFunc("POST /internal/v1/activity", s.handleAddActivity)
 	worker.HandleFunc("GET /internal/v1/memories", s.handleListMemories)
 	worker.HandleFunc("POST /internal/v1/memories", s.handleWorkerAddMemory)
+	worker.HandleFunc("PUT /internal/v1/memories/profile", s.handleWorkerSetProfile)
+	worker.HandleFunc("DELETE /internal/v1/memories/{id}", s.handleDeleteMemory)
+	worker.HandleFunc("GET /internal/v1/projects", s.handleListProjects)
+	worker.HandleFunc("POST /internal/v1/triage/check", s.handleTriageCheck)
+	worker.HandleFunc("POST /internal/v1/triage/record", s.handleTriageRecord)
+	worker.HandleFunc("PUT /internal/v1/projects", s.handleWorkerSaveProject)
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +213,7 @@ func (s *Server) storeErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrConflict):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
-		s.log.Error("store error", "err", err)
+		s.log.Error("store error", "err", logSafe(err.Error()))
 		writeErr(w, http.StatusInternalServerError, "internal error")
 	}
 }
@@ -231,8 +309,17 @@ func (s *Server) RunBreakerClock(ctx context.Context) {
 func (s *Server) RunScheduler(ctx context.Context) {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
+	var lastPrune time.Time
 	for {
 		s.fireRoutines(ctx)
+		if time.Since(lastPrune) > 24*time.Hour {
+			lastPrune = time.Now()
+			if n, err := s.store.Prune(ctx); err != nil {
+				s.log.Warn("prune old history", "err", err)
+			} else if n > 0 {
+				s.log.Info("pruned old history", "rows", n)
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -255,16 +342,10 @@ func (s *Server) fireRoutines(ctx context.Context) {
 	}
 }
 
-// managerID finds the employee with the manager role; the worker reports the
-// roster, so this follows whatever the owner configured.
+// managerID is the main agent, which receives assignments and automations.
 func (s *Server) managerID(ctx context.Context) string {
-	emps, err := s.store.ListEmployees(ctx)
-	if err == nil {
-		for _, e := range emps {
-			if e.Role == "manager" {
-				return e.ID
-			}
-		}
+	if a, err := s.store.MainAgent(ctx); err == nil {
+		return a.ID
 	}
 	return "manager"
 }

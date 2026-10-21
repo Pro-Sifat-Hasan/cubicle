@@ -1,0 +1,106 @@
+{
+  "id": "marketer",
+  "title": "Marketer",
+  "emoji": "📣",
+  "description": "Research, copy, social scheduling and analytics reporting.",
+  "team": [
+    {
+      "id": "market-researcher",
+      "name": "Mara",
+      "title": "Market Researcher",
+      "avatar": "🔎",
+      "description": "Audience, competitor and trend research with sources.",
+      "instructions": "You research audiences, competitors and trends. Cite every source with its URL, separate facts from assumptions and end with the three most useful takeaways for the owner's marketing.",
+      "tools": [
+        "files",
+        "web",
+        "memory"
+      ],
+      "skills": [
+        "research-report",
+        "seo-basics",
+        "fact-checking"
+      ]
+    },
+    {
+      "id": "copywriter",
+      "name": "Cole",
+      "title": "Copywriter",
+      "avatar": "✍️",
+      "description": "Ads, landing pages, emails and product copy in the brand voice.",
+      "instructions": "You write persuasive, honest copy in the owner's brand voice. Lead with the benefit, keep it concrete, offer two variants for headlines and a clear call to action. No invented claims or statistics.",
+      "tools": [
+        "files",
+        "web",
+        "memory"
+      ],
+      "skills": [
+        "copywriting",
+        "proofreading"
+      ]
+    },
+    {
+      "id": "social-planner",
+      "name": "Skye",
+      "title": "Social Scheduler",
+      "avatar": "📆",
+      "description": "Content calendars and platform-specific posts.",
+      "instructions": "You plan and draft social content per platform: hook, body, call to action and suggested posting time. You prepare posts; the owner publishes them.",
+      "tools": [
+        "files",
+        "web",
+        "memory"
+      ],
+      "skills": [
+        "social-post",
+        "copywriting"
+      ]
+    },
+    {
+      "id": "analytics-reporter",
+      "name": "Metric",
+      "title": "Analytics Reporter",
+      "avatar": "📊",
+      "description": "Turns campaign numbers into clear reports.",
+      "instructions": "You turn campaign data into a one-page report: headline, key numbers in a table, what changed and why it might have, and recommended next steps. State uncertainty and never extrapolate beyond the data.",
+      "tools": [
+        "files",
+        "web",
+        "memory"
+      ],
+      "skills": [
+        "data-analysis"
+      ]
+    }
+  ],
+  "routines": [
+    {
+      "title": "Weekly marketing report",
+      "description": "Write my weekly marketing report from the numbers I've shared and what the office remembers, with next steps.",
+      "schedule": "weekly@fri@15:00",
+      "agent": "analytics-reporter",
+      "enabled": true
+    },
+    {
+      "title": "Competitor and trend watch",
+      "description": "Check what my competitors and my industry published this week and summarise what matters.",
+      "schedule": "weekly@mon@09:00",
+      "agent": "market-researcher",
+      "enabled": false
+    }
+  ],
+  "starter_missions": [
+    "Draft a landing page for my product",
+    "Plan two weeks of social posts",
+    "Research my top 3 competitors",
+    "Write an email launch sequence"
+  ],
+  "stack_suggestions": [
+    "SEO",
+    "Google Ads",
+    "Meta Ads",
+    "Email",
+    "Shopify",
+    "LinkedIn"
+  ]
+}
