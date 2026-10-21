@@ -8,7 +8,7 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="32,28" MaxWidth="820" HorizontalAlignment="Stretch">
+        <StackPanel Margin="32,28" MaxWidth="820" HorizontalAlignment="Left">
             <TextBlock Text="Settings" Style="{StaticResource PageTitle}" />
             <TextBlock Style="{StaticResource PageSubtitle}"
                        Text="Everything stays on this PC. Keys are encrypted with Windows DPAPI and never shown again." />

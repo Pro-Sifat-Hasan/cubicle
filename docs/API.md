@@ -63,9 +63,16 @@ Turning an agent off hands its queued work to the main agent.
 | `POST /api/v1/skills` | `{template_id}` or `{name, description, content}` | new skill (`201`) |
 | `PUT /api/v1/skills/{id}` | `{name, description, content, enabled}` | updated skill |
 | `DELETE /api/v1/skills/{id}` | | `204`; detached from every agent |
+| `POST /api/v1/integrations/{id}/connect` | `{values, agent_ids}` | `{server, attached}`: connects an app from the catalog in one step. `values` fills the preset's `fields` (secret fields are stored encrypted, others fill `{placeholders}`); `agent_ids` get the app. Reconnecting reuses the server, and an empty secret keeps the stored key |
+| `POST /api/v1/skills/discover` | `{source}` | `{source, skills: [{name, description, path, installed}]}`: reads a skills.sh link, an `npx skills add` command, `owner/repo[/skill]` or a GitHub link (public repositories only) |
+| `POST /api/v1/skills/install` | `{source, paths?}` | `{installed, skipped}`: installs the chosen skills (all when `paths` is empty). They belong to no agent until attached |
 | `GET /api/v1/plugins` | | installed plugins with the ids of what they added |
 | `POST /api/v1/plugins` | `{catalog_id}` or `{bundle: {name, description, version, agents, mcp_servers, skills}}` | installed plugin (`201`) |
 | `DELETE /api/v1/plugins/{id}` | | `204`; removes everything the plugin added |
+
+App presets (`GET /api/v1/catalog`, `mcp_servers`) carry `category`, `icon`, `fields` (what to ask the
+owner: `key`, `label`, `kind` of `secret`, `text` or `folder`, `secret` name, `placeholder`, `help`),
+`agents` (who benefits most) and `link` (where to get a key).
 
 MCP server fields: `name`, `description`, `transport` (`stdio` or `http`), `command`, `args`,
 `env` (plain values), `secret_env` (names of secrets passed to a stdio server), `url`, `headers`,
@@ -166,7 +173,8 @@ stored), `assignment.done`, `inbox.new`, `inbox.answered`, `agent.status`, `agen
 | `POST /internal/v1/assignments` | `{title, description, agent_id, source_task_id?}` | an agent starts an assignment for the main agent (from a chat); `source_task_id` ties it to the reply that started it |
 | `POST /internal/v1/usage` | `{task_id, employee_id, input_tokens, output_tokens}` | feeds the circuit breaker |
 | `POST /internal/v1/activity` | `{employee_id, task_id, message}` | activity log line |
-| `GET /internal/v1/memories?limit=` | | facts to include in prompts |
+| `GET /internal/v1/memories?limit=` | | facts (with ids); the worker picks the ones that fit each request |
+| `DELETE /internal/v1/memories/{id}` | | `204`; an agent forgets a wrong fact |
 | `POST /internal/v1/memories` | `{content, employee_id}` | saves a learned fact |
 
 Errors are returned as `{"error": "message"}` with `400`, `401`, `404`, `409` (wrong state, or the

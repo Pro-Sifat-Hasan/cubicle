@@ -21,7 +21,7 @@
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="32,28" MaxWidth="1000" HorizontalAlignment="Stretch" DataContext="{Binding Tools}">
+        <StackPanel Margin="32,28" MaxWidth="1000" HorizontalAlignment="Left" DataContext="{Binding Tools}">
             <TextBlock Text="Integrations" Style="{StaticResource PageTitle}" />
             <TextBlock Style="{StaticResource PageSubtitle}" Margin="0,4,0,18"
                        Text="Connect the apps your staff work in, and teach them how you like things done. Agents ask your approval before they change anything in a connected app." />

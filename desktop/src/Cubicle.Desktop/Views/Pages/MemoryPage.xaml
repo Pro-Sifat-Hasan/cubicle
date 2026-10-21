@@ -8,10 +8,10 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="32,28" MaxWidth="860" HorizontalAlignment="Stretch">
+        <StackPanel Margin="32,28" MaxWidth="860" HorizontalAlignment="Left">
             <TextBlock Text="Memory" Style="{StaticResource PageTitle}" />
             <TextBlock Style="{StaticResource PageSubtitle}"
-                       Text="What your staff know about you: preferences, people and projects. They learn while they work, and you can teach them directly. Every employee sees this." />
+                       Text="What your staff know about you: preferences, people and projects. Agents save what they learn while they work, and you can teach them directly. For each task they use only the facts that fit it, so keep them short and true, and delete anything that is wrong." />
 
             <Border Style="{StaticResource Card}" Padding="14" Margin="0,0,0,20">
                 <DockPanel>

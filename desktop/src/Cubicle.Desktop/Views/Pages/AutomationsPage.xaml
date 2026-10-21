@@ -8,7 +8,7 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="32,28" MaxWidth="900" HorizontalAlignment="Stretch" DataContext="{Binding Automations}">
+        <StackPanel Margin="32,28" MaxWidth="900" HorizontalAlignment="Left" DataContext="{Binding Automations}">
             <TextBlock Text="Automations" Style="{StaticResource PageTitle}" />
             <TextBlock Style="{StaticResource PageSubtitle}"
                        Text="Work your staff do on a schedule, even while this window is closed. Send it to the main agent to have it planned with the team, or straight to one agent." />

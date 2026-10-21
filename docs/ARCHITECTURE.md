@@ -125,6 +125,9 @@ list. A successful list confirms the key works.
 | `load_skill` | Load a skill's full instructions | Only the agent's own skills |
 | `ask_teammate` | Consult a teammate | Only the agent's team; a consulted teammate cannot consult further |
 | `start_assignment` | Start a team assignment from a chat | Only in chats, only with the *assignments* tool |
+| `edit_file`, `find_files`, `grep_files` | Change part of a file, find files by name, search file contents | Same workspace confinement as the file tools; edits need an exact, unique match |
+| `run_command` | Run tests, linters, builds and git in the workspace (the *terminal* tool, off by default except for developer roles) | No shell, an allowlist of programs, a minimal environment with no secrets, a time limit and an output cap. Read-only git runs at once; everything else needs your approval of that exact command |
+| `forget` | Remove a wrong or outdated remembered fact | Matches the closest stored fact |
 | `ask_owner` | Ask you a question through the Inbox, in an assignment or a chat | Ends the turn; at most two questions per task |
 | `request_approval` | Ask you to approve one specific action before it happens | Ends the turn; the agent acts only on "Approved" and only on that action |
 
@@ -134,16 +137,33 @@ included in full in the prompt.
 
 ## MCP servers, skills and plugins
 
+- **Apps (integrations)** are MCP servers with guided setup. The Integrations page lists apps by kind
+  (GitHub, Git, Slack, Notion, Linear, files, databases, web); *Connect* asks only for what the app
+  needs, stores keys encrypted, gives the app to the agents that benefit, and tests it. Agents ask for
+  approval before changing anything in a connected app.
 - **MCP servers** run (stdio) or are reached (HTTP) only for the run that needs them. A stdio server
   gets a minimal environment plus the variables and secrets configured for it, never every secret the
   worker holds. A server that fails to start is skipped with a warning in the Activity log, and the
   work goes on. Its own output goes to `<home>/logs/mcp-<id>.log`. **Test** on the Tools page starts
   the server through the worker and lists its tools.
 - **Skills** use the `SKILL.md` format: a name, a description that says when to use it, and
-  instructions. Agents see the descriptions and load a skill when a task matches.
+  instructions. Agents see the descriptions and load a skill when a task matches. Every role
+  template and profession teammate comes with the skills for its job. Skills can also be installed
+  from [skills.sh](https://skills.sh): paste a link or `npx skills add owner/repo`, and the gateway
+  reads the public GitHub repository (only github.com is contacted). Imported skills belong to no
+  agent until you attach them, because an agent follows what a skill says.
 - **Plugins** install agents, MCP servers and skills together, and uninstall them together. Built-in
   packs are available, and Claude Code plugin folders (`.claude-plugin/plugin.json`, `agents/`,
   `skills/`, `.mcp.json`) can be imported. `${NAME}` values become references to Cubicle secrets.
+
+## Memory and tokens
+
+Agents save durable facts about you as soon as they learn them (`remember`), and fix wrong ones
+(`forget`); keys, tokens and passwords are refused. The office can hold hundreds of facts, but each
+request carries only the few that fit it (matching words, plus the newest), within a size budget.
+Long chats keep their latest turns whole and trim old long ones, tool output and file reads are
+capped (long files are read in parts), skills load only when needed, and a single-step assignment
+skips the wrap-up model call. Activity older than 45 days and usage older than 400 days are pruned.
 
 ## Automations and the budget
 
