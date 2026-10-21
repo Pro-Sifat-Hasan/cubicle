@@ -17,11 +17,19 @@
 .EXAMPLE
   ./scripts/build.ps1 -Version 0.2.0
   ./scripts/build.ps1 -SkipInstaller
+  ./scripts/build.ps1 -Clean
+
+  A full build takes about 9 minutes, most of it PyInstaller collecting the agent worker (about 6) and Inno
+  Setup compressing the installer (about 2). Each step prints how long it took. A repeat build reuses
+  PyInstaller's cache; pass -Clean after changing Python dependencies, or for a release. -SkipInstaller saves
+  the installer step while you are only testing. Excluding build\ from Windows Defender real-time scanning
+  speeds PyInstaller up noticeably.
 #>
 [CmdletBinding()]
 param(
     [string]$Version = "0.2.0",
-    [switch]$SkipInstaller
+    [switch]$SkipInstaller,
+    [switch]$Clean  # discard PyInstaller's cache first (CI starts from nothing anyway)
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,7 +40,18 @@ $Stage = Join-Path $Work "stage"
 $Commit = "local"
 try { $c = & git -C $Root rev-parse --short HEAD 2>$null; if ($LASTEXITCODE -eq 0 -and $c) { $Commit = $c } } catch { }
 
-function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Yellow }
+$Started = Get-Date
+$StepStarted = $Started
+$StepName = ""
+function Elapsed([datetime]$since) { "{0:m\:ss}" -f ((Get-Date) - $since) }
+
+# Prints a heading, and how long the step before it took, so a slow build shows where the time goes.
+function Step($msg) {
+    if ($StepName) { Write-Host "    $StepName took $(Elapsed $script:StepStarted)" -ForegroundColor DarkGray }
+    $script:StepName = $msg
+    $script:StepStarted = Get-Date
+    Write-Host "`n==> $msg  [$(Elapsed $Started) so far]" -ForegroundColor Yellow
+}
 
 # Runs a native tool and fails on a non-zero exit code. Windows PowerShell 5.1 turns
 # anything a tool writes to stderr (uv and pyinstaller log there) into an error when
@@ -64,11 +83,12 @@ try {
 } finally { Pop-Location }
 
 Step "Agents (Python -> PyInstaller)"
+$cleanArgs = @(); if ($Clean) { $cleanArgs = @("--clean") }
 Push-Location (Join-Path $Root "agents")
 try {
     Invoke-Native "uv sync" { uv sync --group build }
     Invoke-Native "pyinstaller" { uv run --group build pyinstaller packaging/entry.py `
-        --name cubicle-agents --onedir --console --noconfirm --clean `
+        --name cubicle-agents --onedir --console --noconfirm $cleanArgs `
         --collect-submodules cubicle_agents `
         --collect-submodules pydantic_ai.models --collect-submodules pydantic_ai.providers `
         --collect-submodules pydantic_ai.capabilities --collect-submodules fastmcp.client --collect-submodules mcp.client `
@@ -109,7 +129,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 if ($SkipInstaller) {
     Clear-OldBuilds @($zipName)
-    Write-Host "`nDone: $zip (staged build in $Stage)" -ForegroundColor Green
+    Write-Host "`nDone in $(Elapsed $Started): $zip (staged build in $Stage)" -ForegroundColor Green
     exit 0
 }
 
@@ -124,4 +144,4 @@ Invoke-Native "ISCC" { & $iscc "/DAppVersion=$Version" "/DStageDir=$Stage" "/O$D
 
 $setupName = "Cubicle-Setup-$Version.exe"
 Clear-OldBuilds @($setupName, $zipName)
-Write-Host "`nDone:`n  $(Join-Path $Dist $setupName)`n  $zip" -ForegroundColor Green
+Write-Host "`nDone in $(Elapsed $Started):`n  $(Join-Path $Dist $setupName)`n  $zip" -ForegroundColor Green
