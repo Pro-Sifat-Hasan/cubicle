@@ -39,7 +39,7 @@ public sealed partial class OnboardingViewModel : ObservableObject
     /// <summary>Raised when the owner picks a first mission.</summary>
     public event Action<string>? MissionChosen;
 
-    public IReadOnlyList<string> NameSuggestions { get; } = ["Nova", "Max", "Atlas", "Juno", "Echo", "Sage"];
+    public IReadOnlyList<string> NameSuggestions { get; } = ["Atlas", "Juno", "Echo", "Sage", "Orion", "Ember"];
 
     public ObservableCollection<Profession> Professions { get; } = [];
     public ObservableCollection<Persona> Passions { get; } = [];

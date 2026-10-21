@@ -108,6 +108,79 @@
         </Viewbox>
     </DataTemplate>
 
+    <!-- Square avatar: rounded square with the employee's initial (team cards and plan steps). Same DataContext as AvatarTemplate. -->
+    <DataTemplate x:Key="AvatarSquareTemplate">
+        <Viewbox>
+            <Border Width="36" Height="36" CornerRadius="9" Background="{Binding Id, Converter={StaticResource AvatarBrush}}">
+                <TextBlock Text="{Binding Name, Converter={StaticResource Initial}}" Foreground="White" FontWeight="SemiBold"
+                           FontSize="16" TextTrimming="None" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+        </Viewbox>
+    </DataTemplate>
+
+    <!-- Collapsible section: a clickable header with a chevron, and content that shows when expanded.
+         Header and body padding come from Padding; Background and BorderBrush set the look. -->
+    <Style x:Key="SectionExpander" TargetType="Expander">
+        <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="14,11" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                        <DockPanel>
+                            <ToggleButton DockPanel.Dock="Top" Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                          Padding="{TemplateBinding Padding}" Cursor="Hand" FocusVisualStyle="{x:Null}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Bd" Background="Transparent" CornerRadius="9" Padding="{TemplateBinding Padding}">
+                                            <DockPanel>
+                                                <TextBlock x:Name="Chevron" DockPanel.Dock="Right" Style="{StaticResource Icon}" Text="&#xE70D;" FontSize="11"
+                                                           Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                                <ContentPresenter ContentTemplate="{TemplateBinding ContentTemplate}" />
+                                            </DockPanel>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Chevron" Property="Text" Value="&#xE70E;" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="Body" Margin="{TemplateBinding Padding}" Visibility="Collapsed" />
+                        </DockPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="Body" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A card inside a card (plan steps). -->
+    <Style x:Key="StepExpander" TargetType="Expander" BasedOn="{StaticResource SectionExpander}">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+        <Setter Property="Padding" Value="12,9" />
+    </Style>
+
+    <!-- A plain text-like toggle ("Add details"). -->
+    <Style x:Key="LinkExpander" TargetType="Expander" BasedOn="{StaticResource SectionExpander}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="4,6" />
+    </Style>
+
     <!-- Buttons -->
     <Style x:Key="AccentButton" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource AccentBrush}" />

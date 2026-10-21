@@ -68,6 +68,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<Agent> Staff { get; } = [];
     public ObservableCollection<AssignmentViewModel> Assignments { get; } = [];
     public ObservableCollection<SubtaskViewModel> SelectedSubtasks { get; } = [];
+    public ObservableCollection<ActivityLine> SelectedActivity { get; } = [];
     public ObservableCollection<InboxItemViewModel> Inbox { get; } = [];
     public ObservableCollection<ActivityItem> Activity { get; } = [];
     public ObservableCollection<MemoryViewModel> Memories { get; } = [];
@@ -313,8 +314,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Automations.Load(routinesTask.Result, agents);
 
         var selectedId = SelectedAssignment?.Task.Id;
-        Replace(Assignments, assignmentsTask.Result.Select(t => new AssignmentViewModel(t, names.GetValueOrDefault(t.Assignee, t.Assignee))));
-        SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == selectedId) ?? SelectedAssignment;
+        _restoringSelection = true; // refilling the list clears the list's selection; that is not the owner closing the panel
+        try
+        {
+            Replace(Assignments, assignmentsTask.Result.OrderByDescending(t => t.CreatedAt)
+                .Select(t => new AssignmentViewModel(t, names.GetValueOrDefault(t.Assignee, t.Assignee))));
+            SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == selectedId) ?? SelectedAssignment;
+        }
+        finally
+        {
+            _restoringSelection = false;
+        }
+        OnPropertyChanged(nameof(Summary));
 
         // Keep half-typed answers when the inbox refreshes.
         var drafts = Inbox.ToDictionary(i => i.Item.Id, i => i.AnswerText);
@@ -323,6 +334,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             AnswerText = drafts.GetValueOrDefault(i.Id, ""),
         }));
         OnPropertyChanged(nameof(OpenQuestions));
+        OnPropertyChanged(nameof(Summary));
 
         Replace(Activity, activityTask.Result);
         Replace(Memories, memoriesTask.Result.Select(m => new MemoryViewModel(m,
@@ -330,7 +342,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             DeleteMemoryAsync)));
 
         if (SelectedAssignment is not null)
-            await LoadDetailAsync(SelectedAssignment.Task.Id, names);
+            await LoadDetailAsync(SelectedAssignment.Task.Id);
     }
 
     private void UpdateAssignTargets(IReadOnlyList<Agent> agents)
@@ -344,26 +356,102 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         AssignTo = AssignTargets.FirstOrDefault(t => t.Id == pick) ?? AssignTargets[0];
     }
 
+    private bool _restoringSelection;
+    private readonly HashSet<string> _expandedSteps = [];
+
     partial void OnSelectedAssignmentChanged(AssignmentViewModel? value)
     {
         if (value is null)
         {
-            SelectedDetail = null;
-            SelectedSubtasks.Clear();
+            if (!_restoringSelection)
+            {
+                IsDetailOpen = false;
+                SelectedDetail = null;
+                SelectedSubtasks.Clear();
+                SelectedActivity.Clear();
+            }
             return;
         }
-        _ = SafeAsync(async () => await LoadDetailAsync(value.Task.Id, Staff.ToDictionary(e => e.Id, e => e.Name)));
+        IsDetailOpen = true;
+        _ = SafeAsync(() => LoadDetailAsync(value.Task.Id));
     }
 
-    private async Task LoadDetailAsync(string id, Dictionary<string, string> names)
+    /// <summary>Whether the assignment panel is shown. Closing it clears the selection, so clicking an assignment opens it again.</summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowDetail))]
+    private bool _isDetailOpen;
+
+    public bool ShowDetail => IsDetailOpen && SelectedDetail is not null;
+
+    partial void OnSelectedDetailChanged(TaskDetail? value) => OnPropertyChanged(nameof(ShowDetail));
+
+    [RelayCommand]
+    private void CloseDetail() => SelectedAssignment = null;
+
+    /// <summary>The plan and the activity trail start collapsed; the result is what matters first.</summary>
+    [ObservableProperty] private bool _planExpanded;
+
+    [ObservableProperty] private bool _activityExpanded;
+
+    public string PlanSummary
+    {
+        get
+        {
+            var total = SelectedSubtasks.Count;
+            if (total == 0)
+                return "";
+            var done = SelectedSubtasks.Count(s => s.Status == "done");
+            return $"{total} step{(total == 1 ? "" : "s")} · {done} done";
+        }
+    }
+
+    public string ActivitySummary
+    {
+        get
+        {
+            var tools = SelectedActivity.Count(a => a.IsTool);
+            return tools == 0 ? $"{SelectedActivity.Count} update{(SelectedActivity.Count == 1 ? "" : "s")}"
+                : $"{tools} tool call{(tools == 1 ? "" : "s")} · {SelectedActivity.Count} updates";
+        }
+    }
+
+    public string DetailMeta => SelectedAssignment is null ? "" : SelectedAssignment.When;
+
+    private async Task LoadDetailAsync(string id)
     {
         if (_client is null)
             return;
-        var detail = await _client.GetTaskAsync(id);
+        var detailTask = _client.GetTaskAsync(id);
+        var activityTask = _client.GetTaskActivityAsync(id);
+        await Task.WhenAll(detailTask, activityTask);
+        var detail = detailTask.Result;
+        var agents = Staff.ToDictionary(e => e.Id);
+        string Who(string? agentId) => agentId is not null && agents.TryGetValue(agentId, out var a) ? a.Name : "";
+
+        var lines = activityTask.Result.Select(a => (a.TaskId, Line: ActivityLine.From(a, Who(a.EmployeeId)))).ToList();
         SelectedDetail = detail;
+        Replace(SelectedActivity, lines.Select(l => l.Line));
         Replace(SelectedSubtasks, detail.Children
             .OrderBy(t => t.CreatedAt)
-            .Select(t => new SubtaskViewModel(t, names.GetValueOrDefault(t.Assignee, t.Assignee))));
+            .Select(t => new SubtaskViewModel(t, agents.GetValueOrDefault(t.Assignee),
+                lines.Where(l => l.TaskId == t.Id).Select(l => l.Line).ToList(), _expandedSteps.Contains(t.Id),
+                (stepId, open) => _ = open ? _expandedSteps.Add(stepId) : _expandedSteps.Remove(stepId))));
+        OnPropertyChanged(nameof(PlanSummary));
+        OnPropertyChanged(nameof(ActivitySummary));
+        OnPropertyChanged(nameof(DetailMeta));
+    }
+
+    /// <summary>The line under the greeting: today's date and what the staff are up to.</summary>
+    public string Summary
+    {
+        get
+        {
+            var parts = new List<string> { DateTime.Now.ToString("dddd, d MMMM") };
+            if (ActiveCount > 0)
+                parts.Add($"{ActiveCount} in progress");
+            if (OpenQuestions > 0)
+                parts.Add($"{OpenQuestions} need{(OpenQuestions == 1 ? "s" : "")} you");
+            return string.Join(" · ", parts);
+        }
     }
 
     // ---- profile and onboarding ----
@@ -447,6 +535,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         await _client!.AnswerAsync(item.Item.Id, item.AnswerText.Trim());
         Inbox.Remove(item);
         OnPropertyChanged(nameof(OpenQuestions));
+        OnPropertyChanged(nameof(Summary));
     });
 
     private bool CanAddMemory() => !string.IsNullOrWhiteSpace(NewMemory);

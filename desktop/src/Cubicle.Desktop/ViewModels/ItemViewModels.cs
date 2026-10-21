@@ -75,19 +75,67 @@ public sealed class AssignmentViewModel(TaskItem task, string assigneeName)
     public string Status => Task.Status;
     public string StatusLabel => StatusText.For(Task.Status);
     public string When => $"{Task.CreatedAt.ToLocalTime():ddd dd MMM, HH:mm} · {assigneeName}{(string.IsNullOrEmpty(Task.RoutineId) ? "" : " · automation")}";
+
+    /// <summary>True while the team is still on it (shows a progress bar in the list).</summary>
+    public bool IsRunning => Task.Status is "queued" or "in_progress" or "delegated";
 }
 
-public sealed class SubtaskViewModel(TaskItem task, string assigneeName)
+/// <summary>One line of an agent's trail: a tool it used, or a note about what it did.</summary>
+public sealed record ActivityLine(string Who, string Text, bool IsTool, string Time)
 {
-    public TaskItem Task { get; } = task;
+    public const string ToolPrefix = "Tool: ";
+
+    public string Glyph => IsTool ? "\uE90F" : "\uE946";
+
+    public static ActivityLine From(ActivityItem item, string who)
+    {
+        var isTool = item.Message.StartsWith(ToolPrefix, StringComparison.Ordinal);
+        return new ActivityLine(who, isTool ? item.Message[ToolPrefix.Length..] : item.Message, isTool,
+            item.CreatedAt.ToLocalTime().ToString("HH:mm:ss"));
+    }
+}
+
+/// <summary>One step of an assignment's plan: who does it, what they were asked, how they did it and what they produced.</summary>
+public sealed partial class SubtaskViewModel : ObservableObject
+{
+    private readonly Action<string, bool> _toggled;
+
+    public SubtaskViewModel(TaskItem task, Agent? agent, IReadOnlyList<ActivityLine> activity, bool expanded, Action<string, bool> toggled)
+    {
+        Task = task;
+        Agent = agent;
+        Activity = activity;
+        _isExpanded = expanded;
+        _toggled = toggled;
+    }
+
+    public TaskItem Task { get; }
+    public Agent? Agent { get; }
     public string Title => Task.Title;
 
     // Id/Name feed the shared avatar template (colour by id, initial from name).
     public string Id => Task.Assignee;
-    public string Name { get; } = assigneeName;
+    public string Name => Agent?.Name ?? Task.Assignee;
+    public string Role => Agent?.Title ?? "";
+    public string Strengths => Agent?.Description ?? "";
+    public string Brief => Task.Description.Trim();
     public string Status => Task.Status;
     public string StatusLabel => StatusText.For(Task.Status);
     public string? Result => Task.Result;
+
+    public IReadOnlyList<ActivityLine> Activity { get; }
+    public bool HasActivity => Activity.Count > 0;
+    public int ToolCount => Activity.Count(a => a.IsTool);
+    public string ActivityTitle => ToolCount switch
+    {
+        0 => "Activity",
+        1 => "Activity · 1 tool used",
+        _ => $"Activity · {ToolCount} tools used",
+    };
+
+    [ObservableProperty] private bool _isExpanded;
+
+    partial void OnIsExpandedChanged(bool value) => _toggled(Task.Id, value);
 }
 
 public static class StatusText

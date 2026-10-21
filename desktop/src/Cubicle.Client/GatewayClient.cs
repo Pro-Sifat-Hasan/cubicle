@@ -58,6 +58,10 @@ public sealed class GatewayClient : IDisposable
     public Task<List<ActivityItem>> GetActivityAsync(int limit = 100, CancellationToken ct = default) =>
         GetAsync<List<ActivityItem>>($"/api/v1/activity?limit={limit}", ct);
 
+    /// <summary>One assignment's trail (its subtasks included), oldest first. Messages starting with "Tool: " are tool calls.</summary>
+    public Task<List<ActivityItem>> GetTaskActivityAsync(string taskId, int limit = 500, CancellationToken ct = default) =>
+        GetAsync<List<ActivityItem>>($"/api/v1/activity?task_id={Uri.EscapeDataString(taskId)}&limit={limit}", ct);
+
     public Task ResetBreakerAsync(CancellationToken ct = default) => SendAsync(HttpMethod.Post, "/api/v1/breaker/reset", null, ct);
 
     // ---- tasks ----
