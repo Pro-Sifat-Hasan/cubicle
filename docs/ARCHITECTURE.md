@@ -68,6 +68,24 @@ You can also give an assignment straight to one agent, which then does it alone.
 
 A failed subtask fails its assignment and cancels the remaining work, so nothing waits forever.
 
+## Onboarding, passions and professions
+
+First run walks the owner through five screens: name the chief of staff, pick a profession, pick a
+passion (or type their own), watch the team get hired, and start a first mission.
+
+- A **profession** pack decides the team (extra specialists), their routines and the starter
+  missions. Hired teammates join the main agent's team; routines marked `enabled` are switched on,
+  the rest wait in Automations.
+- A **passion** pack decides the main agent's voice (`system_prompt_style`, appended to its
+  instructions), the greetings on Today, the daily feed queries and the accent colour the app uses.
+  Only the main agent takes the voice; specialists stay professional.
+- A **custom** passion is written by the main agent: the gateway queues a hidden `persona` task, the
+  worker answers with schema-validated JSON, and the gateway clamps it before anything is stored.
+  With no model available a plain persona is used instead, so setup never blocks.
+- The owner's profession and stack are saved as memories, so every agent sees them.
+
+Packs are JSON in `gateway/internal/catalog/packs/`; adding one needs no code.
+
 ## Chat
 
 Each message you send in the Inbox becomes a chat task for that agent, with the conversation so far.

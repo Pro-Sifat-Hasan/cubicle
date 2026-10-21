@@ -102,6 +102,30 @@ Schedules (local time): `daily@09:00`, `weekdays@08:30`, `weekly@mon,thu@08:30`,
 `agent_id` sends the work to the main agent; an agent that was removed or turned off is replaced by
 the main agent.
 
+### Onboarding and profile
+
+| Method & path | Body | Returns |
+|---|---|---|
+| `GET /api/v1/onboarding` | | `{profile, passions, professions}`: the built-in packs and whether setup is done |
+| `POST /api/v1/onboarding` | `{agent_name, owner_name?, profession, passion, custom_passion?, persona?, stack?}` | `{profile, hired, routines, starter_missions}` |
+| `GET /api/v1/profile` | | `{profile, starter_missions}` |
+| `POST /api/v1/persona` | `{passion}` | `202 {task_id}`: the main agent writes a persona for a typed passion |
+| `GET /api/v1/persona/{task_id}` | | `{status, persona?, error?}`; `status` is `queued`, `in_progress`, `done` or `failed` |
+
+A **passion** pack (`id`, `title`, `emoji`, `system_prompt_style`, `greeting_templates`,
+`daily_feed_queries`, `accent_color`, `avatar_set`) sets the main agent's voice and look. A
+**profession** pack (`id`, `title`, `emoji`, `description`, `team`, `routines`, `starter_missions`,
+`stack_suggestions`) sets the team, routines and missions. Both are JSON files embedded in the
+gateway (`internal/catalog/packs`).
+
+Onboarding renames the main agent and appends the passion's style to its instructions (a second run
+replaces it), hires the profession's team (agents that already exist are kept), creates its routines
+(only the ones marked `enabled` are switched on), and saves the profession, stack and passion as
+memories. `passion` is a pack id or `custom`; for `custom`, `custom_passion` (up to 80 characters)
+is required and `persona` is the generated one, which is optional: without it a plain fallback persona
+is used. Model-written personas are clamped (lengths, counts, a valid `#RRGGBB` accent) before they
+are stored. Persona tasks run on the main agent and never appear in `/api/v1/tasks`.
+
 ### Settings, providers, secrets and memory
 
 | Method & path | Body | Returns |
@@ -124,7 +148,7 @@ Each frame is `data: {"type": "...", "data": {...}, "at": "..."}`. Types: `task.
 stored), `assignment.done`, `inbox.new`, `inbox.answered`, `agent.status`, `agents.updated`,
 `employees.offline`, `mcp.updated`, `skills.updated`, `plugins.updated`, `conversation.updated`,
 `conversation.deleted`, `routine.updated`, `routine.deleted`, `activity`, `breaker.tripped`,
-`breaker.reset`, `settings.updated`, `memory.added`, `memory.deleted`.
+`breaker.reset`, `settings.updated`, `profile.updated`, `memory.added`, `memory.deleted`.
 
 ## Worker API
 

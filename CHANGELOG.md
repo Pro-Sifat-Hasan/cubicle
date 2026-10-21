@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Onboarding:** five short screens to name your chief of staff, pick a profession and a passion, watch your team get hired, and start a first mission. Professions (software engineer, video editor, marketer, founder, other) hire a specialist team, set up routines and suggest starter missions. Ten passions give the main agent a voice, greetings and the app's accent colour, and **Custom** lets you type your own and have the model write the persona. Packs are JSON files. Run setup again from Settings.
+- Starter missions on Today while there is no work yet.
 - **Agents page:** create agents, add them from 18 role templates in one click, and customise each one's instructions, model, effort, tools, MCP servers, skills and team. Choose the main agent, which plans assignments with its team. Changes apply without restarting.
 - **Chat in the Inbox:** talk to any agent, with live progress and replies that stream in. Agents can consult teammates, and the main agent can start a full assignment from a chat.
 - **MCP servers:** connect agents to apps and services (GitHub, files, browser, search and more) with presets or custom stdio and HTTP servers, encrypted secrets, and a live connection test.
