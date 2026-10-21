@@ -41,7 +41,7 @@
         </ItemsPanelTemplate>
     </UserControl.Resources>
 
-    <Grid Margin="32,28,32,24" DataContext="{Binding AgentsPage}">
+    <Grid x:Name="Root" Margin="32,28,32,24" DataContext="{Binding AgentsPage}" SizeChanged="Root_SizeChanged">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" MinWidth="320" />
             <ColumnDefinition Width="Auto" />
@@ -108,7 +108,7 @@
         </DockPanel>
 
         <!-- ============ Right: the editor or the templates (closes with X) ============ -->
-        <Border Grid.Column="1" Style="{StaticResource Card}" Padding="0" Width="580" Margin="24,0,0,0"
+        <Border x:Name="Drawer" Grid.Column="1" Style="{StaticResource Card}" Padding="0" Width="580" Margin="24,0,0,0"
                 Visibility="{Binding ShowDrawer, Converter={StaticResource BoolToVisibility}}">
             <Grid>
                 <!-- Templates gallery -->

@@ -10,10 +10,23 @@
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="Cubicle"
         Icon="/Assets/cubicle.ico"
-        Width="1280" Height="820" MinWidth="880" MinHeight="600"
-        WindowStartupLocation="CenterScreen"
+        Width="1280" Height="820" MinWidth="760" MinHeight="520"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Ideal"
         Background="{DynamicResource AppBackgroundBrush}"
         SizeChanged="Window_SizeChanged">
+
+    <Window.InputBindings>
+        <!-- Ctrl+1..8 jump to a page, Ctrl+, opens Settings: the same shortcuts as other desktop apps. -->
+        <KeyBinding Modifiers="Ctrl" Key="D1" Command="{Binding NavigateCommand}" CommandParameter="0" />
+        <KeyBinding Modifiers="Ctrl" Key="D2" Command="{Binding NavigateCommand}" CommandParameter="1" />
+        <KeyBinding Modifiers="Ctrl" Key="D3" Command="{Binding NavigateCommand}" CommandParameter="2" />
+        <KeyBinding Modifiers="Ctrl" Key="D4" Command="{Binding NavigateCommand}" CommandParameter="3" />
+        <KeyBinding Modifiers="Ctrl" Key="D5" Command="{Binding NavigateCommand}" CommandParameter="4" />
+        <KeyBinding Modifiers="Ctrl" Key="D6" Command="{Binding NavigateCommand}" CommandParameter="5" />
+        <KeyBinding Modifiers="Ctrl" Key="D7" Command="{Binding NavigateCommand}" CommandParameter="6" />
+        <KeyBinding Modifiers="Ctrl" Key="D8" Command="{Binding NavigateCommand}" CommandParameter="7" />
+        <KeyBinding Modifiers="Ctrl" Key="OemComma" Command="{Binding NavigateCommand}" CommandParameter="7" />
+    </Window.InputBindings>
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -108,13 +121,13 @@
                             <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
                         </Style>
                     </ListBox.Resources>
-                    <ListBoxItem ToolTip="Today">
+                    <ListBoxItem ToolTip="Today (Ctrl+1)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xE80F;" />
                             <TextBlock Style="{StaticResource NavLabel}" Text="Today" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Inbox">
+                    <ListBoxItem ToolTip="Inbox (Ctrl+2)">
                         <Grid>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource NavIcon}" Text="&#xE715;" />
@@ -129,37 +142,37 @@
                             </Border>
                         </Grid>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Team">
+                    <ListBoxItem ToolTip="Team (Ctrl+3)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xE716;" />
                             <TextBlock Style="{StaticResource NavLabel}" Text="Team" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Automations">
+                    <ListBoxItem ToolTip="Automations (Ctrl+4)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xE8EE;" />
                             <TextBlock Style="{StaticResource NavLabel}" Text="Automations" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Integrations">
+                    <ListBoxItem ToolTip="Integrations (Ctrl+5)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xE90F;" />
                             <TextBlock Style="{StaticResource NavLabel}" Text="Integrations" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Memory">
+                    <ListBoxItem ToolTip="Memory (Ctrl+6)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xEA80;" />
                             <TextBlock Style="{StaticResource NavLabel}" Text="Memory" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Activity">
+                    <ListBoxItem ToolTip="Activity (Ctrl+7)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xE81C;" />
                             <TextBlock Style="{StaticResource NavLabel}" Text="Activity" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Settings">
+                    <ListBoxItem ToolTip="Settings (Ctrl+8)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xE713;" />
                             <TextBlock Style="{StaticResource NavLabel}" Text="Settings" />
@@ -200,7 +213,7 @@
                 </Border>
             </StackPanel>
 
-            <TabControl SelectedIndex="{Binding SelectedSection}" BorderThickness="0" Padding="0" Background="Transparent">
+            <TabControl x:Name="Pages" SelectedIndex="{Binding SelectedSection}" BorderThickness="0" Padding="0" Background="Transparent">
                 <TabControl.ItemContainerStyle>
                     <Style TargetType="TabItem">
                         <Setter Property="Visibility" Value="Collapsed" />

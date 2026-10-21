@@ -4,9 +4,13 @@ using Cubicle.Client;
 
 namespace Cubicle.Desktop.Services;
 
-/// <summary>Per-user desktop preferences (appearance), stored next to the office data.</summary>
-public sealed record UiPreferences(string Theme)
+/// <summary>
+/// Per-user desktop preferences, stored next to the office data: appearance, where the window was,
+/// whether desktop notifications are on, and whether the "still running in the tray" hint was shown.
+/// </summary>
+public sealed record UiPreferences(string Theme, string? Placement = null, bool Notifications = true, bool TrayHintShown = false)
 {
+    private static readonly object Gate = new();
     private static string FilePath => Path.Join(CubiclePaths.Home, "desktop.json");
 
     public static UiPreferences Load()
@@ -22,6 +26,13 @@ public sealed record UiPreferences(string Theme)
             System.Diagnostics.Debug.WriteLine($"could not read preferences: {e.Message}");
         }
         return Default;
+    }
+
+    /// <summary>Changes some preferences and keeps the rest (each setting is saved from a different place).</summary>
+    public static void Update(Func<UiPreferences, UiPreferences> change)
+    {
+        lock (Gate)
+            change(Load()).Save();
     }
 
     public void Save()

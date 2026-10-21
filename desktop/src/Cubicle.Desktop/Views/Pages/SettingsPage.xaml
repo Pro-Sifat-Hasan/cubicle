@@ -149,6 +149,9 @@
                     <CheckBox IsChecked="{Binding StartWithWindows}">
                         <TextBlock Text="Start Cubicle when I sign in to Windows (runs quietly in the tray)" TextWrapping="Wrap" TextTrimming="None" />
                     </CheckBox>
+                    <CheckBox IsChecked="{Binding NotificationsOn}" Margin="0,10,0,0">
+                        <TextBlock Text="Show a desktop notification when something is done or needs me" TextWrapping="Wrap" TextTrimming="None" />
+                    </CheckBox>
                     <TextBlock Style="{StaticResource Muted}" Margin="0,10,0,0" FontSize="12.5"
                                Text="Closing this window keeps your staff working. To stop everything, right-click the tray icon and choose 'Stop staff and quit'." />
                 </StackPanel>

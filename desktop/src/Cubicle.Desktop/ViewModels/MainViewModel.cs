@@ -29,8 +29,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private Catalog? _catalog;
     private bool _refreshQueued;
 
-    /// <summary>Raised for things worth a desktop notification (title, message).</summary>
-    public event Action<string, string>? Notify;
+    /// <summary>Raised for things worth a desktop notification (title, message, the page it is about).</summary>
+    public event Action<string, string, int>? Notify;
 
     public MainViewModel(string theme = ThemeService.SystemMode)
     {
@@ -38,8 +38,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _gatewayUri = new Uri(string.IsNullOrWhiteSpace(url) ? CubiclePaths.DefaultGatewayUrl : url);
         _startWithWindows = AutoStart.IsEnabled;
         _theme = theme;
+        _notificationsOn = UiPreferences.Load().Notifications;
         void ShowError(string message) => ErrorText = message;
-        void Notice(string title, string message) => Notify?.Invoke(title, message);
+        void Notice(string title, string message) => Notify?.Invoke(title, message, TodaySection);
         Ai = new AiSettingsViewModel(() => _client, ShowError, Notice);
         AgentsPage = new AgentsViewModel(() => _client, ShowError, Notice);
         Tools = new ToolsViewModel(() => _client, ShowError, Notice);
@@ -179,7 +180,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     partial void OnThemeChanged(string value)
     {
         ThemeService.Apply(value);
-        new UiPreferences(value).Save();
+        UiPreferences.Update(p => p with { Theme = value });
         OnPropertyChanged(nameof(ThemeGlyph));
         OnPropertyChanged(nameof(ThemeTooltip));
     }
@@ -278,15 +279,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 Chat.OnConversationUpdated(evt.Data);
                 break;
             case "assignment.done":
-                Notify?.Invoke("Done ✅", evt.Data.GetProperty("title").GetString() ?? "An assignment is finished.");
+                Notify?.Invoke("Done ✅", evt.Data.GetProperty("title").GetString() ?? "An assignment is finished.", TodaySection);
                 break;
             case "inbox.new":
                 Notify?.Invoke(evt.Data.TryGetProperty("kind", out var kind) && kind.GetString() == InboxItem.ApprovalKind
                     ? "Your staff need your approval" : "Your staff have a question",
-                    (evt.Data.GetProperty("question").GetString() ?? "").Replace("**", ""));
+                    (evt.Data.GetProperty("question").GetString() ?? "").Replace("**", ""), InboxSection);
                 break;
             case "breaker.tripped":
-                Notify?.Invoke("Work paused", "Daily token budget reached. Open Cubicle to resume.");
+                Notify?.Invoke("Work paused", "Daily token budget reached. Open Cubicle to resume.", TodaySection);
                 break;
         }
         QueueRefresh();
@@ -637,6 +638,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void Navigate(string index) => SelectedSection = int.Parse(index);
 
     partial void OnStartWithWindowsChanged(bool value) => AutoStart.Set(value);
+
+    /// <summary>Desktop notifications (a popup above the taskbar when something finishes or needs you).</summary>
+    [ObservableProperty] private bool _notificationsOn;
+
+    partial void OnNotificationsOnChanged(bool value) => UiPreferences.Update(p => p with { Notifications = value });
+
+    /// <summary>What the tray tooltip says: what needs the owner and what is running.</summary>
+    public string TrayStatus
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (OpenQuestions > 0)
+                parts.Add($"{OpenQuestions} need{(OpenQuestions == 1 ? "s" : "")} you");
+            if (ActiveCount > 0)
+                parts.Add($"{ActiveCount} in progress");
+            if (!IsConnected)
+                parts.Add("starting…");
+            return parts.Count > 0 ? string.Join(" · ", parts) : "Your staff are ready";
+        }
+    }
 
     [RelayCommand]
     private void DismissError() => ErrorText = null;
