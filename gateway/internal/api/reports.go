@@ -93,7 +93,8 @@ func (s *Server) handleCreateReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kind := map[string]string{store.PeriodToday: "Daily report", store.PeriodYesterday: "Daily report",
-		store.PeriodWeek: "Weekly report", store.PeriodLastWeek: "Weekly report", store.PeriodMonth: "Monthly report"}[in.Period]
+		store.PeriodWeek: "Weekly report", store.PeriodLastWeek: "Weekly report", store.PeriodMonth: "Monthly report",
+		store.PeriodLastMonth: "Monthly report"}[in.Period]
 	title := kind + ": " + resp.Label
 	body := resp.Markdown
 	if len(body) > 15000 {

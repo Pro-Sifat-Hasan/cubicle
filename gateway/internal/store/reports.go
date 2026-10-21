@@ -12,9 +12,10 @@ import (
 const (
 	PeriodToday     = "today"
 	PeriodYesterday = "yesterday"
-	PeriodWeek      = "week"      // this week, Monday until now
-	PeriodLastWeek  = "last_week" // the whole of the previous week
-	PeriodMonth     = "month"     // this calendar month until now
+	PeriodWeek      = "week"       // this week, Monday until now
+	PeriodLastWeek  = "last_week"  // the whole of the previous week
+	PeriodMonth     = "month"      // this calendar month until now
+	PeriodLastMonth = "last_month" // the whole of the previous calendar month
 )
 
 // PeriodRange turns a period name into a half-open time range [from, to) in the owner's local time, and a label
@@ -36,8 +37,12 @@ func PeriodRange(now time.Time, period string) (from, to time.Time, label string
 	case PeriodMonth:
 		first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 		return first, first.AddDate(0, 1, 0), first.Format("January 2006"), nil
+	case PeriodLastMonth:
+		first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		prev := first.AddDate(0, -1, 0)
+		return prev, first, prev.Format("January 2006"), nil
 	}
-	return time.Time{}, time.Time{}, "", fmt.Errorf("period must be today, yesterday, week, last_week or month")
+	return time.Time{}, time.Time{}, "", fmt.Errorf("period must be today, yesterday, week, last_week, month or last_month")
 }
 
 // WorkLog is everything the staff did in a period, taken from what the office already records.

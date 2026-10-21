@@ -257,7 +257,7 @@ def _ask_teammate(team: list[Employee], consult: ConsultFunc) -> Tool:
     )
 
 
-WORK_LOG_PERIODS = ["today", "yesterday", "week", "last_week", "month"]
+WORK_LOG_PERIODS = ["today", "yesterday", "week", "last_week", "month", "last_month"]
 
 
 def _work_log(gateway: Gateway) -> Tool:
