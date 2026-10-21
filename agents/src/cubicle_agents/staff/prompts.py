@@ -15,6 +15,7 @@ from datetime import date
 from typing import Any
 
 from cubicle_agents.staff.roster import TOOL_ASSIGNMENTS, TOOL_FILES, TOOL_MEMORY, TOOL_TERMINAL, TOOL_WEB, Employee
+from cubicle_agents.tools.mcp import tool_prefix
 
 ASK_PREFIX = "ASK_OWNER:"
 APPROVAL_PREFIX = "REQUEST_APPROVAL:"
@@ -65,7 +66,8 @@ PERSONA_SCHEMA: dict[str, Any] = {
 
 
 def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_mode: bool, web: bool,
-                  team: list[Employee] | None = None, mode: str = MODE_TASK, today: date | None = None) -> str:
+                  team: list[Employee] | None = None, mode: str = MODE_TASK, today: date | None = None,
+                  native_files: bool = False, coordinator: bool = False) -> str:
     today = today or date.today()
     intro = f"You are {employee.name}"
     if employee.title:
@@ -78,12 +80,17 @@ def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_m
         parts.append(f"Your strengths: {employee.description}")
     parts.append(f"Today is {today:%A, %d %B %Y}. Interpret relative dates (\"this week\", \"tomorrow\") from this date.")
     parts.append(_working_rules(employee, owner, tool_mode=tool_mode, web=web, mode=mode,
-                                has_team=bool(team) and tool_mode and mode != MODE_CONSULT))
+                                has_team=bool(team) and tool_mode and mode != MODE_CONSULT,
+                                native_files=native_files, coordinator=coordinator))
     if team and tool_mode and mode != MODE_CONSULT:
         parts.append("Teammates you can consult with ask_teammate (use their id):\n"
                      + "\n".join(f"- {m.id}: {m.name}, {m.title or 'agent'}. {m.description}".rstrip() for m in team))
     if employee.skills:
         parts.append(_skills_block(employee, tool_mode=tool_mode))
+    if employee.mcp and tool_mode:
+        apps = "\n".join(f"- {m.name}: its tools start with `{tool_prefix(m)}`" for m in employee.mcp)
+        parts.append("Your connected apps (tools from the owner's own accounts and services). When a request involves "
+                     f"one, use its tools instead of guessing, and look before you change anything:\n{apps}")
     if memories:
         facts = "\n".join(f"- {m}" for m in memories)
         parts.append(f"What the office knows about {owner} (from earlier work; trust it unless told otherwise):\n{facts}")
@@ -100,7 +107,8 @@ def _skills_block(employee: Employee, *, tool_mode: bool) -> str:
     return f"Your skills. Follow a skill's instructions whenever a request matches it.\n\n{docs}"
 
 
-def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool, mode: str, has_team: bool) -> str:
+def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool, mode: str, has_team: bool,
+                   native_files: bool = False, coordinator: bool = False) -> str:
     rules = []
     if mode == MODE_CHAT:
         rules += [
@@ -128,7 +136,25 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
     else:
         rules.append("You have no web access for this work; rely on what you know and say what should be verified.")
     if tool_mode:
-        if employee.has_tool(TOOL_FILES):
+        if coordinator:
+            rules.append(
+                "You lead a team, so you coordinate instead of building: you cannot create or change files yourself. "
+                "Anything that has to be built or written as files (code, a website or portfolio, scripts, documents, "
+                "data files) goes to the teammate whose strengths fit, by ask_teammate for a job that fits in one "
+                "reply, or start_assignment for a big one. Hand over a complete brief: the goal, the content, the "
+                "style, the constraints, and where it should end up. Teammates save their files in the same working "
+                "folder, so afterwards look at what they made with your read tools, check it against the request, send "
+                "it back for fixes if it falls short, and then tell the owner what was made and where.")
+            if native_files:
+                rules.append("Use Read, Glob and Grep to look at files in the working folder.")
+            elif employee.has_tool(TOOL_FILES):
+                rules.append("Use read_file, list_files, find_files and grep_files to look at files in the working folder.")
+        elif employee.has_tool(TOOL_FILES) and native_files:
+            rules.append("Your working folder is the current directory. Build deliverables as real files there with "
+                         "Write (relative paths such as 'index.html' or 'src/app.js'), change existing files with Edit "
+                         "(read them first), and find things with Glob and Grep. Never write outside the working folder. "
+                         "Summarise what you made in your answer.")
+        elif employee.has_tool(TOOL_FILES):
             rules.append("Save substantial deliverables (documents, code, tables, drafts) with write_file so the owner "
                          "gets real files, and summarise them in your answer. Use read_file/list_files to build on "
                          "teammates' files. To change part of a file, read it and use edit_file with the exact text "
@@ -139,6 +165,11 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
                          "'Run: <exact command>' and what it does, and run it only once approved. After a change, run "
                          "the project's tests or linter if there are any, and report the real result. Never claim a "
                          "command passed unless you ran it and saw it pass.")
+        rules.append(
+            "Work in this order: understand what done looks like; check your skills and connected apps and use the "
+            "ones that fit (load a skill before the work it describes); for a job with several steps, say in one short "
+            "sentence what you are about to do before each stage; do the work with your tools; then verify (read back "
+            "what you wrote, run the tests, look at what a tool returned) and fix what is wrong before you report.")
         if employee.has_tool(TOOL_MEMORY):
             rules.append("Save durable facts about the owner with remember the moment you learn them, without being "
                          "asked: who they are, their work, preferences, people, projects, decisions. When they correct "

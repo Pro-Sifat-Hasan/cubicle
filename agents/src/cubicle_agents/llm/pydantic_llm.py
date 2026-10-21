@@ -15,13 +15,30 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from cubicle_agents.core.settings import KIND_ANTHROPIC
-from cubicle_agents.llm.base import MAX_TOOL_ROUNDS, AgentResult, EventCallback, LLMConfigError, LLMRefusalError, Turn
+from cubicle_agents.llm.base import (
+    MAX_TOOL_ROUNDS,
+    STEP_DONE,
+    STEP_ERROR,
+    STEP_NOTE,
+    STEP_THINKING,
+    STEP_TOOL,
+    AgentResult,
+    EventCallback,
+    LLMConfigError,
+    LLMRefusalError,
+    Step,
+    StepCallback,
+    Turn,
+    describe_tool,
+)
+from cubicle_agents.office.steps import as_text, tidy_json
 from cubicle_agents.staff.roster import McpServer
 from cubicle_agents.tools import mcp as mcp_tools
 from cubicle_agents.tools.base import Toolbox
@@ -142,7 +159,8 @@ class PydanticLLM:
     async def run(self, *, system: str, prompt: str, model: str, toolbox: Toolbox | None = None,
                   json_schema: dict[str, Any] | None = None, workdir: Path | None = None,
                   history: list[Turn] | None = None, mcp: tuple[McpServer, ...] = (), effort: str = "",
-                  on_event: EventCallback | None = None, web: bool = True) -> AgentResult:
+                  on_event: EventCallback | None = None, web: bool = True,
+                  on_step: StepCallback | None = None) -> AgentResult:
         from pydantic_ai import Agent, PromptedOutput, StructuredDict, ToolOutput, UsageLimits
         from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior, UsageLimitExceeded
         from pydantic_ai.usage import RunUsage
@@ -188,7 +206,7 @@ class PydanticLLM:
                 model_settings=self._settings(effort),  # type: ignore[arg-type]
                 retries=2,
             )
-            streamer = _Streamer(on_event) if on_event else None
+            streamer = _Streamer(on_event, on_step) if on_event or on_step else None
             try:
                 run = await agent.run(
                     prompt,
@@ -286,50 +304,97 @@ def _with_usage(result: AgentResult, usage: Any) -> AgentResult:
     return result
 
 
-_TOOL_STATUS = {
-    "web_search": "Searching the web…", "web_fetch": "Reading a web page…", "write_file": "Writing a file…",
-    "read_file": "Reading a file…", "list_files": "Looking at the files…", "remember": "Saving to memory…",
-    "load_skill": "Loading a skill…", "ask_teammate": "Asking a teammate…", "start_assignment": "Starting an assignment…",
-    "edit_file": "Editing a file…", "find_files": "Looking for files…", "grep_files": "Searching the files…",
-    "run_command": "Running a command…",
-}
-
-
-def describe_tool(name: str) -> str:
-    return _TOOL_STATUS.get(name) or f"Using {name.replace('_', ' ')}…"
-
-
 class _Streamer:
-    """Turns Pydantic AI stream events into throttled progress updates."""
+    """Turns Pydantic AI stream events into throttled progress updates and steps (thoughts, remarks, tool calls)."""
 
-    def __init__(self, on_event: EventCallback) -> None:
+    def __init__(self, on_event: EventCallback | None, on_step: StepCallback | None = None) -> None:
         self._on_event = on_event
+        self._on_step = on_step
         self._text = ""
         self._last_push = 0.0
+        self._counter = 0
+        self._thinking: dict[int, Step] = {}  # open thinking parts, by part index
+        self._tools: dict[str, Step] = {}  # tool calls waiting for their result, by call id
 
     async def handle(self, _ctx: Any, stream: Any) -> None:
         from pydantic_ai import (
             FunctionToolCallEvent,
+            FunctionToolResultEvent,
             NativeToolCallPart,
+            NativeToolReturnPart,
             PartDeltaEvent,
+            PartEndEvent,
             PartStartEvent,
+            RetryPromptPart,
             TextPart,
             TextPartDelta,
+            ThinkingPart,
+            ThinkingPartDelta,
         )
 
         async for event in stream:
             if isinstance(event, PartStartEvent):
-                if isinstance(event.part, TextPart):
-                    self._text += event.part.content
+                part = event.part
+                if isinstance(part, TextPart):
+                    self._text += part.content
                     await self._push_text()
-                elif isinstance(event.part, NativeToolCallPart):
-                    await self._emit("status", describe_tool(event.part.tool_name))
-            elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
-                self._text += event.delta.content_delta
-                await self._push_text()
+                elif isinstance(part, ThinkingPart):
+                    step = Step(self._next_id("think"), STEP_THINKING, output=part.content)
+                    self._thinking[event.index] = step
+                    await self._step(step)
+                elif isinstance(part, NativeToolCallPart):
+                    await self._flush_note()
+                    await self._emit("status", describe_tool(part.tool_name))
+                    await self._start_tool(part.tool_call_id, part.tool_name, part.args)
+                elif isinstance(part, NativeToolReturnPart):
+                    await self._finish_tool(part.tool_call_id, part.content, part.outcome != "success")
+            elif isinstance(event, PartDeltaEvent):
+                if isinstance(event.delta, TextPartDelta):
+                    self._text += event.delta.content_delta
+                    await self._push_text()
+                elif isinstance(event.delta, ThinkingPartDelta) and event.index in self._thinking:
+                    step = self._thinking[event.index]
+                    step.output += event.delta.content_delta or ""
+                    await self._step(step)
+            elif isinstance(event, PartEndEvent) and isinstance(event.part, ThinkingPart):
+                step = self._thinking.pop(event.index, None)
+                if step is not None:
+                    step.output = event.part.content or step.output
+                    step.status = STEP_DONE
+                    await self._step(step)
             elif isinstance(event, FunctionToolCallEvent):
-                self._text = ""  # text before a tool call was the model thinking aloud
+                await self._flush_note()  # text before a tool call is the agent saying what it is about to do
                 await self._emit("status", describe_tool(event.part.tool_name))
+                await self._start_tool(event.part.tool_call_id, event.part.tool_name, event.part.args)
+            elif isinstance(event, FunctionToolResultEvent):
+                part = event.part
+                failed = isinstance(part, RetryPromptPart) or getattr(part, "outcome", "success") != "success"
+                await self._finish_tool(part.tool_call_id, part.content, failed)
+
+    def _next_id(self, prefix: str) -> str:
+        self._counter += 1
+        return f"{prefix}-{uuid.uuid4().hex[:10]}-{self._counter}"
+
+    async def _flush_note(self) -> None:
+        text = self._text.strip()
+        self._text = ""
+        if not text:
+            return
+        await self._emit("text", "")
+        await self._step(Step(self._next_id("note"), STEP_NOTE, output=text, status=STEP_DONE))
+
+    async def _start_tool(self, call_id: str, name: str, args: Any) -> None:
+        step = Step(call_id or self._next_id("tool"), STEP_TOOL, name=name, input=_args_text(args))
+        self._tools[step.id] = step
+        await self._step(step)
+
+    async def _finish_tool(self, call_id: str, content: Any, failed: bool) -> None:
+        step = self._tools.pop(call_id, None)
+        if step is None:  # a result without a seen call (e.g. a server-side tool): still worth showing
+            step = Step(call_id or self._next_id("tool"), STEP_TOOL, name="tool")
+        step.output = as_text(content)
+        step.status = STEP_ERROR if failed or step.output.startswith("ERROR: ") else STEP_DONE
+        await self._step(step)
 
     async def _push_text(self) -> None:
         now = time.monotonic()
@@ -338,7 +403,21 @@ class _Streamer:
             await self._emit("text", self._text)
 
     async def _emit(self, kind: str, text: str) -> None:
+        if self._on_event is None:
+            return
         try:
             await self._on_event(kind, text)
         except Exception:  # progress is cosmetic; never let it break the work
             log.debug("progress update failed", exc_info=True)
+
+    async def _step(self, step: Step) -> None:
+        if self._on_step is None:
+            return
+        try:
+            await self._on_step(Step(step.id, step.kind, step.name, step.input, step.output, step.status))
+        except Exception:
+            log.debug("step update failed", exc_info=True)
+
+
+def _args_text(args: Any) -> str:
+    return tidy_json(args) if isinstance(args, str) else as_text(args)

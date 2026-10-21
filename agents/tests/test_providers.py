@@ -171,11 +171,35 @@ def test_capabilities_per_provider():
 # ---- Claude Code CLI ----
 
 def test_claude_code_command_is_locked_down(tmp_path):
-    cmd = build_command("claude", model="sonnet", system_file=tmp_path / "s.md", web=False)
-    assert cmd[:4] == ["claude", "-p", "--output-format", "json"]
+    cmd = build_command("claude", model="sonnet", system_file=tmp_path / "s.md", tools=["Read", "Write"])
+    assert cmd[:6] == ["claude", "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
     assert "Bash" not in cmd and "WebFetch" not in cmd and "--mcp-config" not in cmd
     assert cmd[cmd.index("--permission-mode") + 1] == "dontAsk"
+    assert cmd[cmd.index("--tools") + 1:cmd.index("--tools") + 3] == ["Read", "Write"]
+    assert cmd[cmd.index("--allowedTools") + 1:cmd.index("--allowedTools") + 3] == ["Read", "Write"]
+    # The owner's own Claude Code setup (skills, MCP servers, settings, hooks) is never loaded.
+    assert "--strict-mcp-config" in cmd and "--disable-slash-commands" in cmd
+    assert cmd[cmd.index("--setting-sources") + 1] == ""
     assert cmd[-2:] == ["--model", "sonnet"]
+
+
+def test_claude_code_without_tools_gets_none_and_effort_is_passed(tmp_path):
+    cmd = build_command("claude", model="", system_file=tmp_path / "s.md", tools=[], effort="high")
+    assert cmd[cmd.index("--tools") + 1] == "" and "--allowedTools" not in cmd
+    assert cmd[-2:] == ["--effort", "high"]
+    assert "--effort" not in build_command("claude", model="", system_file=tmp_path / "s.md", tools=[], effort="warp")
+
+
+def test_claude_code_file_tools_follow_the_agents_toolbox():
+    from cubicle_agents.llm.claude_code_llm import file_tools
+    from cubicle_agents.tools.base import Tool, Toolbox
+
+    def box(*names):
+        return Toolbox([Tool(n, "", {}, None) for n in names])  # type: ignore[arg-type]
+
+    assert file_tools(box("read_file", "write_file", "edit_file")) == ["Read", "Glob", "Grep", "Write", "Edit"]
+    assert file_tools(box("read_file", "list_files")) == ["Read", "Glob", "Grep"]  # a main agent with a team: look only
+    assert file_tools(box("remember")) == []
 
 
 def test_claude_code_gets_mcp_servers_without_secrets_on_disk(tmp_path):
@@ -184,7 +208,7 @@ def test_claude_code_gets_mcp_servers_without_secrets_on_disk(tmp_path):
     config = mcp_config((gh, brave))["mcpServers"]
     assert config["github"]["headers"]["Authorization"] == "Bearer ${GITHUB_TOKEN}"
     assert config["brave_search"]["env"] == {"BRAVE_API_KEY": "${BRAVE_API_KEY}"}
-    cmd = build_command("claude", model="", system_file=tmp_path / "s.md", web=True, mcp_file=tmp_path / "m.json",
+    cmd = build_command("claude", model="", system_file=tmp_path / "s.md", tools=["Read"], mcp_file=tmp_path / "m.json",
                         mcp_names=["github", "brave_search"])
     assert "mcp__github" in cmd and "--strict-mcp-config" in cmd
 

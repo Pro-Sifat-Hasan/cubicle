@@ -81,6 +81,9 @@ class Gateway(Protocol):
     async def report_usage(self, task_id: str, agent_id: str, input_tokens: int, output_tokens: int) -> None:
         """Report the tokens a model call used."""
 
+    async def save_step(self, task_id: str, agent_id: str, step: dict[str, Any]) -> None:
+        """Record (or update, by id) something an agent did while working: a thought, a remark or a tool call."""
+
     async def log(self, agent_id: str, task_id: str, message: str) -> None:
         """Add a line to the activity log."""
 
@@ -164,6 +167,9 @@ class GatewayClient:
             "task_id": task_id, "employee_id": agent_id,
             "input_tokens": input_tokens, "output_tokens": output_tokens,
         })
+
+    async def save_step(self, task_id: str, agent_id: str, step: dict[str, Any]) -> None:
+        await self._send("POST", f"/internal/v1/tasks/{task_id}/steps", {"agent_id": agent_id, **step})
 
     async def log(self, agent_id: str, task_id: str, message: str) -> None:
         await self._send("POST", "/internal/v1/activity",

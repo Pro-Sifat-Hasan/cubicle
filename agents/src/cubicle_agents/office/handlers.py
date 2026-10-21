@@ -22,6 +22,7 @@ from cubicle_agents.core.gateway import Claim, Gateway
 from cubicle_agents.llm.base import LLM, AgentResult, EventCallback, Turn
 from cubicle_agents.office import directives
 from cubicle_agents.office.status import StatusBoard
+from cubicle_agents.office.steps import StepReporter
 from cubicle_agents.staff import prompts
 from cubicle_agents.staff.memory import MEMORY_FETCH, select_memories, trim_history
 from cubicle_agents.staff.roster import TOOL_MEMORY, TOOL_WEB, Employee, Roster
@@ -100,6 +101,7 @@ class TaskHandler:
         workdir = self._workdir(claim)
         tool_mode = ctx.llm.supports_tools
         team = ctx.roster.team_of(employee) if mode != prompts.MODE_CONSULT and json_schema is None else []
+        coordinator = employee.is_manager and bool(team)  # a main agent with a team hands building to teammates
         toolbox = None
         if tool_mode and json_schema is None:
             async def consult(teammate_id: str, request: str) -> str:
@@ -111,17 +113,21 @@ class TaskHandler:
                 approved_actions=self._approved_actions(claim),
                 client_web_fetch=ctx.client_web_fetch, web_access=ctx.web_access,
                 team=team, consult=consult if team else None, allow_assignments=mode == prompts.MODE_CHAT,
+                read_only_files=coordinator,
             )
         if on_event is None and json_schema is None:
             on_event = self._tool_logger(employee, claim)
         memories = await self._memories(prompt[:3000])
         system = prompts.system_prompt(employee, ctx.owner, memories=memories, tool_mode=tool_mode,
-                                       web=ctx.web_access, team=team, mode=mode)
+                                       web=ctx.web_access, team=team, mode=mode, coordinator=coordinator,
+                                       native_files=getattr(ctx.llm, "native_file_tools", False))
+        reporter = StepReporter(ctx.gateway, claim.task["id"], employee.id) if json_schema is None else None
         result = await ctx.llm.run(
             system=system, prompt=prompt, model=employee.model or ctx.default_model, toolbox=toolbox,
             json_schema=json_schema, workdir=workdir, history=history,
             mcp=employee.mcp if json_schema is None else (), effort=employee.effort, on_event=on_event,
             web=ctx.web_access and employee.has_tool(TOOL_WEB),
+            on_step=reporter.callback if reporter else None,
         )
         await ctx.gateway.report_usage(claim.task["id"], employee.id, result.input_tokens, result.output_tokens)
         for warning in result.warnings or []:

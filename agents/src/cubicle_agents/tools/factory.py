@@ -14,6 +14,9 @@ from cubicle_agents.tools.terminal import terminal_tool
 from cubicle_agents.tools.web import WEB_FETCH
 from cubicle_agents.tools.workspace import Workspace
 
+# The file tools that only look.
+READ_ONLY_TOOLS = frozenset({"read_file", "list_files", "find_files", "grep_files"})
+
 # consult(teammate_id, request) -> the teammate's answer
 ConsultFunc = Callable[[str, str], Awaitable[str]]
 
@@ -32,15 +35,18 @@ def build_toolbox(
     team: list[Employee] | None = None,
     consult: ConsultFunc | None = None,
     allow_assignments: bool = False,
+    read_only_files: bool = False,
 ) -> Toolbox:
     """Tools for one run.
 
     client_web_fetch adds our own guarded web_fetch; providers with a built-in
-    web tool (Claude, OpenAI) pass False and use theirs instead.
+    web tool (Claude, OpenAI) pass False and use theirs instead. read_only_files
+    keeps only the tools that look at files: a main agent that leads a team hands
+    the building to a teammate.
     """
     toolbox = Toolbox()
     if employee.has_tool(TOOL_FILES):
-        toolbox.tools.extend(Workspace(workspace).tools())
+        toolbox.tools.extend(t for t in Workspace(workspace).tools() if not read_only_files or t.name in READ_ONLY_TOOLS)
     if employee.has_tool(TOOL_TERMINAL):
         async def log_command(message: str) -> None:
             await gateway.log(employee.id, task_id, f"{TOOL_PREFIX}{message}")

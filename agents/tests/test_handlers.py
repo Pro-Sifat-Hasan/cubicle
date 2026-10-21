@@ -3,7 +3,7 @@ import dataclasses
 import json
 
 from cubicle_agents.core.gateway import Claim, RosterUpdate
-from cubicle_agents.llm.base import AgentResult
+from cubicle_agents.llm.base import AgentResult, Step
 from cubicle_agents.llm.demo_llm import DemoLLM
 from cubicle_agents.office.desk import Desk
 from cubicle_agents.office.office import Office
@@ -381,3 +381,47 @@ def test_approvals_stay_available_after_the_question_limit(tmp_path):
     run(make_handler(gw, llm, tmp_path).handle(WRITER, resumed))
     names = {t.name for t in llm.calls[0]["toolbox"].tools}
     assert "ask_owner" not in names and "request_approval" in names
+
+
+def test_a_main_agent_with_a_team_coordinates_and_cannot_write_files(tmp_path):
+    gw = FakeGateway()
+
+    async def manager_turn(call):
+        names = {t.name for t in call["toolbox"].tools}
+        assert {"read_file", "list_files", "ask_teammate"} <= names
+        assert not names & {"write_file", "edit_file"}  # building is for a teammate
+        assert "you coordinate instead of building" in call["system"]
+        built = await call["toolbox"].call("ask_teammate", {"teammate": "engineer", "request": "Build the portfolio"})
+        return AgentResult(f"Dev: {built.content}")
+
+    async def engineer_turn(call):
+        assert {"write_file", "edit_file"} <= {t.name for t in call["toolbox"].tools}  # the teammate builds
+        assert "you coordinate" not in call["system"]
+        await call["toolbox"].call("write_file", {"path": "index.html", "content": "<h1>Hi</h1>"})
+        return AgentResult("Built index.html")
+
+    llm = ScriptedLLM(manager_turn, engineer_turn, supports_tools=True)
+    run(make_handler(gw, llm, tmp_path).handle(MANAGER, chat_claim()))
+    assert gw.completed["tsk_1"].startswith("Dev: Built index.html")
+    assert "`index.html`" in gw.completed["tsk_1"]  # the teammate's file is listed with the reply
+
+
+def test_what_agents_do_is_reported_as_steps_for_the_agent_that_did_it(tmp_path):
+    gw = FakeGateway()
+
+    async def turn(call):
+        await call["on_step"](Step("t1", "tool", "write_file", '{"path": "a.md"}', "", "running"))
+        await call["on_step"](Step("t1", "tool", "write_file", '{"path": "a.md"}', "Saved a.md", "done"))
+        return AgentResult("ok")
+
+    run(make_handler(gw, ScriptedLLM(turn, supports_tools=True), tmp_path).handle(WRITER, chat_claim()))
+    assert [(t, a, s["id"], s["status"]) for t, a, s in gw.steps] == [
+        ("tsk_1", "writer", "t1", "running"), ("tsk_1", "writer", "t1", "done")]
+    assert gw.steps[1][2]["output"] == "Saved a.md"
+
+
+def test_planning_runs_report_no_steps(tmp_path):
+    gw = FakeGateway()
+    llm = ScriptedLLM(plan_json({"title": "t", "description": "d", "assignee": "writer", "depends_on": []}))
+    run(make_handler(gw, llm, tmp_path).handle(MANAGER, claim(kind="assignment", parent_id="")))
+    assert llm.calls[0]["on_step"] is None

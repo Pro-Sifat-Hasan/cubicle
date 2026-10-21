@@ -7,12 +7,13 @@ Output is clearly labelled as demo content.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from pathlib import Path
 from typing import Any
 
-from cubicle_agents.llm.base import AgentResult, EventCallback, Turn
+from cubicle_agents.llm.base import STEP_DONE, STEP_THINKING, AgentResult, EventCallback, Step, StepCallback, Turn
 from cubicle_agents.staff.roster import McpServer
 from cubicle_agents.tools.base import Toolbox
 
@@ -30,7 +31,8 @@ class DemoLLM:
     async def run(self, *, system: str, prompt: str, model: str, toolbox: Toolbox | None = None,
                   json_schema: dict[str, Any] | None = None, workdir: Path | None = None,
                   history: list[Turn] | None = None, mcp: tuple[McpServer, ...] = (), effort: str = "",
-                  on_event: EventCallback | None = None, web: bool = True) -> AgentResult:
+                  on_event: EventCallback | None = None, web: bool = True,
+                  on_step: StepCallback | None = None) -> AgentResult:
         tokens_in = len(prompt) // 4
 
         if json_schema is not None and prompt.startswith("PERSONA REQUEST"):
@@ -73,8 +75,14 @@ class DemoLLM:
                 "I'm running on Cubicle's offline demo provider, so this is a sample reply. Connect an AI in "
                 "Settings → AI provider and I'll answer for real."
             )
-        if on_event is not None:
-            await on_event("text", text)
+        if on_step is not None:
+            await on_step(Step("demo-thinking", STEP_THINKING, status=STEP_DONE,
+                               output="Reading the request and putting a sample answer together."))
+        if on_event is not None:  # write the sample out in pieces, like a real model would
+            pieces = text.split(" ")
+            for end in range(0, len(pieces), 6):
+                await on_event("text", " ".join(pieces[:end + 6]))
+                await asyncio.sleep(0.02)
         return AgentResult(text=text, input_tokens=tokens_in, output_tokens=len(text) // 4)
 
     async def list_models(self) -> list[str]:
