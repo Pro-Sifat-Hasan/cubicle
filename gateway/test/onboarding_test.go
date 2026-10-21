@@ -289,7 +289,8 @@ func TestTaskActivityCoversTheAssignmentAndItsSubtasks(t *testing.T) {
 
 	var got []store.Activity
 	h.do("GET", "/api/v1/activity?task_id="+asg.ID, adminTok, nil, 200, &got)
-	if len(got) != 2 || got[0].Message != "Max is planning." || got[1].Message != "Tool: Searching the web…" {
+	if len(got) != 3 || got[0].Message != "New assignment: Report" || got[1].Message != "Max is planning." ||
+		got[2].Message != "Tool: Searching the web…" {
 		t.Fatalf("want the assignment's own trail, oldest first, got %+v", got)
 	}
 }
