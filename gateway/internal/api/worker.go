@@ -167,6 +167,7 @@ func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 		s.storeErr(w, err)
 		return
 	}
+	_ = s.store.FinishSteps(r.Context(), r.PathValue("id"))
 	s.publishTasks(changed...)
 	for _, t := range changed {
 		switch t.Kind {
@@ -192,6 +193,7 @@ func (s *Server) handleFail(w http.ResponseWriter, r *http.Request) {
 		s.storeErr(w, err)
 		return
 	}
+	_ = s.store.FinishSteps(r.Context(), r.PathValue("id"))
 	s.publishTasks(changed...)
 	for _, t := range changed {
 		if t.Kind == store.KindChat {
@@ -227,6 +229,7 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		s.storeErr(w, err)
 		return
 	}
+	_ = s.store.FinishSteps(r.Context(), item.TaskID)
 	s.hub.Publish("inbox.new", item)
 	if t, err := s.store.GetTask(r.Context(), item.TaskID); err == nil {
 		s.publishTasks(t)

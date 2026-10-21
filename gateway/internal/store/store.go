@@ -118,7 +118,7 @@ func Open(path string) (*Store, error) {
 
 func (s *Store) migrate() error {
 	if _, err := s.db.Exec(schema + routinesSchema + settingsSchema + memoriesSchema + agentsSchema +
-		extensionsSchema + chatSchema); err != nil {
+		extensionsSchema + chatSchema + stepsSchema); err != nil {
 		return err
 	}
 	// Columns added after the first release. SQLite has no ADD COLUMN IF NOT EXISTS.
@@ -158,6 +158,7 @@ func (s *Store) Prune(ctx context.Context) (int64, error) {
 		{`DELETE FROM activity WHERE created_at < ? AND id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT ?)`,
 			[]any{now.AddDate(0, 0, -activityKeepDays).UnixMilli(), activityKeepRows}},
 		{`DELETE FROM activity WHERE id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT ?)`, []any{activityKeepRows * 3}},
+		{`DELETE FROM steps WHERE created_at < ?`, []any{now.AddDate(0, 0, -activityKeepDays).UnixMilli()}},
 		{`DELETE FROM usage WHERE created_at < ?`, []any{now.AddDate(0, 0, -usageKeepDays).UnixMilli()}},
 	} {
 		res, err := s.db.ExecContext(ctx, q.sql, q.args...)
