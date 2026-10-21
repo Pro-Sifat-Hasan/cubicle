@@ -37,6 +37,18 @@ class _Question:
     question: str
 
 
+@dataclass(frozen=True)
+class _Approval:
+    action: str
+    details: str = ""
+
+
+def _request_approval(action: str, details: str = "") -> _Approval:
+    """Ask the owner to approve ONE specific action before you do it. Required before anything with consequences
+    outside your workspace (sending, publishing, deleting, spending, changing accounts). This ends your turn."""
+    return _Approval(action.strip(), details.strip())
+
+
 def _ask_owner(question: str) -> _Question:
     """Ask the owner one clear question when you cannot do a good job without information only they have.
     Don't ask for things you can reasonably assume or look up. This ends your turn."""
@@ -148,9 +160,14 @@ class PydanticLLM:
                 # JSON answer is validated and retried just the same.
                 output = PromptedOutput(output)
         elif toolbox is not None:
-            tools = [_convert(toolbox, t) for t in toolbox.tools if t.name != "ask_owner"]
+            tools = [_convert(toolbox, t) for t in toolbox.tools if t.name not in ("ask_owner", "request_approval")]
+            outputs: list[Any] = [str]
             if toolbox.get("ask_owner") is not None:
-                output = [str, ToolOutput(_ask_owner, name="ask_owner")]
+                outputs.append(ToolOutput(_ask_owner, name="ask_owner"))
+            if toolbox.get("request_approval") is not None:
+                outputs.append(ToolOutput(_request_approval, name="request_approval"))
+            if len(outputs) > 1:
+                output = outputs
 
         usage = RunUsage()
         result = AgentResult(text="")
@@ -196,6 +213,9 @@ class PydanticLLM:
         out = run.output
         if isinstance(out, _Question):
             result.question = out.question
+        elif isinstance(out, _Approval):
+            result.question = f"**{out.action}**" + (f"\n\n{out.details[:3000]}" if out.details else "")
+            result.question_kind = "approval"
         elif structured:
             import json
 

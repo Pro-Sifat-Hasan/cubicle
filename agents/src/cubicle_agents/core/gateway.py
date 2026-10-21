@@ -68,14 +68,15 @@ class Gateway(Protocol):
     async def fail(self, task_id: str, error: str) -> None:
         """Fail a task with a reason."""
 
-    async def ask(self, task_id: str, agent_id: str, question: str) -> None:
-        """Park a task and ask the owner a question."""
+    async def ask(self, task_id: str, agent_id: str, question: str, kind: str = "question") -> None:
+        """Park a task and ask the owner a question, or for approval (kind=\"approval\")."""
 
     async def progress(self, task_id: str, status: str = "", text: str = "") -> None:
         """Stream live progress for a task."""
 
-    async def create_assignment(self, title: str, description: str, agent_id: str) -> dict[str, Any]:
-        """Start a new assignment (from a chat)."""
+    async def create_assignment(self, title: str, description: str, agent_id: str,
+                                source_task_id: str = "") -> dict[str, Any]:
+        """Start a new assignment (from a chat reply, `source_task_id`)."""
 
     async def report_usage(self, task_id: str, agent_id: str, input_tokens: int, output_tokens: int) -> None:
         """Report the tokens a model call used."""
@@ -141,15 +142,18 @@ class GatewayClient:
     async def fail(self, task_id: str, error: str) -> None:
         await self._send("POST", f"/internal/v1/tasks/{task_id}/fail", {"error": error})
 
-    async def ask(self, task_id: str, agent_id: str, question: str) -> None:
-        await self._send("POST", f"/internal/v1/tasks/{task_id}/ask", {"employee_id": agent_id, "question": question})
+    async def ask(self, task_id: str, agent_id: str, question: str, kind: str = "question") -> None:
+        await self._send("POST", f"/internal/v1/tasks/{task_id}/ask",
+                         {"employee_id": agent_id, "question": question, "kind": kind})
 
     async def progress(self, task_id: str, status: str = "", text: str = "") -> None:
         await self._send("POST", f"/internal/v1/tasks/{task_id}/progress", {"status": status[:300], "text": text})
 
-    async def create_assignment(self, title: str, description: str, agent_id: str) -> dict[str, Any]:
+    async def create_assignment(self, title: str, description: str, agent_id: str,
+                                source_task_id: str = "") -> dict[str, Any]:
         resp = await self._send("POST", "/internal/v1/assignments",
-                                {"title": title[:300], "description": description[:20000], "agent_id": agent_id})
+                                {"title": title[:300], "description": description[:20000], "agent_id": agent_id,
+                                 "source_task_id": source_task_id})
         return resp.json()
 
     async def report_usage(self, task_id: str, agent_id: str, input_tokens: int, output_tokens: int) -> None:

@@ -23,6 +23,8 @@ def build_toolbox(
     gateway: Gateway,
     may_ask: bool,
     client_web_fetch: bool,
+    may_approve: bool = False,
+    task_id: str = "",
     web_access: bool = True,
     team: list[Employee] | None = None,
     consult: ConsultFunc | None = None,
@@ -43,7 +45,7 @@ def build_toolbox(
     if team and consult is not None:
         toolbox.tools.append(_ask_teammate(team, consult))
     if allow_assignments and employee.has_tool(TOOL_ASSIGNMENTS):
-        toolbox.tools.append(_start_assignment(gateway, employee.id))
+        toolbox.tools.append(_start_assignment(gateway, employee.id, task_id))
     if may_ask:
         async def ask_owner(args: dict[str, Any]) -> str:
             toolbox.question = require_str(args, "question", max_len=2000).strip()
@@ -60,6 +62,28 @@ def build_toolbox(
                 "additionalProperties": False,
             },
             handler=ask_owner,
+        ))
+    if may_approve:
+        async def request_approval(args: dict[str, Any]) -> str:
+            action = require_str(args, "action", max_len=600).strip()
+            details = args.get("details") if isinstance(args.get("details"), str) else ""
+            toolbox.question = f"**{action}**" + (f"\n\n{details.strip()[:3000]}" if details.strip() else "")
+            toolbox.question_kind = "approval"
+            return "Approval requested. Stop working now; do nothing else until the owner decides."
+
+        toolbox.tools.append(Tool(
+            name="request_approval",
+            description="Ask the owner to approve ONE specific action before you do it. Required before anything with "
+            "consequences outside your workspace: sending or publishing something, deleting or overwriting data, "
+            "spending money, changing accounts or settings, or using a tool that changes something. State exactly what "
+            "you will do (who, what, where) in `action`, and put the full draft or details in `details`. Ends your turn.",
+            parameters={
+                "type": "object",
+                "properties": {"action": {"type": "string"}, "details": {"type": "string"}},
+                "required": ["action"],
+                "additionalProperties": False,
+            },
+            handler=request_approval,
         ))
     if client_web_fetch and web_access and employee.has_tool(TOOL_WEB):
         toolbox.tools.append(WEB_FETCH)
@@ -136,12 +160,13 @@ def _ask_teammate(team: list[Employee], consult: ConsultFunc) -> Tool:
     )
 
 
-def _start_assignment(gateway: Gateway, agent_id: str) -> Tool:
+def _start_assignment(gateway: Gateway, agent_id: str, source_task_id: str = "") -> Tool:
     async def start_assignment(args: dict[str, Any]) -> str:
         title = require_str(args, "title", max_len=300).strip()
         description = args.get("description") if isinstance(args.get("description"), str) else ""
-        task = await gateway.create_assignment(title, description, agent_id)
-        return f"Assignment started (id {task.get('id', '?')}). The team is working on it; it appears on the Today page."
+        task = await gateway.create_assignment(title, description, agent_id, source_task_id)
+        return (f"Assignment started (id {task.get('id', '?')}). The team is working on it; its plan and "
+                "result show in this chat and on the Today page.")
 
     return Tool(
         name="start_assignment",

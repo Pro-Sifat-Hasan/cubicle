@@ -29,6 +29,7 @@ class AgentResult:
     input_tokens: int = 0
     output_tokens: int = 0
     question: str | None = None  # set when the agent asked the owner via a tool
+    question_kind: str = "question"  # "question", or "approval" for a yes/no request to act
     # Notes for the owner about things that did not work (e.g. an MCP server that failed to start).
     warnings: list[str] | None = None
 

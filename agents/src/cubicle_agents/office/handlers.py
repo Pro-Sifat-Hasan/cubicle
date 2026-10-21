@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 
 MAX_SUBTASKS = 6
 MAX_QUESTIONS_PER_TASK = 2
+MAX_APPROVALS_PER_TASK = 10
 MEMORY_LIMIT = 50
 MAX_TOOL_LOGS = 40  # tool calls recorded per run
 TOOL_PREFIX = "Tool: "  # activity messages with this prefix are tool calls (the app shows them as such)
@@ -104,6 +105,7 @@ class TaskHandler:
 
             toolbox = build_toolbox(
                 employee=employee, workspace=workdir, gateway=ctx.gateway, may_ask=may_ask,
+                may_approve=mode != prompts.MODE_CONSULT and self._may_approve(claim), task_id=claim.task["id"],
                 client_web_fetch=ctx.client_web_fetch, web_access=ctx.web_access,
                 team=team, consult=consult if team else None, allow_assignments=mode == prompts.MODE_CHAT,
             )
@@ -127,8 +129,8 @@ class TaskHandler:
                 for fact in parsed.memories:
                     await ctx.gateway.add_memory(fact, employee.id)
             result.text = parsed.text
-            if may_ask and parsed.question:
-                result.question = parsed.question
+            if (may_ask or parsed.question_kind == "approval") and parsed.question:
+                result.question, result.question_kind = parsed.question, parsed.question_kind
         return result
 
     def _tool_logger(self, employee: Employee, claim: Claim) -> EventCallback:
@@ -146,7 +148,12 @@ class TaskHandler:
         return on_event
 
     def _may_ask(self, claim: Claim) -> bool:
-        return len(claim.human_answers) < MAX_QUESTIONS_PER_TASK
+        asked = [a for a in claim.human_answers if a.get("kind") != "approval"]
+        return len(asked) < MAX_QUESTIONS_PER_TASK
+
+    def _may_approve(self, claim: Claim) -> bool:
+        approvals = [a for a in claim.human_answers if a.get("kind") == "approval"]
+        return len(approvals) < MAX_APPROVALS_PER_TASK
 
     def _name(self, agent_id: str) -> str:
         e = self.ctx.roster.get(agent_id)
@@ -201,8 +208,7 @@ class TaskHandler:
         prompt = prompts.work_prompt(task, claim.parent, claim.dependency_results, claim.human_answers, may_ask)
         result = await self._run(employee, claim, prompt, may_ask=may_ask)
         if result.question:
-            await gw.ask(task["id"], employee.id, result.question)
-            await gw.log(employee.id, task["id"], f"{employee.name} asked you a question.")
+            await self._ask_owner(employee, task["id"], result)
             return
         text = result.text or "(no written output; see the workspace files)"
         if task.get("kind") == "assignment":  # done alone: list the files like a wrap-up would
@@ -229,21 +235,39 @@ class TaskHandler:
         workspace = Workspace(self._workdir(claim))
         before = set(workspace.files())
 
+        log_tool = self._tool_logger(employee, claim)
+
         async def on_event(kind: str, text: str) -> None:
             if kind == "status":
                 await gw.progress(task["id"], status=text)
+                await log_tool(kind, text)  # kept in the reply's trail: "how it was done"
             else:
                 await gw.progress(task["id"], text=text)
 
-        result = await self._run(employee, claim, task.get("description") or task["title"], mode=prompts.MODE_CHAT,
+        may_ask = self._may_ask(claim)
+        message = task.get("description") or task["title"]
+        context = prompts.chat_context(claim.human_answers)
+        prompt = f"{context}\n\n---\n\n{message}" if context else message
+        result = await self._run(employee, claim, prompt, mode=prompts.MODE_CHAT, may_ask=may_ask,
                                  history=history, on_event=on_event)
-        text = result.text or result.question or "(I have nothing to add.)"
+        if result.question:  # the reply waits for the owner; their answer resumes this same reply
+            await self._ask_owner(employee, task["id"], result)
+            return
+        text = result.text or "(I have nothing to add.)"
         new_files = sorted(set(workspace.files()) - before)
         if new_files:
             text += "\n\n---\n**Files saved:** " + ", ".join(f"`{f}`" for f in new_files)
         if result.warnings:
             text += "\n\n> " + " ".join(result.warnings)
         await gw.complete(task["id"], text)
+
+    async def _ask_owner(self, employee: Employee, task_id: str, result: AgentResult) -> None:
+        """Park the task and put the question, or the approval request, in the owner's inbox."""
+        gw = self.ctx.gateway
+        assert result.question is not None
+        await gw.ask(task_id, employee.id, result.question, result.question_kind)
+        what = "asked you for approval" if result.question_kind == "approval" else "asked you a question"
+        await gw.log(employee.id, task_id, f"{employee.name} {what}.")
 
     # ---- teammates ----
 

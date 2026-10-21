@@ -27,7 +27,7 @@ def test_team_and_skills_are_described():
     text = prompts.system_prompt(MANAGER, "Sam", memories=[], tool_mode=True, web=True, team=team,
                                  mode=prompts.MODE_CHAT)
     assert "ask_teammate" in text and "- researcher: Rhea" in text and "start_assignment" in text
-    assert "ask_owner" not in text  # chats just ask in the reply
+    assert "ask_owner" in text and "request_approval" in text  # chats can ask and request approval too
 
 
 def test_text_mode_inlines_skills():

@@ -24,6 +24,8 @@ class FakeGateway:
         self.progress_events: list[tuple[str, str, str]] = []
         self.assignments: list[tuple[str, str, str]] = []
         self.logs: list[str] = []
+        self.question_kinds: list[str] = []
+        self.assignment_sources: list[str] = []
         self.started = 0
         self.updates: list[RosterUpdate | None] = []
 
@@ -49,14 +51,16 @@ class FakeGateway:
     async def fail(self, task_id, error):
         self.failed[task_id] = error
 
-    async def ask(self, task_id, agent_id, question):
+    async def ask(self, task_id, agent_id, question, kind="question"):
         self.questions.append((task_id, agent_id, question))
+        self.question_kinds.append(kind)
 
     async def progress(self, task_id, status="", text=""):
         self.progress_events.append((task_id, status, text))
 
-    async def create_assignment(self, title, description, agent_id):
+    async def create_assignment(self, title, description, agent_id, source_task_id=""):
         self.assignments.append((title, description, agent_id))
+        self.assignment_sources.append(source_task_id)
         return {"id": "asg_new"}
 
     async def report_usage(self, task_id, agent_id, input_tokens, output_tokens):

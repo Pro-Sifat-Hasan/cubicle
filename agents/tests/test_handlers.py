@@ -92,7 +92,7 @@ def test_agent_tools_follow_the_owners_choice(tmp_path):
     llm = ScriptedLLM("ok", supports_tools=True)
     run(make_handler(gw, llm, tmp_path, roster=[MANAGER, writer], client_web_fetch=True).handle(writer, claim()))
     call = llm.calls[0]
-    assert {t.name for t in call["toolbox"].tools} == {"ask_owner"}
+    assert {t.name for t in call["toolbox"].tools} == {"ask_owner", "request_approval"}
     assert call["web"] is False
 
 
@@ -192,7 +192,7 @@ def test_chat_replies_with_history_and_streams_progress(tmp_path):
     assert call["workdir"] == tmp_path / "cnv_1"
     assert "chatting with Sam" in call["system"]
     tools = {t.name for t in call["toolbox"].tools}
-    assert "ask_owner" not in tools and {"ask_teammate", "start_assignment"} <= tools
+    assert {"ask_owner", "request_approval", "ask_teammate", "start_assignment"} <= tools
     assert gw.completed == {"tsk_1": "Sure, where to?"}
     assert gw.progress_events == [("tsk_1", "Searching the web…", ""), ("tsk_1", "", "Sure")]
 
@@ -238,6 +238,7 @@ def test_chat_can_start_an_assignment(tmp_path):
 
     run(make_handler(gw, ScriptedLLM(reply, supports_tools=True), tmp_path).handle(MANAGER, chat_claim()))
     assert gw.assignments == [("Plan Rome trip", "4 days in May", "manager")]
+    assert gw.assignment_sources == ["tsk_1"]  # tied to the reply that started it
 
 
 # ---- desks and the office ----
@@ -333,3 +334,50 @@ def test_tool_calls_are_logged_as_activity_without_repeats(tmp_path):
     gw = FakeGateway()
     run(make_handler(gw, ScriptedLLM(use_tools), tmp_path).handle(WRITER, claim(kind="subtask", parent_id="asg_1")))
     assert [m for m in gw.logs if m.startswith("Tool: ")] == ["Tool: Searching the web…", "Tool: Reading a page…"]
+
+
+def test_approval_request_in_a_chat_parks_the_reply_with_its_kind(tmp_path):
+    gw = FakeGateway()
+
+    async def reply(call):
+        await call["toolbox"].call("request_approval", {"action": "Email the report to Bob", "details": "Draft below"})
+        assert call["toolbox"].question_kind == "approval"
+        return AgentResult("", question=call["toolbox"].question, question_kind="approval")
+
+    run(make_handler(gw, ScriptedLLM(reply, supports_tools=True), tmp_path).handle(MANAGER, chat_claim()))
+    assert gw.completed == {}  # the reply is not finished: it resumes with the owner's decision
+    assert gw.questions == [("tsk_1", "manager", "**Email the report to Bob**\n\nDraft below")]
+    assert gw.question_kinds == ["approval"]
+    assert any("asked you for approval" in m for m in gw.logs)
+
+
+def test_chat_reply_resumes_with_the_owners_answer(tmp_path):
+    gw = FakeGateway()
+    llm = ScriptedLLM("Sent it!", supports_tools=True)
+    answers = [{"kind": "approval", "question": "**Email Bob**",
+                "answer": "Approved. You may do exactly what you asked about."}]
+    resumed = chat_claim()
+    resumed.human_answers = answers
+    run(make_handler(gw, llm, tmp_path).handle(MANAGER, resumed))
+    prompt = llm.calls[0]["prompt"]
+    assert "YOU ASKED THE OWNER TO APPROVE: **Email Bob**" in prompt and "THE OWNER DECIDED: Approved." in prompt
+    assert gw.completed == {"tsk_1": "Sent it!"}
+
+
+def test_text_mode_approval_directive(tmp_path):
+    gw = FakeGateway()
+    llm = ScriptedLLM("REQUEST_APPROVAL: Post the announcement on LinkedIn")
+    run(make_handler(gw, llm, tmp_path).handle(WRITER, claim()))
+    assert gw.question_kinds == ["approval"] and gw.questions[0][2] == "Post the announcement on LinkedIn"
+    assert gw.completed == {}
+
+
+def test_approvals_stay_available_after_the_question_limit(tmp_path):
+    gw = FakeGateway()
+    llm = ScriptedLLM("done", supports_tools=True)
+    answers = [{"kind": "question", "question": "q", "answer": "a"}] * 2
+    resumed = claim()
+    resumed.human_answers = answers
+    run(make_handler(gw, llm, tmp_path).handle(WRITER, resumed))
+    names = {t.name for t in llm.calls[0]["toolbox"].tools}
+    assert "ask_owner" not in names and "request_approval" in names
