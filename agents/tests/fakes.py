@@ -60,6 +60,9 @@ class FakeGateway:
     async def progress(self, task_id, status="", text=""):
         self.progress_events.append((task_id, status, text))
 
+    async def work_log(self, period):
+        return f"# Work log: {period}\n- Assignments: 1"
+
     async def set_conversation_title(self, conversation_id, title):
         self.titles.setdefault(conversation_id, title)
 

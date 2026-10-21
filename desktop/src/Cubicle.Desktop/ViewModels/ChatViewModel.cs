@@ -329,6 +329,10 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
         ThreadUpdated?.Invoke();
     });
 
+    /// <summary>Closes the open chat (it stays in the list) and goes back to the start screen.</summary>
+    [RelayCommand]
+    private void CloseChat() => Selected = null;
+
     [RelayCommand]
     private Task DeleteConversationAsync(ConversationItemViewModel item) => Run(async c =>
     {

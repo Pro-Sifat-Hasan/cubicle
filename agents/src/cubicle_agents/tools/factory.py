@@ -61,6 +61,8 @@ def build_toolbox(
         toolbox.tools.append(_ask_teammate(team, consult))
     if allow_assignments and employee.has_tool(TOOL_ASSIGNMENTS):
         toolbox.tools.append(_start_assignment(gateway, employee.id, task_id))
+    if employee.has_tool(TOOL_ASSIGNMENTS):
+        toolbox.tools.append(_work_log(gateway))
     if may_ask:
         async def ask_owner(args: dict[str, Any]) -> str:
             toolbox.question = require_str(args, "question", max_len=2000).strip()
@@ -198,6 +200,32 @@ def _ask_teammate(team: list[Employee], consult: ConsultFunc) -> Tool:
             "additionalProperties": False,
         },
         handler=ask_teammate,
+    )
+
+
+WORK_LOG_PERIODS = ["today", "yesterday", "week", "last_week", "month"]
+
+
+def _work_log(gateway: Gateway) -> Tool:
+    async def work_log(args: dict[str, Any]) -> str:
+        period = require_str(args, "period", max_len=20).strip()
+        if period not in WORK_LOG_PERIODS:
+            raise ToolError(f"'period' must be one of: {', '.join(WORK_LOG_PERIODS)}.")
+        return await gateway.work_log(period)
+
+    return Tool(
+        name="work_log",
+        description="Read what the whole staff did in a period: assignments with their outcomes, chats, each "
+        "agent's finished tasks, tool calls and tokens, questions and approvals, new things learned about the owner "
+        "and files produced. Use it to write a daily or weekly report, or to answer 'what did we do today/this week'. "
+        "Report only what it says.",
+        parameters={
+            "type": "object",
+            "properties": {"period": {"type": "string", "enum": WORK_LOG_PERIODS}},
+            "required": ["period"],
+            "additionalProperties": False,
+        },
+        handler=work_log,
     )
 
 

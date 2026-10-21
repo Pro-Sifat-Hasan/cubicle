@@ -15,7 +15,7 @@ _TOOL_STATUS = {
     "edit_file": "Editing a file…", "insert_lines": "Editing a file…", "find_files": "Looking for files…",
     "grep_files": "Searching the files…",
     "run_command": "Running a command…", "forget": "Updating memory…", "ask_owner": "Asking you…",
-    "request_approval": "Asking for your approval…",
+    "request_approval": "Asking for your approval…", "work_log": "Reading the work log…",
     # Claude Code's own tools
     "Read": "Reading a file…", "Write": "Writing a file…", "Edit": "Editing a file…", "Glob": "Looking for files…",
     "Grep": "Searching the files…", "WebSearch": "Searching the web…", "WebFetch": "Reading a web page…",

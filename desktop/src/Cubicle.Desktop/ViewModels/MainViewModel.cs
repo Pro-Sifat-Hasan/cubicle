@@ -548,6 +548,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == task.Id);
     });
 
+    /// <summary>Asks the main agent for a daily or weekly report of what the staff did.</summary>
+    [RelayCommand]
+    private Task WriteReportAsync(string period) => SafeAsync(async () =>
+    {
+        var task = await _client!.CreateReportAsync(period);
+        await RefreshAllAsync();
+        SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == task.Id);
+    });
+
     [RelayCommand]
     private Task CancelSelectedAsync() => SafeAsync(async () =>
     {

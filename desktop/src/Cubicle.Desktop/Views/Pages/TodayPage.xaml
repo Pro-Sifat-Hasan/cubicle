@@ -51,6 +51,30 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Reports: the main agent writes them from what the staff really did -->
+                <DockPanel Margin="0,-8,0,22" LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Text="REPORTS" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <Button DockPanel.Dock="Left" Style="{StaticResource GhostButton}" Command="{Binding WriteReportCommand}" CommandParameter="today"
+                            Padding="12,7" Margin="0,0,8,0" ToolTip="Everything the staff did today: finished work, what is open, what needs you">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE787;" FontSize="13" Margin="0,0,8,0" Foreground="{DynamicResource AccentTextBrush}" />
+                            <TextBlock Text="Today" FontWeight="SemiBold" FontSize="13" />
+                        </StackPanel>
+                    </Button>
+                    <Button DockPanel.Dock="Left" Style="{StaticResource GhostButton}" Command="{Binding WriteReportCommand}" CommandParameter="yesterday"
+                            Padding="12,7" Margin="0,0,8,0" ToolTip="What the staff did yesterday">
+                        <TextBlock Text="Yesterday" FontWeight="SemiBold" FontSize="13" />
+                    </Button>
+                    <Button DockPanel.Dock="Left" Style="{StaticResource GhostButton}" Command="{Binding WriteReportCommand}" CommandParameter="week"
+                            Padding="12,7" Margin="0,0,8,0" ToolTip="This week so far, Monday to now">
+                        <TextBlock Text="This week" FontWeight="SemiBold" FontSize="13" />
+                    </Button>
+                    <Button DockPanel.Dock="Left" Style="{StaticResource GhostButton}" Command="{Binding WriteReportCommand}" CommandParameter="last_week"
+                            Padding="12,7" ToolTip="The whole of last week">
+                        <TextBlock Text="Last week" FontWeight="SemiBold" FontSize="13" />
+                    </Button>
+                </DockPanel>
+
                 <!-- Needs you -->
                 <StackPanel Visibility="{Binding Inbox.Count, Converter={StaticResource CountToVisibility}}" Margin="0,0,0,22">
                     <DockPanel Margin="0,0,0,10">

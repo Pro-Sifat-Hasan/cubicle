@@ -79,3 +79,25 @@ public class StepTextTests
         Assert.EndsWith("… 100 more characters", clipped);
     }
 }
+
+public class ReportApiTests
+{
+    private static readonly Uri Base = new("http://127.0.0.1:7878");
+    private static readonly string Token = new('t', 48); // fake test credential
+
+    [Fact]
+    public async Task Asks_for_a_report_of_a_period()
+    {
+        var handler = new FakeHandler(_ => FakeHandler.Json("""
+            {"id":"tsk_1","kind":"assignment","title":"Daily report: Wednesday 21 October 2026","description":"",
+             "assignee":"manager","status":"queued","depends_on":[],"created_at":"2026-10-21T08:00:00Z","updated_at":"2026-10-21T08:00:00Z"}
+            """));
+        using var client = new GatewayClient(Base, Token, handler);
+
+        var task = await client.CreateReportAsync("today");
+
+        Assert.Equal("/api/v1/reports", handler.Requests[0].Request.RequestUri!.AbsolutePath);
+        Assert.Contains("\"period\":\"today\"", handler.Requests[0].Body);
+        Assert.StartsWith("Daily report", task.Title);
+    }
+}

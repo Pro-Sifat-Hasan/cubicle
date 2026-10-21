@@ -60,6 +60,16 @@ public partial class InboxPage : UserControl
         Dispatcher.BeginInvoke(() => ThreadScroll.ScrollToEnd(), System.Windows.Threading.DispatcherPriority.Background);
     }
 
+    // Esc closes the open chat (the list keeps it).
+    private void Page_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && _chat?.Selected is not null && !e.Handled)
+        {
+            e.Handled = true;
+            _chat.CloseChatCommand.Execute(null);
+        }
+    }
+
     // Enter sends; Shift+Enter inserts a new line.
     private void Composer_PreviewKeyDown(object sender, KeyEventArgs e)
     {

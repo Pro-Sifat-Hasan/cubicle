@@ -214,6 +214,10 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
         if has_team:
             rules.append("Consult a teammate with ask_teammate when their expertise would clearly improve the result; "
                          "do simple things yourself.")
+        if employee.has_tool(TOOL_ASSIGNMENTS):
+            rules.append("For a daily, weekly or 'what did we do' report, call work_log for the period first and report "
+                         "only what it says: what was finished, what is open or failed, what needs the owner, files "
+                         "made, and what was learned about them. Say so when the log is thin; never invent work.")
         if mode == MODE_CHAT and employee.has_tool(TOOL_ASSIGNMENTS):
             rules.append("For a big job with several parts, call start_assignment so the team plans and does it in the "
                          "background, then tell the owner it has started.")

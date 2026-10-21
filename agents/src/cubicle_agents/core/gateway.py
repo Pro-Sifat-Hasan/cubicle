@@ -90,6 +90,9 @@ class Gateway(Protocol):
     async def set_conversation_title(self, conversation_id: str, title: str) -> None:
         """Name a chat that has no title yet (ignored when it already has one)."""
 
+    async def work_log(self, period: str) -> str:
+        """What the staff did in a period (today, yesterday, week, last_week, month), as readable text."""
+
     async def log(self, agent_id: str, task_id: str, message: str) -> None:
         """Add a line to the activity log."""
 
@@ -173,6 +176,10 @@ class GatewayClient:
             "task_id": task_id, "employee_id": agent_id,
             "input_tokens": input_tokens, "output_tokens": output_tokens,
         })
+
+    async def work_log(self, period: str) -> str:
+        resp = await self._send("GET", f"/internal/v1/work-log?period={period}")
+        return str(resp.json().get("markdown", ""))
 
     async def set_conversation_title(self, conversation_id: str, title: str) -> None:
         await self._send("PUT", f"/internal/v1/conversations/{conversation_id}/title", {"title": title[:200]})

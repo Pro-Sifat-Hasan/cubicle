@@ -97,6 +97,13 @@ public sealed class GatewayClient : IDisposable
     public Task<TaskItem> CreateAssignmentAsync(string title, string description, string? agentId = null, CancellationToken ct = default) =>
         SendAsync<TaskItem>(HttpMethod.Post, "/api/v1/assignments", new { title, description, agent_id = agentId ?? "" }, ct);
 
+    /// <summary>
+    /// Starts an assignment for the main agent to write a report from what the staff really did.
+    /// <paramref name="period"/> is today, yesterday, week, last_week or month.
+    /// </summary>
+    public Task<TaskItem> CreateReportAsync(string period, CancellationToken ct = default) =>
+        SendAsync<TaskItem>(HttpMethod.Post, "/api/v1/reports", new { period }, ct);
+
     public Task CancelTaskAsync(string id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, $"/api/v1/tasks/{Uri.EscapeDataString(id)}/cancel", null, ct);
 

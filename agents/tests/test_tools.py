@@ -214,3 +214,13 @@ def test_insert_lines_adds_text_at_a_line(tmp_path):
     assert (tmp_path / "i.txt").read_text() == "top\na\nx\ny\nb\nc\nend\n"
     assert run(box.call("insert_lines", {"path": "i.txt", "after_line": 99, "text": "z"})).is_error
     assert run(box.call("insert_lines", {"path": "i.txt", "after_line": -1, "text": "z"})).is_error
+
+
+def test_main_agent_can_read_the_work_log(tmp_path):
+    manager = next(e for e in DEFAULT_ROSTER if e.is_manager)
+    box = build_toolbox(employee=manager, workspace=tmp_path, gateway=FakeGateway(), may_ask=False, client_web_fetch=False)
+    done = run(box.call("work_log", {"period": "week"}))
+    assert "# Work log: week" in done.content
+    assert run(box.call("work_log", {"period": "decade"})).is_error
+    # Only agents trusted with assignments get it.
+    assert "work_log" not in {t.name for t in _tools(tmp_path).tools}
