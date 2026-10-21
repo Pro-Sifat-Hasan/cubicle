@@ -100,6 +100,16 @@
                 </StackPanel>
             </Border>
 
+            <!-- ================= Your staff ================= -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Your staff" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,12" TextWrapping="Wrap"
+                               Text="Rename your chief of staff, switch profession or pick another passion. Teammates who are already hired stay." />
+                    <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Command="{Binding RunSetupAgainCommand}" Content="Run setup again" />
+                </StackPanel>
+            </Border>
+
             <!-- ================= Appearance ================= -->
             <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                 <StackPanel>

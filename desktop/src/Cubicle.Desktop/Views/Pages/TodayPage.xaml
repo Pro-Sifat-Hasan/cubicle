@@ -96,7 +96,23 @@
 
                 <TextBlock Text="Assignments" Style="{StaticResource SectionTitle}" />
                 <Border Style="{StaticResource EmptyState}" Visibility="{Binding Assignments.Count, Converter={StaticResource ZeroToVisibility}}">
-                    <TextBlock Style="{StaticResource Muted}" Text="Nothing yet. Give your staff their first assignment above." />
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Muted}" Text="Nothing yet. Give your staff their first assignment above, or start with one of these." />
+                        <ItemsControl ItemsSource="{Binding StarterMissions}" Margin="0,12,0,0">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding}" Style="{StaticResource GhostButton}" Margin="0,0,8,8"
+                                            Command="{Binding DataContext.StartMissionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </Border>
             </StackPanel>
 

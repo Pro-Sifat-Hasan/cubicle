@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:Cubicle.Desktop.ViewModels"
         xmlns:pages="clr-namespace:Cubicle.Desktop.Views.Pages"
+        xmlns:overlays="clr-namespace:Cubicle.Desktop.Views.Overlays"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
         Title="Cubicle"
@@ -215,5 +216,9 @@
                 <TabItem><pages:SettingsPage /></TabItem>
             </TabControl>
         </DockPanel>
+
+        <!-- First-run setup covers everything until it is finished. -->
+        <overlays:OnboardingOverlay Grid.ColumnSpan="2" DataContext="{Binding Onboarding}"
+                                    Visibility="{Binding DataContext.ShowOnboarding, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
     </Grid>
 </Window>

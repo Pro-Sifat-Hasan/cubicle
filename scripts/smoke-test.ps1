@@ -94,6 +94,21 @@ try {
     $models = Invoke-RestMethod "$Base/api/v1/providers/ollama/models" -Headers $h -TimeoutSec 90
     if (-not ($models.live -or $models.error)) { throw "model listing did not reach the worker" }
     Write-Host "Model listing via worker: live=$($models.live) error='$($models.error)'"
+    # Onboarding: the main agent writes a persona for a custom passion, then setup applies it.
+    $pt = Invoke-RestMethod "$Base/api/v1/persona" -Method Post -Headers $h -ContentType "application/json" `
+        -Body (@{ passion = "urban foxes" } | ConvertTo-Json)
+    $deadline = (Get-Date).AddSeconds(60); $persona = $null
+    while ((Get-Date) -lt $deadline) {
+        $ps = Invoke-RestMethod "$Base/api/v1/persona/$($pt.task_id)" -Headers $h
+        if ($ps.status -eq "done") { $persona = $ps.persona; break }
+        if ($ps.status -in "failed", "cancelled") { throw "persona failed: $($ps.error)" }
+        Start-Sleep -Milliseconds 500
+    }
+    if (-not $persona) { throw "persona was not written in time" }
+    $ob = Invoke-RestMethod "$Base/api/v1/onboarding" -Method Post -Headers $h -ContentType "application/json" `
+        -Body (@{ agent_name = "Nova"; profession = "software-engineer"; passion = "custom"; custom_passion = "urban foxes"; persona = $persona } | ConvertTo-Json -Depth 5)
+    if (-not $ob.profile.onboarded -or @($ob.hired).Count -ne 4) { throw "onboarding did not hire the team" }
+    Write-Host "Onboarding: $($ob.profile.agent_name) hired $(@($ob.hired).Count) teammates, accent $($ob.profile.passion.accent_color)"
     Write-Host "SMOKE TEST PASSED" -ForegroundColor Green
 }
 catch {

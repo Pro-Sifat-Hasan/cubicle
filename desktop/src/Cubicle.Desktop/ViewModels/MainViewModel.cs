@@ -45,6 +45,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Tools = new ToolsViewModel(() => _client, ShowError, Notice);
         Chat = new ChatViewModel(() => _client, ShowError);
         Automations = new AutomationsViewModel(() => _client, ShowError, Notice);
+        Onboarding = new OnboardingViewModel(() => _client, ShowError);
+        Onboarding.Finished += profile => _ = FinishOnboardingAsync(profile);
+        Onboarding.MissionChosen += title => _ = RunMissionAsync(title);
         AgentsPage.Changed += QueueRefresh;
         Tools.Changed += QueueRefresh;
         Automations.Changed += QueueRefresh;
@@ -60,6 +63,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ToolsViewModel Tools { get; }
     public ChatViewModel Chat { get; }
     public AutomationsViewModel Automations { get; }
+    public OnboardingViewModel Onboarding { get; }
 
     public ObservableCollection<Agent> Staff { get; } = [];
     public ObservableCollection<AssignmentViewModel> Assignments { get; } = [];
@@ -69,6 +73,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<MemoryViewModel> Memories { get; } = [];
     public ObservableCollection<AgentChoice> AssignTargets { get; } = [];
 
+    /// <summary>One-tap missions for the owner's profession, shown while there is no work yet.</summary>
+    public ObservableCollection<string> StarterMissions { get; } = [];
+
     // ---- connection / status ----
 
     [ObservableProperty] private bool _isConnected;
@@ -77,6 +84,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _usageText = "";
     [ObservableProperty] private int _selectedSection;
     [ObservableProperty] private string? _errorText;
+
+    /// <summary>True while first-run setup covers the window.</summary>
+    [ObservableProperty] private bool _showOnboarding;
+
+    /// <summary>Who the owner is and how they set up their staff; null until the gateway answers.</summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Greeting))]
+    private OwnerProfile? _profile;
 
     public int OpenQuestions => Inbox.Count;
 
@@ -90,6 +104,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             var hour = DateTime.Now.Hour;
             var part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
             var name = Ai.OwnerName.Trim();
+            if (Profile is { Onboarded: true, Passion: { } persona })
+            {
+                var text = persona.Greet(string.IsNullOrEmpty(name) ? "there" : name, Profile.AgentName, DateTime.Now.DayOfYear);
+                const string morning = "Good morning";
+                return text.StartsWith(morning, StringComparison.Ordinal) ? part + text[morning.Length..] : text;
+            }
             return string.IsNullOrEmpty(name) ? part : $"{part}, {name}";
         }
     }
@@ -187,6 +207,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 _catalog = await _client.GetCatalogAsync(ct);
                 await RefreshAllAsync();
                 await Ai.LoadAsync();
+                await LoadProfileAsync(ct);
                 IsConnected = true;
                 ConnectionText = "Office open";
 
@@ -344,6 +365,61 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             .OrderBy(t => t.CreatedAt)
             .Select(t => new SubtaskViewModel(t, names.GetValueOrDefault(t.Assignee, t.Assignee))));
     }
+
+    // ---- profile and onboarding ----
+
+    private OnboardingPacks? _packs;
+
+    private async Task LoadProfileAsync(CancellationToken ct)
+    {
+        var packs = await _client!.GetOnboardingAsync(ct);
+        ApplyPacks(packs);
+        if (!packs.Profile.Onboarded && !ShowOnboarding)
+        {
+            Onboarding.Begin(packs, Ai.OwnerName);
+            ShowOnboarding = true;
+        }
+    }
+
+    private void ApplyPacks(OnboardingPacks packs)
+    {
+        _packs = packs;
+        Profile = packs.Profile;
+        ThemeService.SetAccent(packs.Profile.Onboarded ? packs.Profile.Passion?.AccentColor : null);
+        Replace(StarterMissions, packs.Professions.FirstOrDefault(p => p.Id == packs.Profile.Profession)?.StarterMissions ?? []);
+        OnPropertyChanged(nameof(MainAgentName));
+    }
+
+    private Task FinishOnboardingAsync(OwnerProfile? profile) => SafeAsync(async () =>
+    {
+        ShowOnboarding = false;
+        if (profile is not null)
+            await Ai.LoadAsync(); // the owner's name may have changed
+        await LoadProfileAsync(_life.Token);
+        await RefreshAllAsync();
+        SelectedSection = TodaySection;
+    });
+
+    private Task RunMissionAsync(string mission) => SafeAsync(async () =>
+    {
+        var task = await _client!.CreateAssignmentAsync(mission, "");
+        await RefreshAllAsync();
+        SelectedAssignment = Assignments.FirstOrDefault(a => a.Task.Id == task.Id);
+    });
+
+    /// <summary>One-tap mission from the Today screen's empty state.</summary>
+    [RelayCommand]
+    private Task StartMission(string mission) => RunMissionAsync(mission);
+
+    /// <summary>Runs first-run setup again, for example to pick another passion.</summary>
+    [RelayCommand]
+    private Task RunSetupAgain() => SafeAsync(async () =>
+    {
+        var packs = await _client!.GetOnboardingAsync();
+        Onboarding.Begin(packs, Ai.OwnerName);
+        Onboarding.AgentName = MainAgentName is "Your main agent" ? "" : MainAgentName;
+        ShowOnboarding = true;
+    });
 
     // ---- commands ----
 
