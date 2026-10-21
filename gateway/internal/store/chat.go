@@ -67,9 +67,33 @@ func (s *Store) CreateConversation(ctx context.Context, agentID, title string) (
 	now := s.ms()
 	c := &Conversation{ID: newID("cnv"), AgentID: agentID, Title: strings.TrimSpace(title),
 		CreatedAt: fromMS(now), UpdatedAt: fromMS(now)}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO conversations (id, agent_id, title, created_at, updated_at) VALUES (?,?,?,?,?)`,
-		c.ID, c.AgentID, c.Title, now, now)
+	// A chat started without a title waits for the agent's model to name it after the first message.
+	_, err := s.db.ExecContext(ctx, `INSERT INTO conversations (id, agent_id, title, title_set, created_at, updated_at) VALUES (?,?,?,?,?,?)`,
+		c.ID, c.AgentID, c.Title, c.Title != "", now, now)
 	return c, err
+}
+
+// SetConversationTitle names a chat the owner did not name. It returns false when the chat already has its
+// title (so a late or repeated suggestion never overwrites it).
+func (s *Store) SetConversationTitle(ctx context.Context, id, title string) (bool, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return false, errors.New("title must not be empty")
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE conversations SET title = ?, title_set = 1 WHERE id = ? AND title_set = 0`,
+		preview(title, 80), id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// TitlePending reports whether the chat still waits for a title.
+func (s *Store) TitlePending(ctx context.Context, id string) bool {
+	var pending bool
+	err := s.db.QueryRowContext(ctx, `SELECT title_set = 0 FROM conversations WHERE id = ?`, id).Scan(&pending)
+	return err == nil && pending
 }
 
 const conversationSelect = `SELECT c.id, c.agent_id, c.title, c.created_at, c.updated_at,
@@ -173,10 +197,7 @@ func (s *Store) SendMessage(ctx context.Context, conversationID, content string)
 			VALUES (?,?,?,?,?,?,?)`, msg.ID, conversationID, MessageOwner, content, task.ID, StatusDone, now); err != nil {
 			return err
 		}
-		if title == "" {
-			title = preview(content, 60)
-		}
-		_, err = tx.ExecContext(ctx, `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?`, title, now, conversationID)
+		_, err = tx.ExecContext(ctx, `UPDATE conversations SET updated_at = ? WHERE id = ?`, now, conversationID)
 		return err
 	})
 	return msg, task, err

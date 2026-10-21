@@ -147,3 +147,56 @@ func TestPruneKeepsRecentHistoryAndDropsOld(t *testing.T) {
 		t.Fatalf("activity = %d", len(list))
 	}
 }
+
+func TestChatTitlesComeFromTheModelAndSessionsStaySeparate(t *testing.T) {
+	h := newHarness(t)
+	var first, second store.Conversation
+	h.do("POST", "/api/v1/conversations", adminTok, map[string]string{"agent_id": "manager"}, 201, &first)
+	h.do("POST", "/api/v1/conversations", adminTok, map[string]string{"agent_id": "manager"}, 201, &second)
+	h.do("POST", "/api/v1/conversations", adminTok, map[string]string{"agent_id": "manager", "title": "Mine"}, 201, nil)
+
+	// Sending a message no longer names the chat after the owner's words: it waits for the model.
+	h.do("POST", "/api/v1/conversations/"+first.ID+"/messages", adminTok, map[string]string{"content": "Please plan my trip to Rome in May"}, 201, nil)
+	var detail api.ConversationDetail
+	h.do("GET", "/api/v1/conversations/"+first.ID, adminTok, nil, 200, &detail)
+	if detail.Title != "" {
+		t.Fatalf("the title should wait for the model, got %q", detail.Title)
+	}
+	var claim api.ClaimResponse
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}, "lane": "chat"}, 200, &claim)
+	if !claim.TitlePending {
+		t.Fatal("the worker should be told the chat still needs a title")
+	}
+
+	h.do("PUT", "/internal/v1/conversations/"+first.ID+"/title", workerTok, map[string]string{"title": "  Rome   trip in May "}, 204, nil)
+	h.do("PUT", "/internal/v1/conversations/"+first.ID+"/title", workerTok, map[string]string{"title": "Something else"}, 204, nil) // too late
+	h.do("PUT", "/internal/v1/conversations/"+first.ID+"/title", workerTok, map[string]string{"title": " "}, 400, nil)
+	h.do("PUT", "/internal/v1/conversations/nope/title", workerTok, map[string]string{"title": "x"}, 404, nil)
+	h.do("PUT", "/internal/v1/conversations/"+first.ID+"/title", adminTok, map[string]string{"title": "x"}, 401, nil)
+	h.do("GET", "/api/v1/conversations/"+first.ID, adminTok, nil, 200, &detail)
+	if detail.Title != "Rome trip in May" {
+		t.Fatalf("the first title stays and is tidied, got %q", detail.Title)
+	}
+	h.do("POST", "/internal/v1/tasks/"+claim.Task.ID+"/complete", workerTok, map[string]string{"result": "Sure, here is a plan"}, 204, nil)
+
+	// A new chat with the same agent starts with a clean history: nothing from the first chat leaks in.
+	h.do("POST", "/api/v1/conversations/"+second.ID+"/messages", adminTok, map[string]string{"content": "Hello"}, 201, nil)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}, "lane": "chat"}, 200, &claim)
+	if len(claim.History) != 0 || !claim.TitlePending || claim.Task.ConversationID != second.ID {
+		t.Fatalf("a new chat must start separate and untitled: %+v", claim)
+	}
+
+	// A chat the owner named is never renamed, and does not ask for a title.
+	var named store.Conversation
+	h.do("POST", "/api/v1/conversations", adminTok, map[string]string{"agent_id": "manager", "title": "Taxes"}, 201, &named)
+	h.do("POST", "/api/v1/conversations/"+named.ID+"/messages", adminTok, map[string]string{"content": "Hi"}, 201, nil)
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}, "lane": "chat"}, 200, &claim)
+	if claim.TitlePending {
+		t.Fatal("an owner-named chat needs no title")
+	}
+	h.do("PUT", "/internal/v1/conversations/"+named.ID+"/title", workerTok, map[string]string{"title": "Other"}, 204, nil)
+	h.do("GET", "/api/v1/conversations/"+named.ID, adminTok, nil, 200, &detail)
+	if detail.Title != "Taxes" {
+		t.Fatalf("the owner's title must stay, got %q", detail.Title)
+	}
+}

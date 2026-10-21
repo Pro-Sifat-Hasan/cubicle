@@ -21,6 +21,7 @@ _ROSTER_LINE = re.compile(r"^- (?P<id>[a-z0-9_-]+) \((?P<title>[^,)]*)", re.MULT
 _ASSIGNMENT = re.compile(r"^(?:OVERALL )?ASSIGNMENT: (?P<title>.+)$", re.MULTILINE)
 _TASK = re.compile(r"^YOUR TASK: (?P<title>.+)$", re.MULTILINE)
 _PASSION = re.compile(r"<passion>(?P<passion>.+?)</passion>", re.DOTALL)
+_MESSAGE = re.compile(r"<message>(?P<message>.+?)</message>", re.DOTALL)
 _NAME = re.compile(r"^You are (?P<name>[^,.]+)")
 
 
@@ -34,6 +35,11 @@ class DemoLLM:
                   on_event: EventCallback | None = None, web: bool = True,
                   on_step: StepCallback | None = None) -> AgentResult:
         tokens_in = len(prompt) // 4
+
+        if json_schema is not None and prompt.startswith("TITLE REQUEST"):
+            words = (_first(_MESSAGE, prompt) or "New chat").split()
+            return AgentResult(text=json.dumps({"title": " ".join(words[:5]).capitalize()}), input_tokens=tokens_in,
+                               output_tokens=6)
 
         if json_schema is not None and prompt.startswith("PERSONA REQUEST"):
             passion = _first(_PASSION, prompt) or "your passion"

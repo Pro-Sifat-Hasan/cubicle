@@ -127,6 +127,7 @@ func (s *Store) migrate() error {
 		{"tasks", "conversation_id", "TEXT NOT NULL DEFAULT ''"},
 		{"routines", "agent_id", "TEXT NOT NULL DEFAULT ''"},
 		{"inbox", "kind", "TEXT NOT NULL DEFAULT 'question'"},
+		{"conversations", "title_set", "INTEGER NOT NULL DEFAULT 1"},
 	} {
 		if err := s.addColumn(c.table, c.column, c.def); err != nil {
 			return err

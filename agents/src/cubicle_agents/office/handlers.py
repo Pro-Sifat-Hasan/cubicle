@@ -12,6 +12,7 @@ instructions, tools, MCP servers and skills and hands back its answer.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -264,8 +265,14 @@ class TaskHandler:
         message = task.get("description") or task["title"]
         context = prompts.chat_context(claim.human_answers)
         prompt = f"{context}\n\n---\n\n{message}" if context else message
-        result = await self._run(employee, claim, prompt, mode=prompts.MODE_CHAT, may_ask=may_ask,
-                                 history=history, on_event=on_event)
+        # The first message of a chat names it, while the reply is being written.
+        naming = asyncio.create_task(self._name_chat(employee, claim, message)) if claim.title_pending else None
+        try:
+            result = await self._run(employee, claim, prompt, mode=prompts.MODE_CHAT, may_ask=may_ask,
+                                     history=history, on_event=on_event)
+        finally:
+            if naming is not None:
+                await asyncio.gather(naming, return_exceptions=True)  # never left running, never fails the reply
         if result.question:  # the reply waits for the owner; their answer resumes this same reply
             await self._ask_owner(employee, task["id"], result)
             return
@@ -276,6 +283,24 @@ class TaskHandler:
         if result.warnings:
             text += "\n\n> " + " ".join(result.warnings)
         await gw.complete(task["id"], text)
+
+    async def _name_chat(self, employee: Employee, claim: Claim, message: str) -> None:
+        """Have the model title a new chat from its first message; fall back to the start of the message."""
+        conversation_id = claim.task.get("conversation_id") or ""
+        if not conversation_id:
+            return
+        title = ""
+        try:
+            result = await self._run(employee, claim, prompts.title_prompt(message), json_schema=prompts.TITLE_SCHEMA)
+            title = prompts.clean_title(json.loads(result.text).get("title", ""))
+        except Exception:  # a title is a nicety: a plain one is better than none
+            log.warning("could not generate a chat title", exc_info=True)
+        title = title or prompts.clean_title("", message)
+        if title:
+            try:
+                await self.ctx.gateway.set_conversation_title(conversation_id, title)
+            except Exception:
+                log.debug("could not set the chat title", exc_info=True)
 
     async def _ask_owner(self, employee: Employee, task_id: str, result: AgentResult) -> None:
         """Park the task and put the question, or the approval request, in the owner's inbox."""

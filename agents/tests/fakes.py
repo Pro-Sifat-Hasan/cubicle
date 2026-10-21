@@ -23,6 +23,7 @@ class FakeGateway:
         self.memories: list[str] = list(memories or [])
         self.progress_events: list[tuple[str, str, str]] = []
         self.steps: list[tuple[str, str, dict[str, Any]]] = []
+        self.titles: dict[str, str] = {}
         self.assignments: list[tuple[str, str, str]] = []
         self.logs: list[str] = []
         self.question_kinds: list[str] = []
@@ -58,6 +59,9 @@ class FakeGateway:
 
     async def progress(self, task_id, status="", text=""):
         self.progress_events.append((task_id, status, text))
+
+    async def set_conversation_title(self, conversation_id, title):
+        self.titles.setdefault(conversation_id, title)
 
     async def save_step(self, task_id, agent_id, step):
         self.steps.append((task_id, agent_id, dict(step)))

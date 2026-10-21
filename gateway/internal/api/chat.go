@@ -135,6 +135,34 @@ func (s *Server) handleProgress(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleSetTitle lets the worker name a chat from its first message. It does nothing when the chat already has a title.
+func (s *Server) handleSetTitle(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Title string `json:"title"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	in.Title = strings.Join(strings.Fields(in.Title), " ")
+	if err := checkLen("title", in.Title, 200, true); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if _, err := s.store.GetConversation(r.Context(), r.PathValue("id")); err != nil {
+		s.storeErr(w, err)
+		return
+	}
+	changed, err := s.store.SetConversationTitle(r.Context(), r.PathValue("id"), in.Title)
+	if err != nil {
+		s.storeErr(w, err)
+		return
+	}
+	if changed {
+		s.publishConversation(r, r.PathValue("id"))
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleWorkerAssignment lets an agent with the "assignments" tool start an
 // assignment for the main agent from a chat.
 func (s *Server) handleWorkerAssignment(w http.ResponseWriter, r *http.Request) {

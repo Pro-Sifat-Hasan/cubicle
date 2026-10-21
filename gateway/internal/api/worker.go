@@ -20,6 +20,8 @@ type ClaimResponse struct {
 	HumanAnswers      []*store.InboxItem `json:"human_answers"`
 	// History is the conversation so far, for chat tasks (oldest first).
 	History []*store.Message `json:"history"`
+	// TitlePending is true while the chat has no title yet: the agent's model names it from the first message.
+	TitlePending bool `json:"title_pending"`
 }
 
 // handleClaim long-polls for up to 25s for a runnable task.
@@ -69,6 +71,7 @@ func (s *Server) handleClaim(w http.ResponseWriter, r *http.Request) {
 func (s *Server) buildClaim(ctx context.Context, t *store.Task) ClaimResponse {
 	resp := ClaimResponse{Task: t, DependencyResults: []*store.Task{}, HumanAnswers: []*store.InboxItem{}, History: []*store.Message{}}
 	if t.ConversationID != "" {
+		resp.TitlePending = s.store.TitlePending(ctx, t.ConversationID)
 		if msgs, err := s.store.Messages(ctx, t.ConversationID, 60); err == nil {
 			for _, m := range msgs {
 				if m.TaskID == t.ID && m.Role == store.MessageOwner {

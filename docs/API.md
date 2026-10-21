@@ -88,7 +88,7 @@ the bundle; they are rewritten to the ids actually created.
 | Method & path | Body | Returns |
 |---|---|---|
 | `GET /api/v1/conversations` | | conversations, most recent first, with `last_message` and `busy` |
-| `POST /api/v1/conversations` | `{agent_id, title?}` | new conversation (`201`) |
+| `POST /api/v1/conversations` | `{agent_id, title?}` | new conversation (`201`). Without a `title` the chat is untitled until the agent's model names it from the first message; a title you give is never replaced |
 | `GET /api/v1/conversations/{id}` | | conversation + `messages` (oldest first; `role` is `owner` or `agent`, `status` is `done` or `failed`) |
 | `POST /api/v1/conversations/{id}/messages` | `{content}` | your message (`201`); the reply arrives as a `conversation.updated` event |
 | `DELETE /api/v1/conversations/{id}` | | `204`; pending replies are cancelled |
@@ -165,12 +165,13 @@ stored), `assignment.done`, `inbox.new`, `inbox.answered`, `agent.status`, `agen
 | `POST /internal/v1/worker/start` | | called once on start: tasks left `in_progress` by a previous worker are queued again; returns `{requeued}` |
 | `GET /internal/v1/agents?after=` | | `{revision, agents}`: enabled agents with resolved `mcp` servers and `skill_docs`. With `after=<revision>` it long-polls (≤ 25 s, `204` if unchanged) |
 | `PATCH /internal/v1/agents/{id}/status` | `{status, current_task_id}` | `idle` / `working` / `waiting` / `offline` |
-| `POST /internal/v1/tasks/claim` | `{agent_ids: [], lane}` | `lane` is `work`, `chat` or empty. Long-poll ≤ 25 s; `200` with `{task, parent, dependency_results, human_answers, history}`, `204` if none, `503` if the breaker is open |
+| `POST /internal/v1/tasks/claim` | `{agent_ids: [], lane}` | `lane` is `work`, `chat` or empty. Long-poll ≤ 25 s; `200` with `{task, parent, dependency_results, human_answers, history, title_pending}` (`history` holds only that chat's earlier messages; `title_pending` is true while the chat still needs a title), `204` if none, `503` if the breaker is open |
 | `POST /internal/v1/tasks/{id}/delegate` | `{subtasks: [{title, description, assignee, depends_on: [index]}], synthesis: {title, description, assignee}}` | assignment → plan; assignees must be enabled agents |
 | `POST /internal/v1/tasks/{id}/complete` | `{result}` | a chat task's result becomes the agent's reply |
 | `POST /internal/v1/tasks/{id}/fail` | `{error}` | fails the parent and cancels siblings; a failed chat task becomes a failed reply |
 | `POST /internal/v1/tasks/{id}/ask` | `{employee_id, question, kind?}` | creates an inbox item and parks the task (an assignment step or a chat reply); `kind` is `question` (default) or `approval`. The answer arrives in `human_answers` when the task is claimed again |
 | `POST /internal/v1/tasks/{id}/progress` | `{status?, text?}` | relayed to the app as `task.progress` |
+| `PUT /internal/v1/conversations/{id}/title` | `{title}` | names an untitled chat (`204`); ignored when the chat already has a title |
 | `POST /internal/v1/tasks/{id}/steps` | `{id, agent_id?, kind, name?, input?, output?, status?}` | records a step and relays it as `task.step`; the same `id` again updates it (a tool call gaining its output). Long fields are cut, a task keeps at most 400 steps, and steps still `running` are marked `done` when the task finishes or pauses |
 | `POST /internal/v1/assignments` | `{title, description, agent_id, source_task_id?}` | an agent starts an assignment for the main agent (from a chat); `source_task_id` ties it to the reply that started it |
 | `POST /internal/v1/usage` | `{task_id, employee_id, input_tokens, output_tokens}` | feeds the circuit breaker |

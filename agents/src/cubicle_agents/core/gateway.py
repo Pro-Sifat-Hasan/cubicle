@@ -26,6 +26,8 @@ class Claim:
     human_answers: list[dict[str, Any]] = field(default_factory=list)
     # Earlier messages of the conversation, for chat tasks (oldest first).
     history: list[dict[str, Any]] = field(default_factory=list)
+    # A chat's first message: the chat has no title yet and the agent's model names it.
+    title_pending: bool = False
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Claim:
@@ -35,6 +37,7 @@ class Claim:
             dependency_results=data.get("dependency_results") or [],
             human_answers=data.get("human_answers") or [],
             history=data.get("history") or [],
+            title_pending=bool(data.get("title_pending")),
         )
 
 
@@ -83,6 +86,9 @@ class Gateway(Protocol):
 
     async def save_step(self, task_id: str, agent_id: str, step: dict[str, Any]) -> None:
         """Record (or update, by id) something an agent did while working: a thought, a remark or a tool call."""
+
+    async def set_conversation_title(self, conversation_id: str, title: str) -> None:
+        """Name a chat that has no title yet (ignored when it already has one)."""
 
     async def log(self, agent_id: str, task_id: str, message: str) -> None:
         """Add a line to the activity log."""
@@ -167,6 +173,9 @@ class GatewayClient:
             "task_id": task_id, "employee_id": agent_id,
             "input_tokens": input_tokens, "output_tokens": output_tokens,
         })
+
+    async def set_conversation_title(self, conversation_id: str, title: str) -> None:
+        await self._send("PUT", f"/internal/v1/conversations/{conversation_id}/title", {"title": title[:200]})
 
     async def save_step(self, task_id: str, agent_id: str, step: dict[str, Any]) -> None:
         await self._send("POST", f"/internal/v1/tasks/{task_id}/steps", {"agent_id": agent_id, **step})

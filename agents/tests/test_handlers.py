@@ -425,3 +425,43 @@ def test_planning_runs_report_no_steps(tmp_path):
     llm = ScriptedLLM(plan_json({"title": "t", "description": "d", "assignee": "writer", "depends_on": []}))
     run(make_handler(gw, llm, tmp_path).handle(MANAGER, claim(kind="assignment", parent_id="")))
     assert llm.calls[0]["on_step"] is None
+
+
+class RoutedLLM(ScriptedLLM):
+    """Answers the title request and the chat reply by what they ask (they run side by side, in any order)."""
+
+    def __init__(self, title: str, reply: str) -> None:
+        super().__init__(supports_tools=True)
+        self.title, self.reply = title, reply
+
+    async def run(self, **kwargs):
+        self.calls.append(kwargs)
+        return AgentResult(self.title if kwargs.get("json_schema") is not None else self.reply, 10, 5)
+
+
+def test_a_new_chat_is_titled_by_the_model_while_the_reply_is_written(tmp_path):
+    gw = FakeGateway()
+    llm = RoutedLLM(json.dumps({"title": '"Trip to Rome in May."'}), "Happy to help!")
+    c = chat_claim()
+    c.history, c.title_pending = [], True
+    run(make_handler(gw, llm, tmp_path).handle(WRITER, c))
+    assert gw.titles == {"cnv_1": "Trip to Rome in May"}
+    assert gw.completed["tsk_1"] == "Happy to help!"
+    titling = next(call for call in llm.calls if call["json_schema"] is not None)
+    assert "TITLE REQUEST" in titling["prompt"] and "Can you help with my trip?" in titling["prompt"]
+    assert titling["toolbox"] is None and titling["on_step"] is None
+
+
+def test_a_failed_title_falls_back_to_the_message_and_never_fails_the_reply(tmp_path):
+    gw = FakeGateway()
+    c = chat_claim()
+    c.history, c.title_pending = [], True
+    run(make_handler(gw, RoutedLLM("not json at all", "Reply"), tmp_path).handle(WRITER, c))
+    assert gw.titles == {"cnv_1": "Can you help with my trip?"} and gw.completed["tsk_1"] == "Reply"
+
+
+def test_a_chat_that_already_has_a_title_is_not_titled_again(tmp_path):
+    gw = FakeGateway()
+    llm = ScriptedLLM("Reply", supports_tools=True)
+    run(make_handler(gw, llm, tmp_path).handle(WRITER, chat_claim()))
+    assert gw.titles == {} and len(llm.calls) == 1

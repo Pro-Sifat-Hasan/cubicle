@@ -139,6 +139,7 @@ func (s *Server) Handler() http.Handler {
 	worker.HandleFunc("POST /internal/v1/assignments", s.handleWorkerAssignment)
 	worker.HandleFunc("POST /internal/v1/tasks/{id}/progress", s.handleProgress)
 	worker.HandleFunc("POST /internal/v1/tasks/{id}/steps", s.handleSaveStep)
+	worker.HandleFunc("PUT /internal/v1/conversations/{id}/title", s.handleSetTitle)
 	worker.HandleFunc("POST /internal/v1/tasks/claim", s.handleClaim)
 	worker.HandleFunc("GET /internal/v1/tasks/{id}", s.handleGetTask)
 	worker.HandleFunc("POST /internal/v1/tasks/{id}/delegate", s.handleDelegate)

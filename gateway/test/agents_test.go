@@ -272,9 +272,10 @@ func TestChatWithAgent(t *testing.T) {
 	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"writer"}, "lane": "work"}, 204, nil)
 	var claim api.ClaimResponse
 	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"writer"}, "lane": "chat"}, 200, &claim)
-	if claim.Task.Kind != store.KindChat || claim.Task.Description != "Hi Quill" || len(claim.History) != 0 {
+	if claim.Task.Kind != store.KindChat || claim.Task.Description != "Hi Quill" || len(claim.History) != 0 || !claim.TitlePending {
 		t.Fatalf("unexpected chat claim: %+v", claim)
 	}
+	h.do("PUT", "/internal/v1/conversations/"+c.ID+"/title", workerTok, map[string]string{"title": "Greeting Quill"}, 204, nil)
 	h.do("POST", "/internal/v1/tasks/"+claim.Task.ID+"/progress", workerTok, map[string]string{"status": "Thinking…"}, 204, nil)
 	h.do("POST", "/internal/v1/tasks/"+claim.Task.ID+"/complete", workerTok, map[string]string{"result": "Hello!"}, 204, nil)
 
@@ -288,7 +289,7 @@ func TestChatWithAgent(t *testing.T) {
 
 	var detail api.ConversationDetail
 	h.do("GET", "/api/v1/conversations/"+c.ID, adminTok, nil, 200, &detail)
-	if len(detail.Messages) != 5 || detail.Messages[4].Status != "failed" || !detail.Busy || detail.Title != "Hi Quill" {
+	if len(detail.Messages) != 5 || detail.Messages[4].Status != "failed" || !detail.Busy || detail.Title != "Greeting Quill" {
 		t.Fatalf("unexpected conversation: %+v", detail)
 	}
 	var top []store.Task
