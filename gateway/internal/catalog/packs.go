@@ -30,6 +30,7 @@ type Teammate struct {
 	Description  string   `json:"description"`
 	Instructions string   `json:"instructions"`
 	Tools        []string `json:"tools"`
+	Skills       []string `json:"skills"` // skill template ids the teammate comes with
 }
 
 // PackRoutine is a recurring assignment a profession pack sets up. Only routines
@@ -108,6 +109,16 @@ func validateProfession(p Profession) error {
 		if ids[t.ID] {
 			return fmt.Errorf("duplicate teammate %q", t.ID)
 		}
+		for _, tool := range t.Tools {
+			if !validTool(tool) {
+				return fmt.Errorf("teammate %q: unknown tool %q", t.ID, tool)
+			}
+		}
+		for _, sk := range t.Skills {
+			if _, ok := SkillTemplateByID(sk); !ok {
+				return fmt.Errorf("teammate %q: unknown skill %q", t.ID, sk)
+			}
+		}
 		ids[t.ID] = true
 	}
 	for _, r := range p.Routines {
@@ -119,6 +130,15 @@ func validateProfession(p Profession) error {
 		}
 	}
 	return nil
+}
+
+func validTool(id string) bool {
+	for _, t := range tools {
+		if t.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Passions returns every built-in passion, sorted by title.

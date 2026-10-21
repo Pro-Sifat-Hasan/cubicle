@@ -15,6 +15,11 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "research-report",
+        "seo-basics",
+        "fact-checking"
       ]
     },
     {
@@ -28,6 +33,10 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "copywriting",
+        "proofreading"
       ]
     },
     {
@@ -41,6 +50,10 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "social-post",
+        "copywriting"
       ]
     },
     {
@@ -54,6 +67,9 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "data-analysis"
       ]
     }
   ],

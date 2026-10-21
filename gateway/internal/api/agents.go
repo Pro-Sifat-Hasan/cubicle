@@ -29,8 +29,11 @@ func (s *Server) ensureOffice(ctx context.Context) error {
 		roster = catalog.DefaultRoster()
 	}
 	seeded, err := s.store.SeedAgents(ctx, roster)
-	if err != nil || !seeded {
+	if err != nil {
 		return err
+	}
+	if !seeded {
+		return s.upgradeBuiltIns(ctx)
 	}
 	// Give the starting team the skills their roles come with.
 	skillIDs := map[string]string{}
@@ -56,7 +59,60 @@ func (s *Server) ensureOffice(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	return s.store.SetFlag(ctx, builtInsFlag)
+}
+
+// builtInsFlag marks the one-time upgrade that gives the built-in agents the tools and skills of this release.
+const builtInsFlag = "builtins-2026-10"
+
+// defaultIDs maps the starting team's ids to the role templates they were made from.
+var defaultIDs = map[string]string{
+	"manager": "chief-of-staff", "researcher": "researcher", "writer": "writer", "engineer": "engineer",
+	"analyst": "analyst", "reviewer": "reviewer",
+}
+
+// upgradeBuiltIns runs once on an existing office: agents made from a role template get the terminal tool
+// and the skills their role now comes with. It only adds; anything the owner removed from an agent earlier
+// stays removed, and it never runs again, so later choices are kept.
+func (s *Server) upgradeBuiltIns(ctx context.Context) error {
+	if done, err := s.store.Flag(ctx, builtInsFlag); err != nil || done {
+		return err
+	}
+	agents, err := s.store.ListAgents(ctx)
+	if err != nil {
+		return err
+	}
+	for _, a := range agents {
+		tid := a.TemplateID
+		if tid == "" {
+			tid = defaultIDs[a.ID]
+		}
+		t, ok := catalog.AgentTemplateByID(tid)
+		if !ok {
+			continue
+		}
+		changed := false
+		if slices.Contains(t.Tools, catalog.ToolTerminal) && !slices.Contains(a.Tools, catalog.ToolTerminal) {
+			a.Tools = append(a.Tools, catalog.ToolTerminal)
+			changed = true
+		}
+		for _, sid := range t.Skills {
+			id, err := s.installSkillTemplate(ctx, sid)
+			if err != nil {
+				return err
+			}
+			if !slices.Contains(a.Skills, id) {
+				a.Skills = append(a.Skills, id)
+				changed = true
+			}
+		}
+		if changed {
+			if _, err := s.store.UpdateAgent(ctx, *a); err != nil {
+				return err
+			}
+		}
+	}
+	return s.store.SetFlag(ctx, builtInsFlag)
 }
 
 // legacyRoster reads the staff.json format of earlier releases.

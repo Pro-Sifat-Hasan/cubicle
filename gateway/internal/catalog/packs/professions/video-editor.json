@@ -15,6 +15,10 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "copywriting",
+        "proofreading"
       ]
     },
     {
@@ -28,6 +32,9 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "copywriting"
       ]
     },
     {
@@ -41,6 +48,10 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "proofreading",
+        "translation-check"
       ]
     },
     {
@@ -54,6 +65,9 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "project-planning"
       ]
     }
   ],

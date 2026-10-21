@@ -1,12 +1,19 @@
 package test
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/api"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/catalog"
+	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/config"
+	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/events"
+	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/secrets"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/store"
 )
 
@@ -292,5 +299,104 @@ func TestTaskActivityCoversTheAssignmentAndItsSubtasks(t *testing.T) {
 	if len(got) != 3 || got[0].Message != "New assignment: Report" || got[1].Message != "Max is planning." ||
 		got[2].Message != "Tool: Searching the web…" {
 		t.Fatalf("want the assignment's own trail, oldest first, got %+v", got)
+	}
+}
+
+func TestEveryTemplateAndPackUsesRealToolsAndSkills(t *testing.T) {
+	toolIDs := map[string]bool{}
+	for _, tl := range catalog.Tools() {
+		toolIDs[tl.ID] = true
+	}
+	for _, a := range catalog.AgentTemplates() {
+		for _, tl := range a.Tools {
+			if !toolIDs[tl] {
+				t.Errorf("template %s has unknown tool %q", a.ID, tl)
+			}
+		}
+		if len(a.Skills) == 0 {
+			t.Errorf("template %s comes with no skills", a.ID)
+		}
+		for _, sk := range a.Skills {
+			if _, ok := catalog.SkillTemplateByID(sk); !ok {
+				t.Errorf("template %s has unknown skill %q", a.ID, sk)
+			}
+		}
+	}
+	for _, sk := range catalog.SkillTemplates() {
+		if strings.TrimSpace(sk.Content) == "" || sk.Description == "" {
+			t.Errorf("skill %s is incomplete", sk.ID)
+		}
+	}
+}
+
+func TestDevelopersGetTheTerminalAndTheirSkills(t *testing.T) {
+	h := newHarness(t)
+	var dev struct {
+		Tools  []string `json:"tools"`
+		Skills []string `json:"skills"`
+	}
+	h.do("GET", "/api/v1/agents/engineer", adminTok, nil, 200, &dev)
+	if !contains(dev.Tools, "terminal") || len(dev.Skills) < 6 {
+		t.Fatalf("the developer should have the terminal and its skills: %+v", dev)
+	}
+	var res struct{ Hired []store.Agent }
+	h.do("POST", "/api/v1/onboarding", adminTok, map[string]any{"agent_name": "Nova", "profession": "software-engineer", "passion": "gaming"}, 200, &res)
+	for _, a := range res.Hired {
+		if len(a.Skills) == 0 {
+			t.Errorf("%s was hired without skills", a.Name)
+		}
+		if a.ID == "pr-reviewer" && !contains(a.Tools, "terminal") {
+			t.Errorf("the PR reviewer should be able to run tests")
+		}
+	}
+}
+
+func TestExistingOfficeIsUpgradedOnceWithoutOverridingLaterChoices(t *testing.T) {
+	dir := t.TempDir()
+	open := func() (*store.Store, *api.Server) {
+		st, err := store.Open(filepath.Join(dir, "office.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { st.Close() })
+		box, err := secrets.Open(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg := &config.Config{Home: dir, AdminToken: adminTok, WorkerToken: workerTok, DailyTokenBudget: 1000}
+		return st, api.New(cfg, st, events.NewHub(), box, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}
+	ctx := context.Background()
+	st, _ := open()
+	// An office from an earlier release: the developer has no terminal and no skills.
+	dev, err := st.GetAgent(ctx, "engineer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := *dev
+	old.Tools, old.Skills = []string{"files", "web", "memory"}, []string{}
+	if _, err := st.UpdateAgent(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ClearFlag(ctx, "builtins-2026-10"); err != nil {
+		t.Fatal(err)
+	}
+
+	st, _ = open() // starting the gateway runs the upgrade
+	dev, _ = st.GetAgent(ctx, "engineer")
+	if !contains(dev.Tools, "terminal") || len(dev.Skills) < 6 {
+		t.Fatalf("the developer was not upgraded: %+v", dev)
+	}
+
+	// The owner then removes the terminal; a restart must not put it back.
+	kept := *dev
+	kept.Tools = []string{"files", "web", "memory"}
+	if _, err := st.UpdateAgent(ctx, kept); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = open()
+	dev, _ = st.GetAgent(ctx, "engineer")
+	if contains(dev.Tools, "terminal") {
+		t.Fatalf("an owner's choice was overridden: %+v", dev.Tools)
 	}
 }

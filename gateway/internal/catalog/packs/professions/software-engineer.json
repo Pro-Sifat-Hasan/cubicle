@@ -14,7 +14,13 @@
       "tools": [
         "files",
         "web",
-        "memory"
+        "memory",
+        "terminal"
+      ],
+      "skills": [
+        "code-review",
+        "security-review",
+        "git-workflow"
       ]
     },
     {
@@ -27,7 +33,12 @@
       "tools": [
         "files",
         "web",
-        "memory"
+        "memory",
+        "terminal"
+      ],
+      "skills": [
+        "debugging",
+        "test-writing"
       ]
     },
     {
@@ -41,6 +52,10 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "technical-writing",
+        "proofreading"
       ]
     },
     {
@@ -54,6 +69,10 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "daily-briefing",
+        "meeting-notes"
       ]
     }
   ],

@@ -46,6 +46,29 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 	return out, err
 }
 
+// Flag reports whether a one-time step (a data upgrade) has already run.
+func (s *Store) Flag(ctx context.Context, name string) (bool, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, "flag:"+name).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil && v == "1", err
+}
+
+// SetFlag records that a one-time step has run.
+func (s *Store) SetFlag(ctx context.Context, name string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, '1')
+		ON CONFLICT(key) DO UPDATE SET value = '1'`, "flag:"+name)
+	return err
+}
+
+// ClearFlag forgets a one-time step, so it runs again (used by tests).
+func (s *Store) ClearFlag(ctx context.Context, name string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, "flag:"+name)
+	return err
+}
+
 func (s *Store) PutSettings(ctx context.Context, v Settings) error {
 	raw, err := json.Marshal(v)
 	if err != nil {

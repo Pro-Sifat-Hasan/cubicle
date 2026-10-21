@@ -110,7 +110,10 @@ func (t SkillTemplate) Skill() store.Skill {
 	return store.Skill{ID: t.ID, Name: t.Name, Description: t.Description, Content: t.Content, TemplateID: t.ID, Enabled: true}
 }
 
-var skillTemplates = []SkillTemplate{
+// skillTemplates is every built-in skill: the core ones here, and the ones in skills_more.go.
+var skillTemplates = append(append([]SkillTemplate(nil), coreSkills...), moreSkills...)
+
+var coreSkills = []SkillTemplate{
 	{
 		ID: "email-writing", Name: "email-writing",
 		Description: "Use when drafting or replying to an email: structure, tone and a ready-to-send result.",

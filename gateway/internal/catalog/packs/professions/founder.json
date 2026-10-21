@@ -14,6 +14,10 @@
       "tools": [
         "files",
         "memory"
+      ],
+      "skills": [
+        "email-writing",
+        "customer-reply"
       ]
     },
     {
@@ -27,6 +31,10 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "email-writing",
+        "proofreading"
       ]
     },
     {
@@ -40,6 +48,10 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "research-report",
+        "fact-checking"
       ]
     },
     {
@@ -53,6 +65,10 @@
         "files",
         "web",
         "memory"
+      ],
+      "skills": [
+        "project-planning",
+        "daily-briefing"
       ]
     }
   ],

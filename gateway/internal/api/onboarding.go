@@ -316,9 +316,17 @@ func (s *Server) applyOnboarding(ctx context.Context, in onboardingInput, prof c
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return nil, err
 		}
+		var skillIDs []string
+		for _, sk := range t.Skills {
+			id, err := s.installSkillTemplate(ctx, sk)
+			if err != nil {
+				return nil, err
+			}
+			skillIDs = append(skillIDs, id)
+		}
 		a, err := s.store.CreateAgent(ctx, store.Agent{
 			ID: t.ID, Name: t.Name, Title: t.Title, Avatar: t.Avatar, Description: t.Description,
-			Instructions: t.Instructions, Tools: t.Tools,
+			Instructions: t.Instructions, Tools: t.Tools, Skills: skillIDs,
 		}, true)
 		if err != nil {
 			return nil, err

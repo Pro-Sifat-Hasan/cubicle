@@ -29,7 +29,7 @@ func TestOfficeStartsWithDefaultTeam(t *testing.T) {
 	if !slices.Equal(main.Team, []string{"researcher", "writer", "engineer", "analyst", "reviewer"}) {
 		t.Fatalf("main agent team = %v", main.Team)
 	}
-	if agents["researcher"].Instructions == "" || len(agents["researcher"].Skills) != 1 {
+	if agents["researcher"].Instructions == "" || len(agents["researcher"].Skills) != 2 {
 		t.Fatalf("specialists should come with instructions and their role's skills: %+v", agents["researcher"])
 	}
 }
@@ -154,7 +154,7 @@ func TestWorkerRosterResolvesExtensionsAndLongPolls(t *testing.T) {
 	if slices.Contains(byID["manager"].Team, "analyst") {
 		t.Fatal("disabled agents must be left out of teams")
 	}
-	if w := byID["writer"]; len(w.MCP) != 1 || w.MCP[0].Command != "uvx" || len(w.SkillDocs) != 1 || w.SkillDocs[0].Content == "" {
+	if w := byID["writer"]; len(w.MCP) != 1 || w.MCP[0].Command != "uvx" || len(w.SkillDocs) != 3 || w.SkillDocs[0].Content == "" {
 		t.Fatalf("writer should get only enabled servers and full skill docs: %+v", w)
 	}
 	// Nothing changed since this revision: the long-poll times out with 204.
@@ -225,7 +225,7 @@ func TestPluginInstallAndUninstall(t *testing.T) {
 	h := newHarness(t)
 	var p store.Plugin
 	h.do("POST", "/api/v1/plugins", adminTok, map[string]any{"catalog_id": "research-desk"}, 201, &p)
-	if len(p.Agents) != 1 || len(p.MCPServers) != 1 || len(p.Skills) != 1 {
+	if len(p.Agents) != 1 || len(p.MCPServers) != 1 || len(p.Skills) != 2 {
 		t.Fatalf("plugin contents: %+v", p)
 	}
 	agent := h.agents()[p.Agents[0]]
