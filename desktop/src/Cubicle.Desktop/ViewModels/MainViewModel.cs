@@ -46,6 +46,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Chat = new ChatViewModel(() => _client, ShowError);
         Automations = new AutomationsViewModel(() => _client, ShowError, Notice);
         Onboarding = new OnboardingViewModel(() => _client, ShowError);
+        Chat.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ChatViewModel.Selected) && Chat.Selected is not null)
+                ShowRequests = false;
+        };
         Onboarding.Finished += profile => _ = FinishOnboardingAsync(profile);
         Onboarding.MissionChosen += title => _ = RunMissionAsync(title);
         AgentsPage.Changed += QueueRefresh;
@@ -71,6 +76,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<ActivityLine> SelectedActivity { get; } = [];
     public ObservableCollection<InboxItemViewModel> Inbox { get; } = [];
     public ObservableCollection<ActivityItem> Activity { get; } = [];
+    public ObservableCollection<RequestHistoryViewModel> RequestHistory { get; } = [];
     public ObservableCollection<MemoryViewModel> Memories { get; } = [];
     public ObservableCollection<AgentChoice> AssignTargets { get; } = [];
 
@@ -243,7 +249,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 Notify?.Invoke("Done ✅", evt.Data.GetProperty("title").GetString() ?? "An assignment is finished.");
                 break;
             case "inbox.new":
-                Notify?.Invoke("Your staff have a question", evt.Data.GetProperty("question").GetString() ?? "");
+                Notify?.Invoke(evt.Data.TryGetProperty("kind", out var kind) && kind.GetString() == InboxItem.ApprovalKind
+                    ? "Your staff need your approval" : "Your staff have a question",
+                    (evt.Data.GetProperty("question").GetString() ?? "").Replace("**", ""));
                 break;
             case "breaker.tripped":
                 Notify?.Invoke("Work paused", "Daily token budget reached. Open Cubicle to resume.");
@@ -281,7 +289,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var statusTask = c.GetStatusAsync();
         var agentsTask = c.GetAgentsAsync();
         var assignmentsTask = c.GetAssignmentsAsync(100);
-        var inboxTask = c.GetInboxAsync("open");
+        var inboxTask = c.GetInboxAsync(null); // open requests, and the answered ones for the history
         var routinesTask = c.GetRoutinesAsync();
         var activityTask = c.GetActivityAsync(150);
         var memoriesTask = c.GetMemoriesAsync();
@@ -329,10 +337,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // Keep half-typed answers when the inbox refreshes.
         var drafts = Inbox.ToDictionary(i => i.Item.Id, i => i.AnswerText);
-        Replace(Inbox, inboxTask.Result.Select(i => new InboxItemViewModel(i, names.GetValueOrDefault(i.EmployeeId, i.EmployeeId), SendAnswerAsync)
+        Replace(Inbox, inboxTask.Result.Where(i => i.Status == "open").Select(i => new InboxItemViewModel(i, names.GetValueOrDefault(i.EmployeeId, i.EmployeeId), SendAnswerAsync)
         {
             AnswerText = drafts.GetValueOrDefault(i.Id, ""),
         }));
+        Replace(RequestHistory, inboxTask.Result.Where(i => i.Status == "answered").OrderByDescending(i => i.CreatedAt).Take(25)
+            .Select(i => new RequestHistoryViewModel(i, names.GetValueOrDefault(i.EmployeeId, i.EmployeeId))));
+        Chat.SetRequests(Inbox.ToList());
+        Chat.RefreshLive();
         OnPropertyChanged(nameof(OpenQuestions));
         OnPropertyChanged(nameof(Summary));
 
@@ -530,10 +542,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             await _client!.CancelTaskAsync(a.Task.Id);
     });
 
-    private Task SendAnswerAsync(InboxItemViewModel item) => SafeAsync(async () =>
+    private Task SendAnswerAsync(InboxItemViewModel item, string? decision) => SafeAsync(async () =>
     {
-        await _client!.AnswerAsync(item.Item.Id, item.AnswerText.Trim());
+        await _client!.AnswerAsync(item.Item.Id, item.AnswerText.Trim(), decision);
         Inbox.Remove(item);
+        Chat.SetRequests(Inbox.ToList());
         OnPropertyChanged(nameof(OpenQuestions));
         OnPropertyChanged(nameof(Summary));
     });
@@ -560,30 +573,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void OpenDataFolder() => Open(CubiclePaths.Home);
 
-    /// <summary>Opens the folder where the staff saved files for the selected assignment.</summary>
-    [RelayCommand]
-    private void OpenAssignmentFiles()
-    {
-        if (SelectedAssignment is null)
-            return;
-        OpenWorkspace(SelectedAssignment.Task.Id, "No files were saved for this assignment.");
-    }
+    // ---- inbox: the "Needs you" thread ----
 
-    /// <summary>Opens the folder where an agent saved files during the open chat.</summary>
-    [RelayCommand]
-    private void OpenChatFiles()
-    {
-        if (Chat.Selected is { } c)
-            OpenWorkspace(c.Conversation.Id, "No files were saved in this chat yet.");
-    }
+    /// <summary>True while the Inbox shows the requests thread (questions and approvals) instead of a chat.</summary>
+    [ObservableProperty] private bool _showRequests;
 
-    private void OpenWorkspace(string id, string missing)
+    [RelayCommand]
+    private void OpenRequests()
     {
-        var folder = Path.Join(CubiclePaths.WorkspaceDirectory, id);
-        if (Directory.Exists(folder))
-            Open(folder);
-        else
-            ErrorText = missing;
+        Chat.Selected = null;
+        ShowRequests = true;
     }
 
     [RelayCommand]

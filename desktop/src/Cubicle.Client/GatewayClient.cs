@@ -58,6 +58,10 @@ public sealed class GatewayClient : IDisposable
     public Task<List<ActivityItem>> GetActivityAsync(int limit = 100, CancellationToken ct = default) =>
         GetAsync<List<ActivityItem>>($"/api/v1/activity?limit={limit}", ct);
 
+    /// <summary>The trail of every reply in one chat, oldest first (group by <see cref="ActivityItem.TaskId"/>).</summary>
+    public Task<List<ActivityItem>> GetConversationActivityAsync(string conversationId, int limit = 1000, CancellationToken ct = default) =>
+        GetAsync<List<ActivityItem>>($"/api/v1/activity?conversation_id={Uri.EscapeDataString(conversationId)}&limit={limit}", ct);
+
     /// <summary>One assignment's trail (its subtasks included), oldest first. Messages starting with "Tool: " are tool calls.</summary>
     public Task<List<ActivityItem>> GetTaskActivityAsync(string taskId, int limit = 500, CancellationToken ct = default) =>
         GetAsync<List<ActivityItem>>($"/api/v1/activity?task_id={Uri.EscapeDataString(taskId)}&limit={limit}", ct);
@@ -93,8 +97,9 @@ public sealed class GatewayClient : IDisposable
     public Task<List<InboxItem>> GetInboxAsync(string? status = "open", CancellationToken ct = default) =>
         GetAsync<List<InboxItem>>(string.IsNullOrEmpty(status) ? "/api/v1/inbox" : $"/api/v1/inbox?status={status}", ct);
 
-    public Task AnswerAsync(string inboxId, string answer, CancellationToken ct = default) =>
-        SendAsync(HttpMethod.Post, $"/api/v1/inbox/{Uri.EscapeDataString(inboxId)}/answer", new { answer }, ct);
+    /// <summary>Answers a question, or decides an approval (<paramref name="decision"/> is "approve" or "decline"; the answer is then an optional note).</summary>
+    public Task AnswerAsync(string inboxId, string answer, string? decision = null, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, $"/api/v1/inbox/{Uri.EscapeDataString(inboxId)}/answer", new { answer, decision }, ct);
 
     // ---- routines ----
 

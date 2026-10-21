@@ -78,7 +78,7 @@ public sealed record TaskDetail(
     IReadOnlyList<TaskItem> Children,
     IReadOnlyList<InboxItem> Inbox);
 
-/// <summary>A question one of your agents asked you while working.</summary>
+/// <summary>A question, or a request for approval, from one of your agents.</summary>
 public sealed record InboxItem(
     string Id,
     string TaskId,
@@ -86,7 +86,19 @@ public sealed record InboxItem(
     string Question,
     string? Answer,
     string Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? Kind = null,
+    string? ConversationId = null,
+    string? TaskTitle = null)
+{
+    public const string ApprovalKind = "approval";
+
+    /// <summary>A yes/no request to do something with side effects, as opposed to a question.</summary>
+    public bool IsApproval => Kind == ApprovalKind;
+
+    /// <summary>The agent is waiting in a chat (as opposed to working on an assignment).</summary>
+    public bool FromChat => !string.IsNullOrEmpty(ConversationId);
+}
 
 /// <summary>An automation: work an agent does on a schedule.</summary>
 public sealed record Routine(
@@ -309,7 +321,8 @@ public sealed record Conversation(
     string LastMessage,
     bool Busy,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    bool Waiting = false);
 
 public sealed record ChatMessage(
     string Id,
@@ -324,12 +337,17 @@ public sealed record ChatMessage(
     public bool Failed => Status == "failed";
 }
 
+/// <summary>An assignment an agent started during a chat reply (<see cref="SourceTaskId"/> is that reply's task).</summary>
+public sealed record StartedAssignment(string SourceTaskId, TaskItem Assignment);
+
 public sealed record ConversationDetail(
     string Id,
     string AgentId,
     string Title,
     bool Busy,
-    IReadOnlyList<ChatMessage> Messages);
+    IReadOnlyList<ChatMessage> Messages,
+    IReadOnlyList<StartedAssignment>? Started = null,
+    bool Waiting = false);
 
 // ---- onboarding and profile ----
 

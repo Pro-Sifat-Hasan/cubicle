@@ -4,11 +4,21 @@ using Cubicle.Client;
 
 namespace Cubicle.Desktop.ViewModels;
 
-/// <summary>A question from an employee, with an editable answer.</summary>
-public sealed partial class InboxItemViewModel(InboxItem item, string employeeName, Func<InboxItemViewModel, Task> send) : ObservableObject
+/// <summary>
+/// A request from an agent: a question (answered with text) or an approval (approved or declined, with an optional note).
+/// <paramref name="send"/> receives the decision ("approve" or "decline") for an approval, and null for a question.
+/// </summary>
+public sealed partial class InboxItemViewModel(InboxItem item, string employeeName, Func<InboxItemViewModel, string?, Task> send) : ObservableObject
 {
     public InboxItem Item { get; } = item;
     public string EmployeeName { get; } = employeeName;
+    public bool IsApproval => Item.IsApproval;
+    public string Heading => IsApproval ? $"{EmployeeName} needs your approval" : $"{EmployeeName} has a question";
+
+    /// <summary>Where the request came from: a chat, or an assignment.</summary>
+    public string Source => Item.FromChat ? "In a chat"
+        : string.IsNullOrEmpty(Item.TaskTitle) ? "" : $"On \u201C{Item.TaskTitle}\u201D";
+
     public string Asked => Item.CreatedAt.ToLocalTime().ToString("ddd HH:mm");
 
     [ObservableProperty]
@@ -18,7 +28,27 @@ public sealed partial class InboxItemViewModel(InboxItem item, string employeeNa
     private bool CanSend() => !string.IsNullOrWhiteSpace(AnswerText);
 
     [RelayCommand(CanExecute = nameof(CanSend))]
-    private Task SendAsync() => send(this);
+    private Task SendAsync() => send(this, null);
+
+    [RelayCommand]
+    private Task ApproveAsync() => send(this, "approve");
+
+    [RelayCommand]
+    private Task DeclineAsync() => send(this, "decline");
+}
+
+/// <summary>A request you already dealt with, for the history under "Needs you".</summary>
+public sealed class RequestHistoryViewModel(InboxItem item, string employeeName)
+{
+    public string Who { get; } = employeeName;
+    public string Question { get; } = item.Question;
+    public bool IsApproval => item.IsApproval;
+    public string Outcome { get; } = item.IsApproval
+        ? (item.Answer?.StartsWith("Approved", StringComparison.Ordinal) == true ? "Approved" : "Declined")
+        : "Answered";
+
+    public string Reply { get; } = item.IsApproval ? "" : item.Answer ?? "";
+    public string When { get; } = item.CreatedAt.ToLocalTime().ToString("ddd dd MMM, HH:mm");
 }
 
 public sealed partial class RoutineViewModel(

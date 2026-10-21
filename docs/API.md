@@ -27,8 +27,8 @@ Invoke-RestMethod http://127.0.0.1:7878/api/v1/status -Headers @{ Authorization 
 | `GET /api/v1/tasks?status=&parent_id=&limit=` | | tasks, newest first (`parent_id=` with an empty value returns top-level work, without chat replies) |
 | `GET /api/v1/tasks/{id}` | | task + `children` + `inbox` |
 | `POST /api/v1/tasks/{id}/cancel` | | cancelled task and children |
-| `GET /api/v1/inbox?status=open` | | questions from your staff |
-| `POST /api/v1/inbox/{id}/answer` | `{answer}` | answered item; the task resumes |
+| `GET /api/v1/inbox?status=open` | | requests from your staff: `kind` is `question` or `approval`; `conversation_id` (a chat) or `task_title` (an assignment) says where it came from |
+| `POST /api/v1/inbox/{id}/answer` | `{answer?, decision?}` | answered item; the task resumes. A question needs `answer`. An approval needs `decision` (`approve` or `decline`) and takes an optional note in `answer` |
 | `GET /api/v1/activity?limit=&task_id=&conversation_id=` | | activity log, newest first; with `task_id`, one assignment's trail (its subtasks included), and with `conversation_id`, the trail of every reply in a chat, both oldest first. Messages starting with `Tool: ` are tool calls |
 | `POST /api/v1/breaker/reset` | | `204` |
 | `GET /api/v1/events` | | Server-Sent Events stream |
@@ -161,9 +161,9 @@ stored), `assignment.done`, `inbox.new`, `inbox.answered`, `agent.status`, `agen
 | `POST /internal/v1/tasks/{id}/delegate` | `{subtasks: [{title, description, assignee, depends_on: [index]}], synthesis: {title, description, assignee}}` | assignment → plan; assignees must be enabled agents |
 | `POST /internal/v1/tasks/{id}/complete` | `{result}` | a chat task's result becomes the agent's reply |
 | `POST /internal/v1/tasks/{id}/fail` | `{error}` | fails the parent and cancels siblings; a failed chat task becomes a failed reply |
-| `POST /internal/v1/tasks/{id}/ask` | `{employee_id, question}` | creates an inbox item |
+| `POST /internal/v1/tasks/{id}/ask` | `{employee_id, question, kind?}` | creates an inbox item and parks the task (an assignment step or a chat reply); `kind` is `question` (default) or `approval`. The answer arrives in `human_answers` when the task is claimed again |
 | `POST /internal/v1/tasks/{id}/progress` | `{status?, text?}` | relayed to the app as `task.progress` |
-| `POST /internal/v1/assignments` | `{title, description, agent_id}` | an agent starts an assignment for the main agent (from a chat) |
+| `POST /internal/v1/assignments` | `{title, description, agent_id, source_task_id?}` | an agent starts an assignment for the main agent (from a chat); `source_task_id` ties it to the reply that started it |
 | `POST /internal/v1/usage` | `{task_id, employee_id, input_tokens, output_tokens}` | feeds the circuit breaker |
 | `POST /internal/v1/activity` | `{employee_id, task_id, message}` | activity log line |
 | `GET /internal/v1/memories?limit=` | | facts to include in prompts |

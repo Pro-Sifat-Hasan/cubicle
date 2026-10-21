@@ -59,22 +59,7 @@
                         </Border>
                         <TextBlock Text="Needs you" Style="{StaticResource SectionTitle}" Margin="0" VerticalAlignment="Center" />
                     </DockPanel>
-                    <ItemsControl ItemsSource="{Binding Inbox}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Style="{StaticResource Card}" Padding="16,14" Margin="0,0,0,8" BorderBrush="{DynamicResource WarningBrush}">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding EmployeeName, StringFormat={}{0} is asking}" Style="{StaticResource Caption}" />
-                                        <TextBlock Text="{Binding Item.Question}" TextWrapping="Wrap" TextTrimming="None" FontSize="14" Margin="0,4,0,10" />
-                                        <DockPanel>
-                                            <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Content="Send" Command="{Binding SendCommand}" Margin="10,0,0,0" />
-                                            <TextBox Text="{Binding AnswerText, UpdateSourceTrigger=PropertyChanged}" controls:Placeholder.Text="Your answer…" />
-                                        </DockPanel>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding Inbox}" ItemTemplate="{StaticResource RequestCardTemplate}" />
                 </StackPanel>
 
                 <!-- Assignments: newest first -->
@@ -213,64 +198,7 @@
                                     <TextBlock Text="{Binding PlanSummary}" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Expander.Header>
-                            <ItemsControl ItemsSource="{Binding SelectedSubtasks}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Expander Style="{StaticResource StepExpander}" IsExpanded="{Binding IsExpanded, Mode=TwoWay}" Margin="0,0,0,8">
-                                            <Expander.Header>
-                                                <DockPanel>
-                                                    <ContentPresenter DockPanel.Dock="Left" Content="{Binding}" ContentTemplate="{StaticResource AvatarSquareTemplate}"
-                                                                      Width="30" Height="30" Margin="0,0,10,0" />
-                                                    <Border DockPanel.Dock="Right" Style="{StaticResource StatusPill}" Tag="{Binding Status}">
-                                                        <TextBlock Text="{Binding StatusLabel}" Style="{StaticResource PillText}" />
-                                                    </Border>
-                                                    <StackPanel VerticalAlignment="Center" Margin="0,0,8,0">
-                                                        <TextBlock Text="{Binding Title}" FontSize="13" />
-                                                        <TextBlock Style="{StaticResource Caption}" FontSize="11.5">
-                                                            <Run Text="{Binding Name, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding Role, Mode=OneWay}" />
-                                                        </TextBlock>
-                                                    </StackPanel>
-                                                </DockPanel>
-                                            </Expander.Header>
-                                            <StackPanel>
-                                                <TextBlock Text="WHO" Style="{StaticResource Label}" FontSize="11" />
-                                                <TextBlock TextWrapping="Wrap" TextTrimming="None" Margin="0,0,0,10" FontSize="13">
-                                                    <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=", " /><Run Text="{Binding Role, Mode=OneWay}" />
-                                                    <LineBreak /><Run Text="{Binding Strengths, Mode=OneWay}" Foreground="{DynamicResource TextSecondaryBrush}" />
-                                                </TextBlock>
-
-                                                <StackPanel Visibility="{Binding Brief, Converter={StaticResource NullToVisibility}}">
-                                                    <TextBlock Text="ASKED TO" Style="{StaticResource Label}" FontSize="11" />
-                                                    <TextBlock Text="{Binding Brief}" TextWrapping="Wrap" TextTrimming="None" Margin="0,0,0,10" FontSize="13" />
-                                                </StackPanel>
-
-                                                <StackPanel Visibility="{Binding HasActivity, Converter={StaticResource BoolToVisibility}}">
-                                                    <TextBlock Text="{Binding ActivityTitle}" Style="{StaticResource Label}" FontSize="11" />
-                                                    <ItemsControl ItemsSource="{Binding Activity}" Margin="0,0,0,10">
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <DockPanel Margin="0,0,0,4">
-                                                                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="12" Width="18"
-                                                                               Foreground="{DynamicResource TextTertiaryBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
-                                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Time}" Style="{StaticResource Caption}" FontSize="11" Margin="8,0,0,0" />
-                                                                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" TextTrimming="None" FontSize="12.5"
-                                                                               Foreground="{DynamicResource TextSecondaryBrush}" />
-                                                                </DockPanel>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-                                                </StackPanel>
-
-                                                <StackPanel Visibility="{Binding Result, Converter={StaticResource NullToVisibility}}">
-                                                    <TextBlock Text="OUTPUT" Style="{StaticResource Label}" FontSize="11" />
-                                                    <FlowDocumentScrollViewer controls:Markdown.Source="{Binding Result}" controls:WheelPassthrough.IsEnabled="True"
-                                                                              VerticalScrollBarVisibility="Disabled" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Expander>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <ItemsControl ItemsSource="{Binding SelectedSubtasks}" ItemTemplate="{StaticResource PlanStepTemplate}" />
                         </Expander>
 
                         <!-- Thinking and tools (collapsed) -->
@@ -283,20 +211,7 @@
                                     <TextBlock Text="{Binding ActivitySummary}" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Expander.Header>
-                            <ItemsControl ItemsSource="{Binding SelectedActivity}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <DockPanel Margin="0,0,0,6">
-                                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="12" Width="20"
-                                                       Foreground="{DynamicResource TextTertiaryBrush}" VerticalAlignment="Top" Margin="0,2,0,0" />
-                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Time}" Style="{StaticResource Caption}" FontSize="11" Margin="8,0,0,0" />
-                                            <TextBlock TextWrapping="Wrap" TextTrimming="None" FontSize="12.5" Foreground="{DynamicResource TextSecondaryBrush}">
-                                                <Run Text="{Binding Who, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" /><Run Text=" " /><Run Text="{Binding Text, Mode=OneWay}" />
-                                            </TextBlock>
-                                        </DockPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <ItemsControl ItemsSource="{Binding SelectedActivity}" ItemTemplate="{StaticResource ActivityLineTemplate}" />
                         </Expander>
                     </StackPanel>
                 </ScrollViewer>

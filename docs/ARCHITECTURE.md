@@ -59,8 +59,10 @@ assignment (you → main agent)
 2. **Work.** A teammate claims a subtask once its dependencies are finished. The claim includes
    the overall assignment, teammates' results and any answers you gave. The teammate works in a
    tool loop with its own instructions, tools, MCP servers and skills, and may consult its own teammates.
-3. **Ask.** If an agent is blocked, it asks you through the Inbox. The task pauses and
-   resumes automatically when you answer. Each task can ask at most twice.
+3. **Ask and approve.** If an agent is blocked, it asks you through the Inbox. Before anything with
+   consequences outside its workspace (sending, publishing, deleting, spending, changing an account),
+   it asks for your approval and acts only if you approve. The task pauses and resumes automatically
+   with your answer. Each task can ask at most two questions.
 4. **Wrap up.** The main agent merges the results into one deliverable, references the files that
    were produced, and lists anything that needs you. Completing the wrap-up completes the assignment.
 
@@ -94,6 +96,11 @@ In a chat an agent can consult teammates (`ask_teammate`: the teammate runs with
 configuration and returns its answer) and, with the *assignments* tool, start a full assignment for
 the team.
 
+A chat reply can pause too: an agent that needs an answer or an approval parks its reply, the request
+appears in the chat and in the Inbox's **Needs you** thread, and the same reply resumes with your
+decision. Every reply keeps a trail of the tools it used ("How it was done"), and an assignment started
+from a chat is shown under the reply that started it, with its status, plan, trail and result.
+
 ## Providers
 
 The gateway turns the provider you choose in Settings into environment variables for the worker,
@@ -118,7 +125,8 @@ list. A successful list confirms the key works.
 | `load_skill` | Load a skill's full instructions | Only the agent's own skills |
 | `ask_teammate` | Consult a teammate | Only the agent's team; a consulted teammate cannot consult further |
 | `start_assignment` | Start a team assignment from a chat | Only in chats, only with the *assignments* tool |
-| `ask_owner` | Ask you a question through the Inbox | Ends the turn, and is limited per task |
+| `ask_owner` | Ask you a question through the Inbox, in an assignment or a chat | Ends the turn; at most two questions per task |
+| `request_approval` | Ask you to approve one specific action before it happens | Ends the turn; the agent acts only on "Approved" and only on that action |
 
 Providers that cannot run Cubicle's tools (Claude Code, Demo) use plain-text directives instead.
 A line starting with `REMEMBER:` saves a fact, and `ASK_OWNER:` asks a question. Their skills are
