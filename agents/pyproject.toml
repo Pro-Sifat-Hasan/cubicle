@@ -1,6 +1,6 @@
 [project]
 name = "cubicle-agents"
-version = "0.1.0"
+version = "0.2.0"
 description = "Cubicle's AI staff: the Python agent worker that plans, delegates and does your daily work."
 readme = "README.md"
 license = "MIT"

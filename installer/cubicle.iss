@@ -5,7 +5,7 @@
 ; office runs under your own account (your data stays in %LOCALAPPDATA%\Cubicle).
 
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.2.0"
 #endif
 #ifndef StageDir
   #define StageDir "..\build\package\stage"

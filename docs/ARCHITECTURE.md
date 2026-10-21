@@ -84,7 +84,7 @@ passion (or type their own), watch the team get hired, and start a first mission
 - A **custom** passion is written by the main agent: the gateway queues a hidden `persona` task, the
   worker answers with schema-validated JSON, and the gateway clamps it before anything is stored.
   With no model available a plain persona is used instead, so setup never blocks.
-- The owner's profession and stack are saved as memories, so every agent sees them.
+- The owner's profession and stack start the owner's profile, the one record every agent reads.
 
 Packs are JSON in `gateway/internal/catalog/packs/`; adding one needs no code.
 
@@ -138,7 +138,11 @@ list. A successful list confirms the key works.
 |---|---|---|
 | `write_file`, `read_file`, `list_files` | Produce deliverables in `workspace/<assignment or chat>/` | Paths are confined to that folder, with size and file-count limits |
 | web search and fetch | Check facts and read pages | Cubicle's own fetch allows only public http(s) addresses, re-checks every redirect, and limits size |
-| `remember` | Save a durable fact about you to office memory | Length limit, de-duplication, and a cap of 300 facts |
+| `remember`, `forget` | Save or remove a short fact about you | One sentence (300 characters), refused when it repeats a stored fact or looks like a secret, cap of 300 facts |
+| `update_profile` | Rewrite the one profile record about you (who you are, what you work on, how you like things done) | The whole text is replaced, 1,500 characters, secrets refused |
+| `compact_memory` | List the stored facts, then merge repeated ones into one and drop outdated ones | Used when memory passes 60 facts |
+| `save_project` | Keep a project's name, folder and notes | A new folder needs your approval; agents then work in a named project's folder |
+| `triage_check`, `propose_tasks`, `triage_record` | Go through your messages: which are new, what needs you (one approval for the whole list), and what became of each | Only for agents with connected apps; read-only until you approve, and sending needs its own approval |
 | `load_skill` | Load a skill's full instructions | Only the agent's own skills |
 | `ask_teammate` | Consult a teammate | Only the agent's team; a consulted teammate cannot consult further |
 | `start_assignment` | Start a team assignment from a chat | Only in chats, only with the *assignments* tool |
@@ -185,12 +189,32 @@ Teammates save into the same work folder, so the main agent can look at the resu
 
 ## Memory and tokens
 
-Agents save durable facts about you as soon as they learn them (`remember`), and fix wrong ones
-(`forget`); keys, tokens and passwords are refused. The office can hold hundreds of facts, but each
+Memory has two parts. The **profile** is one record about who you are, rewritten whole by the staff
+when they learn something lasting (and editable by you); every agent reads it. **Facts** are short
+sentences saved as soon as they are learned (`remember`), checked against stored facts so repeats are
+skipped, fixed when wrong (`forget`) and merged when there are many (`compact_memory`); keys,
+tokens and passwords are refused. The office can hold hundreds of facts, but each
 request carries only the few that fit it (matching words, plus the newest), within a size budget.
 Long chats keep their latest turns whole and trim old long ones, tool output and file reads are
 capped (long files are read in parts), skills load only when needed, and a single-step assignment
 skips the wrap-up model call. Activity older than 45 days and usage older than 400 days are pruned.
+
+## Projects, messages and alerts
+
+**Projects.** A project is a name, a folder and short notes. A request that names one (any spelling:
+`abroadmate`, `Abroad Mate`) runs in that folder with its notes in the prompt; other projects appear
+by name only. A new folder is registered only after you approve it.
+
+**Message triage.** Connecting email (Gmail over IMAP with an app password), Discord or Slack turns on
+the hourly automation *Check my messages*. The agent lists recent messages with the app's reading
+tools, asks the gateway which are new (a ledger of message keys, so none is raised twice), decides what
+needs you and puts the whole list to you as one approval. After you approve it does only those items;
+replies are drafts in your voice and sending needs a second approval showing the exact text. The
+ledger is the *Messages seen* view on the Activity page.
+
+**Alerts.** The gateway can post to a Discord webhook or send an email (over TLS only) when a question
+or approval waits for you, or an assignment finishes. The webhook and mail password are encrypted and
+never given to the agents; you still answer in Cubicle.
 
 ## Automations and the budget
 

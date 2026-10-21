@@ -31,7 +31,10 @@ the background, even when the window is closed.
 - **Automations.** Recurring or one-off work for the whole team or one agent: daily, weekdays, chosen days, every few minutes, or once. If your PC was asleep, a missed run happens once when it wakes.
 - **Bring any AI.** Use Claude, OpenAI, Google Gemini, OpenRouter, a local model through Ollama, or **your existing Claude subscription** through Claude Code.
 - **Tools.** Your staff can search and read the web, save documents and code as files, and remember what they learn about you.
-- **Memory.** Preferences, people and projects carry over from task to task. You can see and edit everything they remember.
+- **A profile of you, and short facts.** One record describes who you are, written and kept current by your staff (and editable by you), next to short facts they save and merge on their own. Only what fits each request is sent, so it stays cheap.
+- **Your projects.** Tell an agent a project's name and folder once. Later, "fix the navbar in abroadmate" is enough: they work in that folder and follow the notes they kept.
+- **Your second self for messages.** Connect your email or Discord and your staff go through new messages every hour, find what needs you, and ask for approval once. They do only what you approve, draft replies in your voice, and ask again before anything is sent.
+- **Reaches you outside the app.** Get a Discord message or an email when something waits for you, so nothing sits unseen while Cubicle is in the tray.
 - **Asks only when needed.** If someone is genuinely blocked, the question lands in your Inbox. Answer it and the work continues.
 - **Private by default.** Everything runs on your PC. Keys are encrypted with Windows DPAPI and the service listens only on this machine.
 - **Spending guard.** Set a daily token budget, and work pauses when it is reached.
@@ -58,8 +61,9 @@ the background, even when the window is closed.
 6. **Teach your staff.** Under **Memory**, add facts like *"I write in British English"*. They also
    learn on their own while they work.
 
-Closing the window keeps your staff working in the background. To stop everything, right-click
-the tray icon and choose **Stop staff and quit**.
+Closing the window keeps your staff working in the background; click the tray icon to open it
+again. Cubicle opens where you left it and always on screen. Ctrl+1 to Ctrl+8 switch pages. To stop
+everything, right-click the tray icon and choose **Stop staff and quit**.
 
 ## Supported AI providers
 

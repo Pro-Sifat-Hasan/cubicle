@@ -6,15 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-21
+
 ### Added
+- **Your second self for messages:** connect **Email (Gmail, read-only over IMAP)**, **Discord** or Slack and an hourly automation, *Check my messages*, turns on by itself. Your staff read only what is new (a ledger remembers every message they looked at), work out what needs you (requests, mentions, questions, deadlines, invitations) and ask once, with the whole list: what came in, from whom, why it needs you, what they suggest and when it is due. They do only what you approve, write replies as drafts in your voice, and ask again before anything is sent or posted. When nothing needs you they say so in one line. New tools `triage_check`, `propose_tasks` and `triage_record`, a `message-triage` skill, and `GET /api/v1/triage`.
+- **Messages seen:** a view on the Activity page listing every message your staff went through and what became of it (waiting for you, approved, done, skipped).
+- **Reach me elsewhere:** a Discord message (webhook) or an email (your own mail server, over TLS only) when a question or approval waits for you, or an assignment is finished, with test buttons. The webhook and mail password are encrypted and never given to the agents; you still answer in Cubicle.
+- **A profile of you:** one record, written and kept current by your staff, that says who you are (role, work, language, working style, goals). Every agent reads it, you can edit it on the Memory page ("About you"), and onboarding starts it. Short facts are limited to one sentence, repeats are skipped, and a new `compact_memory` tool merges overlapping facts once memory grows past 60.
+- **Your projects:** tell an agent a project's name and folder once; it keeps notes (what it is, the stack, where things live, how to run it). A request that names the project, in any spelling, runs in its folder with its notes, and the main agent names the project when it hands work to a teammate. A new folder needs your approval. `save_project`, `GET`/`PUT /api/v1/projects`.
+- **Monthly reports** for last month (`last_month`), next to today, yesterday, this week, last week and this month.
+- **Desktop:** the window opens on the screen you are using, sized to it, and reopens where you left it (and moves back into view if a screen goes away); the tray icon opens the window on a click, shows what your staff are doing, gets a dot when something needs you, and has a menu in your theme; notifications open the page they are about and stay quiet while you are looking at the window; Ctrl+1 to Ctrl+8 switch pages; pages fade in, controls show a focus ring when you tab to them, the Team editor slides over the list on a narrow window, and the scrollbar is slim.
 - **Daily and weekly reports:** the Today page has Today, Yesterday, This week and Last week buttons. The main agent writes the report from a work log of what really happened (assignments and outcomes, chats, tool calls, tokens, questions and approvals, new things learned about you, files made). Agents with the assignments tool can read the same log with `work_log`, so an automation can send you a report every evening.
 - **Chats are titled by the model** from your first message, and each chat is its own session with separate history. A chat you name yourself keeps its name.
 - **Close button** (and Esc) for the open chat in the Inbox.
 - **A better edit tool for the Dev:** `edit_file` makes several changes to a file at once, keeps its line endings and indentation, shows the diff and warns when a Python or JSON file no longer parses; `insert_lines` adds lines at a line number.
 - **Pre-push safety checks** (`./scripts/install-hooks.ps1`): secret and API key scan, a block on `.env`, database and key files, a vulnerability audit of Go, Python and .NET dependencies, then the linters and tests. Issue templates for agent problems, questions and documentation.
 
-### Fixed
-- Resolved the open CodeQL alerts (log injection, floating point comparison, disposal on error paths) and the gitleaks findings (fake keys in a test), and pinned a Go toolchain without known vulnerabilities.
 - **See everything an agent does, like Claude Code:** the Inbox shows a live timeline of each reply: what the agent is thinking, the remarks it makes between steps, and every tool call with its input (a file's content appears as it is written) and its output, with a spinner while it runs, a check or a cross when it ends, and how long it took. Click a call to open it. The timeline stays under the reply as "How it was done", and a teammate's steps carry their face and name. Replies are typed out as they are written.
 - **Cartoon avatars:** every agent is a cartoon character, drawn from its id and name so it always looks the same, with a prop for the job (a headset for engineers, a tie for the chief of staff, a beret for writers, glasses for analysts and reviewers).
 - **The main agent leads and the Dev builds:** a main agent with a team can no longer create files itself. It briefs the right teammate (the engineer for code, websites and portfolios), checks what they made and reports back. With Claude Code, the teammate builds with Claude Code's own file tools in the shared work folder.
@@ -48,6 +55,8 @@ All notable changes to this project are documented here. The format follows
 - Agents are stored by the gateway and edited in the app; `staff.json` is only imported once on upgrade, and `cubicle-agents init-staff` and `roster` were removed.
 
 ### Fixed
+- Resolved the open CodeQL alerts (log injection, floating point comparison, disposal on error paths) and the gitleaks findings (fake keys in a test), and pinned a Go toolchain without known vulnerabilities.
+- The window no longer opens partly off screen on a small display, and the Team page cards have even gaps.
 - Work in progress when the worker restarted (for example after saving settings) stayed "Working" forever; it is now resumed.
 - Dark text on dark backgrounds, and the Windows accent colour (for example green) leaking into selections and the title bar.
 - A blurry app and tray icon at small sizes.
@@ -68,5 +77,6 @@ The first public release.
 - **Distribution:** a per-user Windows installer, a Windows service mode, a Docker image and a hardened systemd unit.
 - **Engineering:** CI on Windows and Linux with an end-to-end smoke test, CodeQL, gitleaks, dependency review, grouped Dependabot updates and a release pipeline.
 
-[Unreleased]: https://github.com/Pro-Sifat-Hasan/cubicle/compare/v0.1.0...develop
+[Unreleased]: https://github.com/Pro-Sifat-Hasan/cubicle/compare/v0.2.0...develop
+[0.2.0]: https://github.com/Pro-Sifat-Hasan/cubicle/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Pro-Sifat-Hasan/cubicle/releases/tag/v0.1.0
