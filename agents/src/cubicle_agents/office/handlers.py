@@ -26,6 +26,7 @@ from cubicle_agents.office.status import StatusBoard
 from cubicle_agents.office.steps import StepReporter
 from cubicle_agents.staff import prompts
 from cubicle_agents.staff.memory import MEMORY_FETCH, select_memories, trim_history
+from cubicle_agents.staff.projects import Project, match_projects, projects_block
 from cubicle_agents.staff.roster import TOOL_MEMORY, TOOL_WEB, Employee, Roster
 from cubicle_agents.tools import build_toolbox
 from cubicle_agents.tools.base import TOOL_PREFIX
@@ -95,11 +96,26 @@ class TaskHandler:
             log.warning("could not load office memory", exc_info=True)
             return []
 
+    async def _projects(self) -> list[Project]:
+        try:
+            return [Project(p["id"], p["name"], p.get("path") or "", p.get("notes") or "")
+                    for p in await self.ctx.gateway.list_projects()]
+        except Exception:  # project notes are helpful context, never a reason to fail work
+            log.warning("could not load projects", exc_info=True)
+            return []
+
     async def _run(self, employee: Employee, claim: Claim, prompt: str, *,
                    json_schema: dict[str, Any] | None = None, may_ask: bool = False, mode: str = prompts.MODE_TASK,
                    history: list[Turn] | None = None, on_event: EventCallback | None = None) -> AgentResult:
         ctx = self.ctx
         workdir = self._workdir(claim)
+        # A request that names one of the owner's projects is worked on in that project's folder.
+        recent = " ".join(t.content for t in (history or [])[-2:])
+        projects = await self._projects()
+        matched = match_projects(projects, prompt[:3000], recent[:1500]) if json_schema is None else []
+        folder = next((p.folder for p in matched if p.folder), None)
+        if folder is not None:
+            workdir = folder
         tool_mode = ctx.llm.supports_tools
         team = ctx.roster.team_of(employee) if mode != prompts.MODE_CONSULT and json_schema is None else []
         coordinator = employee.is_manager and bool(team)  # a main agent with a team hands building to teammates
@@ -121,7 +137,8 @@ class TaskHandler:
         memories = await self._memories(prompt[:3000])
         system = prompts.system_prompt(employee, ctx.owner, memories=memories, tool_mode=tool_mode,
                                        web=ctx.web_access, team=team, mode=mode, coordinator=coordinator,
-                                       native_files=getattr(ctx.llm, "native_file_tools", False))
+                                       native_files=getattr(ctx.llm, "native_file_tools", False),
+                                       projects=projects_block(projects, matched, ctx.owner) if json_schema is None else "")
         reporter = StepReporter(ctx.gateway, claim.task["id"], employee.id) if json_schema is None else None
         result = await ctx.llm.run(
             system=system, prompt=prompt, model=employee.model or ctx.default_model, toolbox=toolbox,

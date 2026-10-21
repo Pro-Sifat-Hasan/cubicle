@@ -105,6 +105,12 @@ class Gateway(Protocol):
     async def forget_memory(self, fact: str) -> bool:
         """Delete the remembered fact that best matches `fact`; False when nothing matches."""
 
+    async def list_projects(self) -> list[dict[str, Any]]:
+        """The projects the owner works on: id, name, path, notes."""
+
+    async def save_project(self, name: str, path: str = "", notes: str = "") -> dict[str, Any]:
+        """Add a project or update the one with this name; an empty path or notes keeps what is stored."""
+
 
 class GatewayClient:
     def __init__(self, base_url: str, token: str) -> None:
@@ -208,3 +214,10 @@ class GatewayClient:
             return False
         await self._send("DELETE", f"/internal/v1/memories/{match['id']}")
         return True
+
+    async def list_projects(self) -> list[dict[str, Any]]:
+        return (await self._send("GET", "/internal/v1/projects")).json()
+
+    async def save_project(self, name: str, path: str = "", notes: str = "") -> dict[str, Any]:
+        body = {"name": name[:60], "path": path[:500], "notes": notes[:4000]}
+        return (await self._send("PUT", "/internal/v1/projects", body)).json()

@@ -21,6 +21,7 @@ class FakeGateway:
         self.questions: list[tuple[str, str, str]] = []
         self.usage: list[tuple[str, str, int, int]] = []
         self.memories: list[str] = list(memories or [])
+        self.projects: list[dict[str, Any]] = []
         self.progress_events: list[tuple[str, str, str]] = []
         self.steps: list[tuple[str, str, dict[str, Any]]] = []
         self.titles: dict[str, str] = {}
@@ -93,6 +94,18 @@ class FakeGateway:
 
     async def add_memory(self, content, agent_id):
         self.memories.append(content)
+
+    async def list_projects(self):
+        return list(self.projects)
+
+    async def save_project(self, name, path="", notes=""):
+        found = next((p for p in self.projects if p["name"].lower() == name.lower()), None)
+        if found is None:
+            found = {"id": f"prj_{len(self.projects) + 1}", "name": name, "path": "", "notes": ""}
+            self.projects.append(found)
+        found["path"] = path or found["path"]
+        found["notes"] = notes or found["notes"]
+        return found
 
 
 class ScriptedLLM:

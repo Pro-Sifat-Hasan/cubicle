@@ -95,7 +95,7 @@ def clean_title(raw: str, fallback_from: str = "") -> str:
 
 def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_mode: bool, web: bool,
                   team: list[Employee] | None = None, mode: str = MODE_TASK, today: date | None = None,
-                  native_files: bool = False, coordinator: bool = False) -> str:
+                  native_files: bool = False, coordinator: bool = False, projects: str = "") -> str:
     today = today or date.today()
     intro = f"You are {employee.name}"
     if employee.title:
@@ -119,6 +119,8 @@ def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_m
         apps = "\n".join(f"- {m.name}: its tools start with `{tool_prefix(m)}`" for m in employee.mcp)
         parts.append("Your connected apps (tools from the owner's own accounts and services). When a request involves "
                      f"one, use its tools instead of guessing, and look before you change anything:\n{apps}")
+    if projects:
+        parts.append(projects)
     if memories:
         facts = "\n".join(f"- {m}" for m in memories)
         parts.append(f"What the office knows about {owner} (from earlier work; trust it unless told otherwise):\n{facts}")
@@ -169,7 +171,8 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
                 "You lead a team, so you coordinate instead of building: you cannot create or change files yourself. "
                 "Anything that has to be built or written as files (code, a website or portfolio, scripts, documents, "
                 "data files) goes to the teammate whose strengths fit, by ask_teammate for a job that fits in one "
-                "reply, or start_assignment for a big one. Hand over a complete brief: the goal, the content, the "
+                "reply, or start_assignment for a big one. Name the owner's project in the brief when the work is for one, "
+                "so the teammate works in its folder. Hand over a complete brief: the goal, the content, the "
                 "style, the constraints, and where it should end up. Teammates save their files in the same working "
                 "folder, so afterwards look at what they made with your read tools, check it against the request, send "
                 "it back for fixes if it falls short, and then tell the owner what was made and where.")
@@ -211,6 +214,10 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
                          "something, forget the old fact and remember the new one. Never save task details, guesses or "
                          "secrets. What the office remembers is listed below; trust it, and ask rather than guess when "
                          "something you need is not there.")
+            rules.append("When the owner tells you about a project (its name and folder), call save_project at once. "
+                         "After you work on a project, update its notes with what is worth knowing next time (what it "
+                         "is, the stack, where things live, conventions, how to run and test it), keeping them short. "
+                         "Work in a matched project's folder and follow its notes; you need not be told twice.")
         if has_team:
             rules.append("Consult a teammate with ask_teammate when their expertise would clearly improve the result; "
                          "do simple things yourself.")

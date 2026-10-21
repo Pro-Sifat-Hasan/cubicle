@@ -59,7 +59,7 @@ def test_tool_loop_runs_cubicle_tools_and_returns_final_text(tmp_path):
     assert result.text == "Saved notes.md"
     assert (tmp_path / "notes.md").read_text(encoding="utf-8") == "Hi"
     assert seen["tools"] == ["edit_file", "find_files", "forget", "grep_files", "insert_lines", "list_files", "read_file",
-                             "remember", "write_file"]
+                             "remember", "save_project", "write_file"]
     assert result.input_tokens > 0 and result.output_tokens > 0
 
 

@@ -55,6 +55,7 @@ def build_toolbox(
     if employee.has_tool(TOOL_MEMORY):
         toolbox.tools.append(_remember(gateway, employee.id))
         toolbox.tools.append(_forget(gateway))
+        toolbox.tools.append(_save_project(gateway, toolbox, may_approve, approved_actions))
     if employee.skills:
         toolbox.tools.append(_load_skill(employee))
     if team and consult is not None:
@@ -150,6 +151,59 @@ def _forget(gateway: Gateway) -> Tool:
             "additionalProperties": False,
         },
         handler=forget,
+    )
+
+
+def project_approval(name: str, path: str) -> str:
+    return f"Register project folder: {name} = {path}"
+
+
+def _save_project(gateway: Gateway, toolbox: Toolbox, may_approve: bool, approved_actions: tuple[str, ...]) -> Tool:
+    async def save_project(args: dict[str, Any]) -> str:
+        name = require_str(args, "name", max_len=60).strip()
+        path = args.get("path").strip() if isinstance(args.get("path"), str) else ""
+        notes = args.get("notes").strip() if isinstance(args.get("notes"), str) else ""
+        if not path and not notes:
+            raise ToolError("Give a 'path' (the project's folder) and/or 'notes' (what to know about it).")
+        if looks_secret(notes):
+            raise ToolError("That looks like a key, password or token. Never store those in project notes.")
+        if path:
+            # Work happens inside a project's folder, so the owner approves each new folder once.
+            known = next((p for p in await gateway.list_projects() if p["name"].lower() == name.lower()), None)
+            wanted = " ".join(project_approval(name, path).lower().split())
+            approved = any(wanted in " ".join(a.replace("*", "").split()).lower() for a in approved_actions)
+            if not approved and not (known and known.get("path") == path):
+                if not may_approve:
+                    raise ToolError("The owner has not approved that folder; mention it in your answer instead.")
+                toolbox.question = (f"**{project_approval(name, path)}**\n\nThe staff will read and change files in "
+                                    "this folder when you ask for work on this project.")
+                toolbox.question_kind = "approval"
+                return "Approval requested. Stop working now; save the project once the owner approves."
+        try:
+            await gateway.save_project(name, path, notes)
+        except Exception as e:  # a bad folder or too many projects: tell the agent, never crash the run
+            raise ToolError(f"Could not save the project: {e}") from e
+        return f"Saved project {name}."
+
+    return Tool(
+        name="save_project",
+        description="Keep a project the owner works on, so later requests about it need no explanation. Call it as "
+        "soon as the owner tells you about a project (its name and folder) and whenever you learn something lasting "
+        "about it: what it is, the stack, where things live (e.g. UI in src/components), conventions, how to run and "
+        "test it, decisions. `notes` REPLACES the stored notes, so send the full, compact set (under 1500 characters; "
+        "read the current ones in your prompt first). A new folder needs the owner's approval, which this tool asks for. "
+        "Never store secrets.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The project's name as the owner says it, e.g. AbroadMate."},
+                "path": {"type": "string", "description": "Absolute folder path; leave out when it is already saved."},
+                "notes": {"type": "string", "description": "Compact notes about the project; replaces the old ones."},
+            },
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+        handler=save_project,
     )
 
 
