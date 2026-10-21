@@ -204,6 +204,7 @@ func (s *Server) handleFail(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		EmployeeID string `json:"employee_id"`
+		Kind       string `json:"kind"` // question (default) or approval
 		Question   string `json:"question"`
 	}
 	if !decode(w, r, &in) {
@@ -213,14 +214,25 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := s.store.Ask(r.Context(), r.PathValue("id"), in.EmployeeID, in.Question)
+	if in.Kind != "" && in.Kind != store.InboxQuestion && in.Kind != store.InboxApproval {
+		writeErr(w, http.StatusBadRequest, "kind must be question or approval")
+		return
+	}
+	item, err := s.store.Ask(r.Context(), r.PathValue("id"), in.EmployeeID, in.Kind, in.Question)
 	if err != nil {
+		s.storeErr(w, err)
+		return
+	}
+	if item, err = s.store.GetInboxItem(r.Context(), item.ID); err != nil {
 		s.storeErr(w, err)
 		return
 	}
 	s.hub.Publish("inbox.new", item)
 	if t, err := s.store.GetTask(r.Context(), item.TaskID); err == nil {
 		s.publishTasks(t)
+		if t.ConversationID != "" {
+			s.publishConversation(r, t.ConversationID) // the chat now shows "waiting for you"
+		}
 	}
 	writeJSON(w, http.StatusCreated, item)
 }

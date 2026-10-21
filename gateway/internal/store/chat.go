@@ -42,7 +42,8 @@ type Conversation struct {
 	AgentID     string    `json:"agent_id"`
 	Title       string    `json:"title"`
 	LastMessage string    `json:"last_message"`
-	Busy        bool      `json:"busy"` // the agent is still replying
+	Busy        bool      `json:"busy"`    // the agent is still replying
+	Waiting     bool      `json:"waiting"` // the agent asked you something and is waiting for the answer
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -73,13 +74,14 @@ func (s *Store) CreateConversation(ctx context.Context, agentID, title string) (
 
 const conversationSelect = `SELECT c.id, c.agent_id, c.title, c.created_at, c.updated_at,
 	COALESCE((SELECT content FROM messages m WHERE m.conversation_id = c.id ORDER BY created_at DESC, rowid DESC LIMIT 1), ''),
-	EXISTS(SELECT 1 FROM tasks t WHERE t.conversation_id = c.id AND t.status IN ('queued','in_progress'))
+	EXISTS(SELECT 1 FROM tasks t WHERE t.conversation_id = c.id AND t.status IN ('queued','in_progress')),
+	EXISTS(SELECT 1 FROM tasks t WHERE t.conversation_id = c.id AND t.status = 'waiting_human')
 	FROM conversations c `
 
 func scanConversation(r scanner) (*Conversation, error) {
 	var c Conversation
 	var created, updated int64
-	if err := r.Scan(&c.ID, &c.AgentID, &c.Title, &created, &updated, &c.LastMessage, &c.Busy); err != nil {
+	if err := r.Scan(&c.ID, &c.AgentID, &c.Title, &created, &updated, &c.LastMessage, &c.Busy, &c.Waiting); err != nil {
 		return nil, err
 	}
 	c.CreatedAt, c.UpdatedAt = fromMS(created), fromMS(updated)
@@ -206,10 +208,61 @@ func (s *Store) DeleteConversation(ctx context.Context, id string) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE conversation_id = ?`, id); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE tasks SET status = ?, updated_at = ? WHERE conversation_id = ? AND status IN (?,?)`,
-			StatusCancelled, s.ms(), id, StatusQueued, StatusInProgress)
+		if _, err := tx.ExecContext(ctx, `UPDATE inbox SET status = 'cancelled' WHERE status = 'open' AND task_id IN
+			(SELECT id FROM tasks WHERE conversation_id = ?)`, id); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE tasks SET status = ?, updated_at = ? WHERE conversation_id = ? AND status IN (?,?,?)`,
+			StatusCancelled, s.ms(), id, StatusQueued, StatusInProgress, StatusWaitingHuman)
 		return err
 	})
+}
+
+// LinkAssignment records that an assignment was started from a chat task.
+func (s *Store) LinkAssignment(ctx context.Context, assignmentID, sourceTaskID string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR REPLACE INTO task_sources (assignment_id, source_task_id) VALUES (?, ?)`,
+		assignmentID, sourceTaskID)
+	return err
+}
+
+// StartedAssignment is an assignment an agent started during a chat reply.
+type StartedAssignment struct {
+	SourceTaskID string `json:"source_task_id"`
+	Assignment   *Task  `json:"assignment"`
+}
+
+// StartedFromChat lists the assignments started by the replies of a conversation, oldest first.
+func (s *Store) StartedFromChat(ctx context.Context, conversationID string) ([]StartedAssignment, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT ts.source_task_id, ts.assignment_id FROM task_sources ts
+		JOIN tasks a ON a.id = ts.assignment_id
+		WHERE ts.source_task_id IN (SELECT id FROM tasks WHERE conversation_id = ?) ORDER BY a.created_at ASC`, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	type pair struct{ source, assignment string }
+	var pairs []pair
+	for rows.Next() {
+		var p pair
+		if err := rows.Scan(&p.source, &p.assignment); err != nil {
+			return nil, err
+		}
+		pairs = append(pairs, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := []StartedAssignment{}
+	for _, p := range pairs {
+		t, err := s.GetTask(ctx, p.assignment)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		out = append(out, StartedAssignment{SourceTaskID: p.source, Assignment: t})
+	}
+	return out, nil
 }
 
 // preview shortens text to at most n runes on one line.

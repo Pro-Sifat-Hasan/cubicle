@@ -4,25 +4,39 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
 // ---- Inbox ("Ask me") ----
 
+// Inbox item kinds. An approval is a yes/no request to do something with side effects.
+const (
+	InboxQuestion = "question"
+	InboxApproval = "approval"
+)
+
 type InboxItem struct {
-	ID         string    `json:"id"`
-	TaskID     string    `json:"task_id"`
-	EmployeeID string    `json:"employee_id"`
-	Question   string    `json:"question"`
-	Answer     string    `json:"answer,omitempty"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
-	AnsweredAt time.Time `json:"answered_at,omitempty"`
+	ID         string `json:"id"`
+	TaskID     string `json:"task_id"`
+	EmployeeID string `json:"employee_id"`
+	Kind       string `json:"kind"`
+	Question   string `json:"question"`
+	// ConversationID and TaskTitle say where the request came from: a chat, or an assignment.
+	ConversationID string    `json:"conversation_id,omitempty"`
+	TaskTitle      string    `json:"task_title,omitempty"`
+	Answer         string    `json:"answer,omitempty"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"created_at"`
+	AnsweredAt     time.Time `json:"answered_at,omitempty"`
 }
 
 // Ask parks an in-progress task until a human answers the question.
-func (s *Store) Ask(ctx context.Context, taskID, employeeID, question string) (*InboxItem, error) {
-	item := &InboxItem{ID: newID("ask"), TaskID: taskID, EmployeeID: employeeID, Question: question, Status: "open"}
+func (s *Store) Ask(ctx context.Context, taskID, employeeID, kind, question string) (*InboxItem, error) {
+	if kind != InboxApproval {
+		kind = InboxQuestion
+	}
+	item := &InboxItem{ID: newID("ask"), TaskID: taskID, EmployeeID: employeeID, Kind: kind, Question: question, Status: "open"}
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		now := s.ms()
 		res, err := tx.ExecContext(ctx, `UPDATE tasks SET status = ?, updated_at = ? WHERE id = ? AND status = ?`,
@@ -34,14 +48,45 @@ func (s *Store) Ask(ctx context.Context, taskID, employeeID, question string) (*
 			return ErrConflict
 		}
 		item.CreatedAt = fromMS(now)
-		_, err = tx.ExecContext(ctx, `INSERT INTO inbox (id, task_id, employee_id, question, status, created_at) VALUES (?,?,?,?,?,?)`,
-			item.ID, taskID, employeeID, question, "open", now)
+		_, err = tx.ExecContext(ctx, `INSERT INTO inbox (id, task_id, employee_id, kind, question, status, created_at) VALUES (?,?,?,?,?,?,?)`,
+			item.ID, taskID, employeeID, kind, question, "open", now)
 		return err
 	})
 	return item, err
 }
 
-// Answer records the human's reply and re-queues the task.
+// Decisions on an approval.
+const (
+	DecisionApprove = "approve"
+	DecisionDecline = "decline"
+)
+
+// ApprovalAnswer is the text an agent reads for a decision; a note from the owner may follow it.
+func ApprovalAnswer(decision, note string) string {
+	text := "Declined. Do not do this."
+	if decision == DecisionApprove {
+		text = "Approved. You may do exactly what you asked about."
+	}
+	if note = strings.TrimSpace(note); note != "" {
+		text += " Note from the owner: " + note
+	}
+	return text
+}
+
+// GetInboxItem returns one request.
+func (s *Store) GetInboxItem(ctx context.Context, id string) (*InboxItem, error) {
+	items, err := s.listInbox(ctx, `WHERE inbox.id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, ErrNotFound
+	}
+	return items[0], nil
+}
+
+// Answer records the human's reply and re-queues the task. For an approval, answer is the
+// final text (see ApprovalAnswer).
 func (s *Store) Answer(ctx context.Context, id, answer string) (*InboxItem, error) {
 	err := s.withTx(ctx, func(tx *sql.Tx) error {
 		var taskID, status string
@@ -65,27 +110,27 @@ func (s *Store) Answer(ctx context.Context, id, answer string) (*InboxItem, erro
 	if err != nil {
 		return nil, err
 	}
-	items, err := s.listInbox(ctx, `WHERE id = ?`, id)
-	if err != nil || len(items) == 0 {
-		return nil, err
-	}
-	return items[0], nil
+	return s.GetInboxItem(ctx, id)
 }
 
 func (s *Store) ListInbox(ctx context.Context, status string) ([]*InboxItem, error) {
 	if status == "" {
 		return s.listInbox(ctx, ``)
 	}
-	return s.listInbox(ctx, `WHERE status = ?`, status)
+	return s.listInbox(ctx, `WHERE inbox.status = ?`, status)
 }
 
 func (s *Store) InboxForTask(ctx context.Context, taskID string) ([]*InboxItem, error) {
-	return s.listInbox(ctx, `WHERE task_id = ?`, taskID)
+	return s.listInbox(ctx, `WHERE inbox.task_id = ?`, taskID)
 }
 
 func (s *Store) listInbox(ctx context.Context, where string, args ...any) ([]*InboxItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, task_id, employee_id, question, answer, status, created_at, answered_at
-		FROM inbox `+where+` ORDER BY created_at ASC LIMIT 500`, args...)
+	rows, err := s.db.QueryContext(ctx, `SELECT inbox.id, inbox.task_id, inbox.employee_id, inbox.kind, inbox.question,
+		inbox.answer, inbox.status, inbox.created_at, inbox.answered_at,
+		COALESCE((SELECT conversation_id FROM tasks t WHERE t.id = inbox.task_id), ''),
+		COALESCE((SELECT CASE WHEN t.kind = 'chat' THEN '' ELSE COALESCE(NULLIF(p.title, ''), t.title) END
+			FROM tasks t LEFT JOIN tasks p ON p.id = t.parent_id WHERE t.id = inbox.task_id), '')
+		FROM inbox `+where+` ORDER BY inbox.created_at ASC LIMIT 500`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +139,8 @@ func (s *Store) listInbox(ctx context.Context, where string, args ...any) ([]*In
 	for rows.Next() {
 		var it InboxItem
 		var created, answered int64
-		if err := rows.Scan(&it.ID, &it.TaskID, &it.EmployeeID, &it.Question, &it.Answer, &it.Status, &created, &answered); err != nil {
+		if err := rows.Scan(&it.ID, &it.TaskID, &it.EmployeeID, &it.Kind, &it.Question, &it.Answer, &it.Status, &created, &answered,
+			&it.ConversationID, &it.TaskTitle); err != nil {
 			return nil, err
 		}
 		it.CreatedAt, it.AnsweredAt = fromMS(created), fromMS(answered)

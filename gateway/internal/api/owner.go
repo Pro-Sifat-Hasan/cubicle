@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/secrets"
@@ -132,16 +133,33 @@ func (s *Server) handleListInbox(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Answer string `json:"answer"`
+		Answer   string `json:"answer"`   // the reply; for an approval, an optional note
+		Decision string `json:"decision"` // approve or decline; required for an approval
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	if err := checkLen("answer", in.Answer, 20000, true); err != nil {
+	if err := checkLen("answer", in.Answer, 20000, false); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := s.store.Answer(r.Context(), r.PathValue("id"), in.Answer)
+	cur, err := s.store.GetInboxItem(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.storeErr(w, err)
+		return
+	}
+	text := in.Answer
+	if cur.Kind == store.InboxApproval {
+		if in.Decision != store.DecisionApprove && in.Decision != store.DecisionDecline {
+			writeErr(w, http.StatusBadRequest, "decision must be approve or decline")
+			return
+		}
+		text = store.ApprovalAnswer(in.Decision, in.Answer)
+	} else if strings.TrimSpace(in.Answer) == "" {
+		writeErr(w, http.StatusBadRequest, "answer is required")
+		return
+	}
+	item, err := s.store.Answer(r.Context(), cur.ID, text)
 	if err != nil {
 		s.storeErr(w, err)
 		return
@@ -149,8 +167,15 @@ func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request) {
 	s.hub.Publish("inbox.answered", item)
 	if t, err := s.store.GetTask(r.Context(), item.TaskID); err == nil {
 		s.publishTasks(t)
+		if t.ConversationID != "" {
+			s.publishConversation(r, t.ConversationID)
+		}
 	}
-	s.logActivity(r.Context(), item.EmployeeID, item.TaskID, "You answered a question.")
+	if item.Kind == store.InboxApproval {
+		s.logActivity(r.Context(), item.EmployeeID, item.TaskID, "You answered an approval request: "+in.Decision+"d.")
+	} else {
+		s.logActivity(r.Context(), item.EmployeeID, item.TaskID, "You answered a question.")
+	}
 	writeJSON(w, http.StatusOK, item)
 }
 

@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS inbox (
 	created_at INTEGER NOT NULL,
 	answered_at INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS task_sources (
+	assignment_id TEXT PRIMARY KEY,
+	source_task_id TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS activity (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	employee_id TEXT NOT NULL DEFAULT '',
@@ -122,6 +126,7 @@ func (s *Store) migrate() error {
 		{"tasks", "routine_id", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "conversation_id", "TEXT NOT NULL DEFAULT ''"},
 		{"routines", "agent_id", "TEXT NOT NULL DEFAULT ''"},
+		{"inbox", "kind", "TEXT NOT NULL DEFAULT 'question'"},
 	} {
 		if err := s.addColumn(c.table, c.column, c.def); err != nil {
 			return err

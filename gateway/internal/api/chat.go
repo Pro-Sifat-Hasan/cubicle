@@ -42,6 +42,8 @@ func (s *Server) handleCreateConversation(w http.ResponseWriter, r *http.Request
 type ConversationDetail struct {
 	*store.Conversation
 	Messages []*store.Message `json:"messages"`
+	// Started are the assignments agents started from this chat, each tied to the reply task that started it.
+	Started []store.StartedAssignment `json:"started"`
 }
 
 func (s *Server) handleGetConversation(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +57,12 @@ func (s *Server) handleGetConversation(w http.ResponseWriter, r *http.Request) {
 		s.storeErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, ConversationDetail{Conversation: c, Messages: msgs})
+	started, err := s.store.StartedFromChat(r.Context(), c.ID)
+	if err != nil {
+		s.storeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ConversationDetail{Conversation: c, Messages: msgs, Started: started})
 }
 
 func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
@@ -135,6 +142,8 @@ func (s *Server) handleWorkerAssignment(w http.ResponseWriter, r *http.Request) 
 		Title       string `json:"title"`
 		Description string `json:"description"`
 		AgentID     string `json:"agent_id"`
+		// SourceTaskID is the chat task whose reply started this assignment.
+		SourceTaskID string `json:"source_task_id"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -154,7 +163,16 @@ func (s *Server) handleWorkerAssignment(w http.ResponseWriter, r *http.Request) 
 		s.storeErr(w, err)
 		return
 	}
+	if in.SourceTaskID != "" {
+		if err := s.store.LinkAssignment(r.Context(), t.ID, in.SourceTaskID); err != nil {
+			s.storeErr(w, err)
+			return
+		}
+	}
 	s.publishTasks(t)
 	s.logActivity(r.Context(), in.AgentID, t.ID, "New assignment from a chat: "+t.Title)
+	if in.SourceTaskID != "" {
+		s.logActivity(r.Context(), in.AgentID, in.SourceTaskID, "Started the assignment “"+t.Title+"”.")
+	}
 	writeJSON(w, http.StatusCreated, t)
 }
