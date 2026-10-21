@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Daily and weekly reports:** the Today page has Today, Yesterday, This week and Last week buttons. The main agent writes the report from a work log of what really happened (assignments and outcomes, chats, tool calls, tokens, questions and approvals, new things learned about you, files made). Agents with the assignments tool can read the same log with `work_log`, so an automation can send you a report every evening.
+- **Chats are titled by the model** from your first message, and each chat is its own session with separate history. A chat you name yourself keeps its name.
+- **Close button** (and Esc) for the open chat in the Inbox.
+- **A better edit tool for the Dev:** `edit_file` makes several changes to a file at once, keeps its line endings and indentation, shows the diff and warns when a Python or JSON file no longer parses; `insert_lines` adds lines at a line number.
+- **Pre-push safety checks** (`./scripts/install-hooks.ps1`): secret and API key scan, a block on `.env`, database and key files, a vulnerability audit of Go, Python and .NET dependencies, then the linters and tests. Issue templates for agent problems, questions and documentation.
+
+### Fixed
+- Resolved the open CodeQL alerts (log injection, floating point comparison, disposal on error paths) and the gitleaks findings (fake keys in a test), and pinned a Go toolchain without known vulnerabilities.
 - **See everything an agent does, like Claude Code:** the Inbox shows a live timeline of each reply: what the agent is thinking, the remarks it makes between steps, and every tool call with its input (a file's content appears as it is written) and its output, with a spinner while it runs, a check or a cross when it ends, and how long it took. Click a call to open it. The timeline stays under the reply as "How it was done", and a teammate's steps carry their face and name. Replies are typed out as they are written.
 - **Cartoon avatars:** every agent is a cartoon character, drawn from its id and name so it always looks the same, with a prop for the job (a headset for engineers, a tie for the chief of staff, a beret for writers, glasses for analysts and reviewers).
 - **The main agent leads and the Dev builds:** a main agent with a team can no longer create files itself. It briefs the right teammate (the engineer for code, websites and portfolios), checks what they made and reports back. With Claude Code, the teammate builds with Claude Code's own file tools in the shared work folder.

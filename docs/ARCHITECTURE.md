@@ -108,6 +108,16 @@ appears in the chat and in the Inbox's **Needs you** thread, and the same reply 
 decision. Every reply keeps a trail of the tools it used ("How it was done"), and an assignment started
 from a chat is shown under the reply that started it, with its status, plan, trail and result.
 
+**Chat titles.** A new chat has no title. While the agent writes its first reply, its model also writes a
+short title from the first message (a separate, tiny request); if that fails, the start of the message is used.
+A title you give is never replaced. Every chat is its own session: its history, its work folder and its title
+are separate, and only office memory is shared between chats.
+
+**Reports.** The gateway keeps what the staff did (tasks and their outcomes, chats, steps, usage, questions, memory,
+files in the work folders) and can summarise any day, week or month as a *work log*. The Today page's report buttons
+start an assignment for the main agent with the log inside it; an automation can do the same on a schedule by asking
+the main agent to use `work_log` for `today` or `week`.
+
 ## Providers
 
 The gateway turns the provider you choose in Settings into environment variables for the worker,
@@ -132,7 +142,8 @@ list. A successful list confirms the key works.
 | `load_skill` | Load a skill's full instructions | Only the agent's own skills |
 | `ask_teammate` | Consult a teammate | Only the agent's team; a consulted teammate cannot consult further |
 | `start_assignment` | Start a team assignment from a chat | Only in chats, only with the *assignments* tool |
-| `edit_file`, `find_files`, `grep_files` | Change part of a file, find files by name, search file contents | Same workspace confinement as the file tools; edits need an exact, unique match |
+| `edit_file`, `insert_lines`, `find_files`, `grep_files` | Change a file in place (several edits per call, applied together or not at all), add lines at a line number, find files by name, search file contents | Same workspace confinement as the file tools. An edit needs an exact, unique match (a wrong indentation is forgiven and the file's own kept), keeps the file's line endings, returns the diff, and warns at once if a Python or JSON file no longer parses |
+| `work_log` | Read what the whole staff did in a period (assignments and outcomes, chats, tool calls, tokens, questions, what was learned, files) to write a daily or weekly report | Read-only; for agents with the *assignments* tool |
 | `run_command` | Run tests, linters, builds and git in the workspace (the *terminal* tool, off by default except for developer roles) | No shell, an allowlist of programs, a minimal environment with no secrets, a time limit and an output cap. Read-only git runs at once; everything else needs your approval of that exact command |
 | `forget` | Remove a wrong or outdated remembered fact | Matches the closest stored fact |
 | `ask_owner` | Ask you a question through the Inbox, in an assignment or a chat | Ends the turn; at most two questions per task |

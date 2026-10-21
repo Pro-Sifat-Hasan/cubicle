@@ -30,6 +30,8 @@ Invoke-RestMethod http://127.0.0.1:7878/api/v1/status -Headers @{ Authorization 
 | `GET /api/v1/inbox?status=open` | | requests from your staff: `kind` is `question` or `approval`; `conversation_id` (a chat) or `task_title` (an assignment) says where it came from |
 | `POST /api/v1/inbox/{id}/answer` | `{answer?, decision?}` | answered item; the task resumes. A question needs `answer`. An approval needs `decision` (`approve` or `decline`) and takes an optional note in `answer` |
 | `GET /api/v1/activity?limit=&task_id=&conversation_id=` | | activity log, newest first; with `task_id`, one assignment's trail (its subtasks included), and with `conversation_id`, the trail of every reply in a chat, both oldest first. Messages starting with `Tool: ` are tool calls |
+| `GET /api/v1/work-log?period=` | | what the staff did in `today`, `yesterday`, `week`, `last_week` or `month` (local time, weeks start on Monday): `{period, label, from, to, assignments, chats, agents, questions, approvals, unanswered, memories, files, markdown}` |
+| `POST /api/v1/reports` | `{period}` | starts an assignment for the main agent to write the daily or weekly report from the work log (`201`, the task) |
 | `GET /api/v1/steps?task_id=&conversation_id=` | | what agents did while working, oldest first: `[{id, task_id, conversation_id, agent_id, kind, name, input, output, status, created_at, updated_at}]`. `kind` is `thinking`, `note` (what the agent said between tool calls) or `tool` (`name`, its `input` and `output`); `status` is `running`, `done` or `error`. With `task_id`, subtasks are included |
 | `POST /api/v1/breaker/reset` | | `204` |
 | `GET /api/v1/events` | | Server-Sent Events stream |
@@ -171,6 +173,7 @@ stored), `assignment.done`, `inbox.new`, `inbox.answered`, `agent.status`, `agen
 | `POST /internal/v1/tasks/{id}/fail` | `{error}` | fails the parent and cancels siblings; a failed chat task becomes a failed reply |
 | `POST /internal/v1/tasks/{id}/ask` | `{employee_id, question, kind?}` | creates an inbox item and parks the task (an assignment step or a chat reply); `kind` is `question` (default) or `approval`. The answer arrives in `human_answers` when the task is claimed again |
 | `POST /internal/v1/tasks/{id}/progress` | `{status?, text?}` | relayed to the app as `task.progress` |
+| `GET /internal/v1/work-log?period=` | | the same work log, for the `work_log` tool |
 | `PUT /internal/v1/conversations/{id}/title` | `{title}` | names an untitled chat (`204`); ignored when the chat already has a title |
 | `POST /internal/v1/tasks/{id}/steps` | `{id, agent_id?, kind, name?, input?, output?, status?}` | records a step and relays it as `task.step`; the same `id` again updates it (a tool call gaining its output). Long fields are cut, a task keeps at most 400 steps, and steps still `running` are marked `done` when the task finishes or pauses |
 | `POST /internal/v1/assignments` | `{title, description, agent_id, source_task_id?}` | an agent starts an assignment for the main agent (from a chat); `source_task_id` ties it to the reply that started it |
