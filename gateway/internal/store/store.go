@@ -133,8 +133,41 @@ func (s *Store) migrate() error {
 		}
 	}
 	_, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_routine ON tasks(routine_id);
-		CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id)`)
+		CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id);
+		CREATE INDEX IF NOT EXISTS idx_activity_task ON activity(task_id);
+		CREATE INDEX IF NOT EXISTS idx_inbox_task ON inbox(task_id);
+		CREATE INDEX IF NOT EXISTS idx_inbox_status ON inbox(status)`)
 	return err
+}
+
+// Retention: the activity log and token usage are history, not state, so old rows are dropped.
+const (
+	activityKeepDays = 45
+	activityKeepRows = 30000
+	usageKeepDays    = 400
+)
+
+// Prune deletes old activity and usage rows. It returns how many rows it removed.
+func (s *Store) Prune(ctx context.Context) (int64, error) {
+	now := s.now()
+	var total int64
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`DELETE FROM activity WHERE created_at < ? AND id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT ?)`,
+			[]any{now.AddDate(0, 0, -activityKeepDays).UnixMilli(), activityKeepRows}},
+		{`DELETE FROM activity WHERE id NOT IN (SELECT id FROM activity ORDER BY id DESC LIMIT ?)`, []any{activityKeepRows * 3}},
+		{`DELETE FROM usage WHERE created_at < ?`, []any{now.AddDate(0, 0, -usageKeepDays).UnixMilli()}},
+	} {
+		res, err := s.db.ExecContext(ctx, q.sql, q.args...)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
 }
 
 func (s *Store) addColumn(table, column, def string) error {

@@ -1,6 +1,8 @@
 package test
 
 import (
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -123,5 +125,25 @@ func TestChatActivityGroupsByReplyTask(t *testing.T) {
 	h.do("GET", "/api/v1/activity?conversation_id="+convID, adminTok, nil, 200, &got)
 	if len(got) != 1 || got[0].TaskID != claim.Task.ID {
 		t.Fatalf("want only this chat's reply trail, got %+v", got)
+	}
+}
+
+func TestPruneKeepsRecentHistoryAndDropsOld(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "p.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	if _, err := st.AddActivity(ctx, "", "", "recent"); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := st.Prune(ctx); err != nil || n != 0 {
+		t.Fatalf("recent history must stay: removed %d, err %v", n, err)
+	}
+	list, _ := st.ListActivity(ctx, 10)
+	if len(list) != 1 {
+		t.Fatalf("activity = %d", len(list))
 	}
 }

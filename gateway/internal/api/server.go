@@ -285,8 +285,17 @@ func (s *Server) RunBreakerClock(ctx context.Context) {
 func (s *Server) RunScheduler(ctx context.Context) {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
+	var lastPrune time.Time
 	for {
 		s.fireRoutines(ctx)
+		if time.Since(lastPrune) > 24*time.Hour {
+			lastPrune = time.Now()
+			if n, err := s.store.Prune(ctx); err != nil {
+				s.log.Warn("prune old history", "err", err)
+			} else if n > 0 {
+				s.log.Info("pruned old history", "rows", n)
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return
