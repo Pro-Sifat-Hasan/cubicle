@@ -23,6 +23,7 @@ from cubicle_agents.llm.base import LLM, AgentResult, EventCallback, Turn
 from cubicle_agents.office import directives
 from cubicle_agents.office.status import StatusBoard
 from cubicle_agents.staff import prompts
+from cubicle_agents.staff.memory import MEMORY_FETCH, select_memories, trim_history
 from cubicle_agents.staff.roster import TOOL_MEMORY, TOOL_WEB, Employee, Roster
 from cubicle_agents.tools import build_toolbox
 from cubicle_agents.tools.base import TOOL_PREFIX
@@ -33,7 +34,6 @@ log = logging.getLogger(__name__)
 MAX_SUBTASKS = 6
 MAX_QUESTIONS_PER_TASK = 2
 MAX_APPROVALS_PER_TASK = 10
-MEMORY_LIMIT = 50
 MAX_TOOL_LOGS = 40  # tool calls recorded per run
 TERMINAL_STATUS = "Running a command…"  # run_command logs the command itself
 
@@ -85,9 +85,10 @@ class TaskHandler:
         folder = task.get("conversation_id") or task.get("parent_id") or task["id"]
         return self.ctx.workspace_root / folder
 
-    async def _memories(self) -> list[str]:
+    async def _memories(self, query: str) -> list[str]:
+        """The facts that fit this request (not all of them: that costs tokens and buries what matters)."""
         try:
-            return await self.ctx.gateway.list_memories(MEMORY_LIMIT)
+            return select_memories(await self.ctx.gateway.list_memories(MEMORY_FETCH), query)
         except Exception:  # memory is helpful context, never a reason to fail work
             log.warning("could not load office memory", exc_info=True)
             return []
@@ -113,7 +114,8 @@ class TaskHandler:
             )
         if on_event is None and json_schema is None:
             on_event = self._tool_logger(employee, claim)
-        system = prompts.system_prompt(employee, ctx.owner, memories=await self._memories(), tool_mode=tool_mode,
+        memories = await self._memories(prompt[:3000])
+        system = prompts.system_prompt(employee, ctx.owner, memories=memories, tool_mode=tool_mode,
                                        web=ctx.web_access, team=team, mode=mode)
         result = await ctx.llm.run(
             system=system, prompt=prompt, model=employee.model or ctx.default_model, toolbox=toolbox,
@@ -238,8 +240,8 @@ class TaskHandler:
 
     async def _chat(self, employee: Employee, claim: Claim) -> None:
         gw, task = self.ctx.gateway, claim.task
-        history = [Turn(m.get("role", "owner"), m.get("content", "")) for m in claim.history
-                   if m.get("status", "done") == "done"]
+        history = trim_history([Turn(m.get("role", "owner"), m.get("content", "")) for m in claim.history
+                                if m.get("status", "done") == "done"])
         workspace = Workspace(self._workdir(claim))
         before = set(workspace.files())
 

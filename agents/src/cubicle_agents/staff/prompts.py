@@ -140,8 +140,11 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
                          "the project's tests or linter if there are any, and report the real result. Never claim a "
                          "command passed unless you ran it and saw it pass.")
         if employee.has_tool(TOOL_MEMORY):
-            rules.append("Use remember for durable facts you learn about the owner (preferences, people, projects), "
-                         "not task details.")
+            rules.append("Save durable facts about the owner with remember the moment you learn them, without being "
+                         "asked: who they are, their work, preferences, people, projects, decisions. When they correct "
+                         "something, forget the old fact and remember the new one. Never save task details, guesses or "
+                         "secrets. What the office remembers is listed below; trust it, and ask rather than guess when "
+                         "something you need is not there.")
         if has_team:
             rules.append("Consult a teammate with ask_teammate when their expertise would clearly improve the result; "
                          "do simple things yourself.")

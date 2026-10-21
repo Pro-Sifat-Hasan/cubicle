@@ -15,7 +15,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-MAX_RESULT_CHARS = 40_000
+MAX_RESULT_CHARS = 20_000
 
 # Activity messages with this prefix are tool calls; the app shows them as such.
 TOOL_PREFIX = "Tool: "

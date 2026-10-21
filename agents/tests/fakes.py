@@ -70,6 +70,13 @@ class FakeGateway:
         self.calls.append(("log", message))
         self.logs.append(message)
 
+    async def forget_memory(self, fact):
+        for m in list(self.memories):
+            if fact.lower() in m.lower():
+                self.memories.remove(m)
+                return True
+        return False
+
     async def list_memories(self, limit=50):
         return self.memories[:limit]
 

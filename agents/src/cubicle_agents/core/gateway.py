@@ -90,6 +90,9 @@ class Gateway(Protocol):
     async def add_memory(self, content: str, agent_id: str) -> None:
         """Save a durable fact about the owner."""
 
+    async def forget_memory(self, fact: str) -> bool:
+        """Delete the remembered fact that best matches `fact`; False when nothing matches."""
+
 
 class GatewayClient:
     def __init__(self, base_url: str, token: str) -> None:
@@ -172,3 +175,14 @@ class GatewayClient:
 
     async def add_memory(self, content: str, agent_id: str) -> None:
         await self._send("POST", "/internal/v1/memories", {"content": content[:1000], "employee_id": agent_id})
+
+    async def forget_memory(self, fact: str) -> bool:
+        wanted = " ".join(fact.lower().split())
+        resp = await self._send("GET", "/internal/v1/memories?limit=300")
+        items = [m for m in resp.json() if " ".join(m["content"].lower().split())]
+        match = next((m for m in items if " ".join(m["content"].lower().split()) == wanted), None) or next(
+            (m for m in items if wanted in " ".join(m["content"].lower().split())), None)
+        if match is None:
+            return False
+        await self._send("DELETE", f"/internal/v1/memories/{match['id']}")
+        return True

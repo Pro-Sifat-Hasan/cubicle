@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from cubicle_agents.core.gateway import Gateway
+from cubicle_agents.staff.memory import looks_secret
 from cubicle_agents.staff.roster import TOOL_ASSIGNMENTS, TOOL_FILES, TOOL_MEMORY, TOOL_TERMINAL, TOOL_WEB, Employee
 from cubicle_agents.tools.base import TOOL_PREFIX, Tool, Toolbox, ToolError, require_str
 from cubicle_agents.tools.terminal import terminal_tool
@@ -47,6 +48,7 @@ def build_toolbox(
         toolbox.tools.append(terminal_tool(workspace, log_command, approved_actions))
     if employee.has_tool(TOOL_MEMORY):
         toolbox.tools.append(_remember(gateway, employee.id))
+        toolbox.tools.append(_forget(gateway))
     if employee.skills:
         toolbox.tools.append(_load_skill(employee))
     if team and consult is not None:
@@ -99,14 +101,19 @@ def build_toolbox(
 
 def _remember(gateway: Gateway, agent_id: str) -> Tool:
     async def remember(args: dict[str, Any]) -> str:
-        fact = require_str(args, "fact", max_len=1000)
-        await gateway.add_memory(fact.strip(), agent_id)
+        fact = require_str(args, "fact", max_len=1000).strip()
+        if looks_secret(fact):
+            raise ToolError("That looks like a key, password or token. Never store those; the owner keeps them in "
+                            "Settings or Integrations.")
+        await gateway.add_memory(fact, agent_id)
         return "Saved to the office memory."
 
     return Tool(
         name="remember",
-        description="Save a durable fact about the owner, their preferences, people or projects so the whole "
-        "staff remembers it in future work. Only save things that will still be true and useful later.",
+        description="Save a durable fact about the owner (who they are, their work, preferences, people, projects, "
+        "decisions) so the whole staff remembers it. Save it as soon as you learn it, without being asked. One short "
+        "sentence that stands alone, e.g. 'Sam prefers short emails and works in UTC+1.' Not task details, "
+        "not guesses, never secrets.",
         parameters={
             "type": "object",
             "properties": {"fact": {"type": "string", "description": "One short, self-contained sentence."}},
@@ -114,6 +121,27 @@ def _remember(gateway: Gateway, agent_id: str) -> Tool:
             "additionalProperties": False,
         },
         handler=remember,
+    )
+
+
+def _forget(gateway: Gateway) -> Tool:
+    async def forget(args: dict[str, Any]) -> str:
+        fact = require_str(args, "fact", max_len=1000).strip()
+        if await gateway.forget_memory(fact):
+            return "Removed from the office memory."
+        raise ToolError("No remembered fact matches that. Quote it as closely as you can.")
+
+    return Tool(
+        name="forget",
+        description="Remove a remembered fact that is wrong or out of date. When the owner corrects something, call "
+        "forget for the old fact and remember for the new one, so memory never contradicts itself.",
+        parameters={
+            "type": "object",
+            "properties": {"fact": {"type": "string", "description": "The remembered fact to remove, quoted closely."}},
+            "required": ["fact"],
+            "additionalProperties": False,
+        },
+        handler=forget,
     )
 
 

@@ -25,7 +25,7 @@ from cubicle_agents.tools.base import Tool, ToolError, require_str
 
 DEFAULT_TIMEOUT_S = 60
 MAX_TIMEOUT_S = 300
-MAX_OUTPUT_CHARS = 20_000
+MAX_OUTPUT_CHARS = 12_000
 APPROVAL_PREFIX = "Run: "  # how an agent words the approval request for a command
 
 # Programs an agent may start (after approval). Subcommands listed here are refused.

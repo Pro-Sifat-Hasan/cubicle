@@ -15,7 +15,7 @@ from typing import Any
 from cubicle_agents.tools.base import Tool, ToolError, require_str
 
 MAX_WRITE_BYTES = 1_000_000
-MAX_READ_CHARS = 100_000
+MAX_READ_CHARS = 30_000
 MAX_FILES = 200
 MAX_MATCHES = 200
 MAX_GREP_FILE_BYTES = 1_000_000
@@ -64,8 +64,15 @@ class Workspace:
         if not path.is_file():
             raise ToolError("No such file. Use list_files to see what exists.")
         text = path.read_text(encoding="utf-8", errors="replace")
+        start, count = args.get("start_line"), args.get("max_lines")
+        if isinstance(start, int) or isinstance(count, int):
+            lines = text.splitlines()
+            first = max(start, 1) if isinstance(start, int) else 1
+            last = min(first - 1 + (max(count, 1) if isinstance(count, int) else len(lines)), len(lines))
+            text = "\n".join(f"{n}: {line}" for n, line in enumerate(lines[first - 1:last], first))
+            text += f"\n[lines {first}-{last} of {len(lines)}]"
         if len(text) > MAX_READ_CHARS:
-            return text[:MAX_READ_CHARS] + "\n[truncated]"
+            return text[:MAX_READ_CHARS] + "\n[truncated: read the rest with start_line and max_lines]"
         return text
 
     async def list_files(self, _: dict[str, Any]) -> str:
@@ -159,10 +166,11 @@ class Workspace:
             ),
             Tool(
                 name="read_file",
-                description="Read a text file from this assignment's workspace, for example a teammate's draft.",
+                description="Read a text file from this assignment's workspace, for example a teammate's draft. Long "
+                "files are cut; read a part with start_line and max_lines (lines are numbered).",
                 parameters={
                     "type": "object",
-                    "properties": {"path": path_prop},
+                    "properties": {"path": path_prop, "start_line": {"type": "integer"}, "max_lines": {"type": "integer"}},
                     "required": ["path"],
                     "additionalProperties": False,
                 },

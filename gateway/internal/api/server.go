@@ -147,6 +147,7 @@ func (s *Server) Handler() http.Handler {
 	worker.HandleFunc("POST /internal/v1/activity", s.handleAddActivity)
 	worker.HandleFunc("GET /internal/v1/memories", s.handleListMemories)
 	worker.HandleFunc("POST /internal/v1/memories", s.handleWorkerAddMemory)
+	worker.HandleFunc("DELETE /internal/v1/memories/{id}", s.handleDeleteMemory)
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {

@@ -46,7 +46,7 @@ def test_remember_and_ask_tools(tmp_path):
     gw = FakeGateway()
     box = build_toolbox(employee=WRITER, workspace=tmp_path, gateway=gw, may_ask=True, client_web_fetch=True)
     assert {t.name for t in box.tools} == {"write_file", "read_file", "list_files", "edit_file", "find_files", "grep_files",
-                                           "remember", "ask_owner", "web_fetch"}
+                                           "remember", "forget", "ask_owner", "web_fetch"}
     run(box.call("remember", {"fact": "Owner is vegetarian"}))
     run(box.call("ask_owner", {"question": "Which city?"}))
     assert gw.memories == ["Owner is vegetarian"]
