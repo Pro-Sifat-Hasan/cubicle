@@ -233,6 +233,10 @@ public sealed class GatewayClient : IDisposable
     public Task<Memory> AddMemoryAsync(string content, CancellationToken ct = default) =>
         SendAsync<Memory>(HttpMethod.Post, "/api/v1/memories", new { content }, ct);
 
+    /// <summary>Replaces the owner's profile; empty text clears it.</summary>
+    public Task SetProfileAsync(string content, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Put, "/api/v1/memories/profile", new { content }, ct);
+
     public Task DeleteMemoryAsync(string id, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, $"/api/v1/memories/{Uri.EscapeDataString(id)}", null, ct);
 

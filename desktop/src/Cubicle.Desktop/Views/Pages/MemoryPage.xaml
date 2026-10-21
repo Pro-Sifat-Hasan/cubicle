@@ -13,6 +13,26 @@
             <TextBlock Style="{StaticResource PageSubtitle}"
                        Text="What your staff know about you: preferences, people and projects. Agents save what they learn while they work, and you can teach them directly. For each task they use only the facts that fit it, so keep them short and true, and delete anything that is wrong." />
 
+            <!-- The profile: one record about you, written and kept current by the staff -->
+            <Border Style="{StaticResource Card}" Padding="18,16" Margin="0,0,0,20">
+                <StackPanel>
+                    <DockPanel Margin="0,0,0,8">
+                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Command="{Binding SaveProfileCommand}" Padding="14,7">
+                            <TextBlock Text="Save" />
+                        </Button>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE77B;" Margin="0,0,10,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AccentTextBrush}" />
+                            <TextBlock Text="About you" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DockPanel>
+                    <TextBox Text="{Binding ProfileText, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True"
+                             MinHeight="70" MaxHeight="220" VerticalScrollBarVisibility="Auto" MaxLength="3000"
+                             controls:Placeholder.Text="Your staff write this as they get to know you: who you are, what you work on, how you like things done. You can edit it too." />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" Text="{Binding ProfileInfo}" />
+                </StackPanel>
+            </Border>
+
             <Border Style="{StaticResource Card}" Padding="14" Margin="0,0,0,20">
                 <DockPanel>
                     <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Margin="10,0,0,0" Command="{Binding AddMemoryCommand}">

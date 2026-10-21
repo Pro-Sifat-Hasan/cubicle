@@ -304,7 +304,11 @@ public sealed record ProviderInfo(
 public sealed record ModelList(IReadOnlyList<string> Models, bool Live, string? Error);
 
 /// <summary>A durable fact the staff keep in mind across tasks.</summary>
-public sealed record Memory(string Id, string Content, string? EmployeeId, DateTimeOffset CreatedAt);
+public sealed record Memory(string Id, string Content, string? EmployeeId, DateTimeOffset CreatedAt, string? Kind = null)
+{
+    /// <summary>The one record that describes the owner in full; everything else is a short fact.</summary>
+    public bool IsProfile => Kind == "profile";
+}
 
 // ---- extensions ----
 

@@ -143,6 +143,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(AddMemoryCommand))]
     private string _newMemory = "";
 
+    // ---- the owner's profile: one record the staff keep up to date ----
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SaveProfileCommand))]
+    private string _profileText = "";
+
+    [ObservableProperty] private string _profileInfo = "";
+    private string _profileSaved = "";
+
+    private bool CanSaveProfile() => ProfileText.Trim() != _profileSaved;
+
+    [RelayCommand(CanExecute = nameof(CanSaveProfile))]
+    private Task SaveProfileAsync() => SafeAsync(async () =>
+    {
+        await _client!.SetProfileAsync(ProfileText.Trim());
+        await RefreshAllAsync();
+    });
+
     // ---- selected assignment ----
 
     [ObservableProperty] private AssignmentViewModel? _selectedAssignment;
@@ -363,9 +381,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Summary));
 
         Replace(Activity, activityTask.Result);
-        Replace(Memories, memoriesTask.Result.Select(m => new MemoryViewModel(m,
-            string.IsNullOrEmpty(m.EmployeeId) ? "Added by you" : $"Learned by {names.GetValueOrDefault(m.EmployeeId, m.EmployeeId)}",
-            DeleteMemoryAsync)));
+        string Source(Memory m) => string.IsNullOrEmpty(m.EmployeeId) ? "Added by you" : $"Learned by {names.GetValueOrDefault(m.EmployeeId, m.EmployeeId)}";
+        Replace(Memories, memoriesTask.Result.Where(m => !m.IsProfile).Select(m => new MemoryViewModel(m, Source(m), DeleteMemoryAsync)));
+        var profile = memoriesTask.Result.FirstOrDefault(m => m.IsProfile);
+        var wasEdited = ProfileText.Trim() != _profileSaved; // keep what the owner is typing
+        _profileSaved = profile?.Content ?? "";
+        if (!wasEdited) ProfileText = _profileSaved;
+        ProfileInfo = profile is null ? "" : $"{Source(profile).Replace("Added by you", "Written by you")} · {profile.CreatedAt.ToLocalTime():dd MMM yyyy}";
+        SaveProfileCommand.NotifyCanExecuteChanged();
 
         if (SelectedAssignment is not null)
             await LoadDetailAsync(SelectedAssignment.Task.Id);
