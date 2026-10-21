@@ -96,6 +96,13 @@ In a chat an agent can consult teammates (`ask_teammate`: the teammate runs with
 configuration and returns its answer) and, with the *assignments* tool, start a full assignment for
 the team.
 
+Everything an agent does is recorded as **steps**: its thoughts (`thinking`), the remarks it makes between
+tool calls (`note`) and each tool call (`tool`, with its input and, when it ends, its output and status). The
+worker reports a step each time it changes (throttled), the gateway stores it (cut to sensible lengths, at most
+400 per task) and relays it as a `task.step` event, so the Inbox shows a live timeline and keeps it under the
+reply as "How it was done". A teammate consulted during a reply reports its steps on the same task, marked with
+its own id.
+
 A chat reply can pause too: an agent that needs an answer or an approval parks its reply, the request
 appears in the chat and in the Inbox's **Needs you** thread, and the same reply resumes with your
 decision. Every reply keeps a trail of the tools it used ("How it was done"), and an assignment started
@@ -109,7 +116,7 @@ and restarts the worker whenever settings or keys change.
 | Adapter | Used for | How it works |
 |---|---|---|
 | Pydantic AI | Claude API, OpenAI, Gemini, OpenRouter, Ollama, custom servers | One engine: tool loop, validated structured output with retries, streaming, usage limits. Claude gets adaptive thinking, effort control, prompt caching and server-side web search and fetch; OpenAI gets native web search; other servers get DuckDuckGo search and Cubicle's guarded fetch |
-| Claude Code | Your Claude subscription | Runs your installed `claude` CLI headlessly in the work folder, with file and web tools only (no shell). MCP servers are passed with `--mcp-config` |
+| Claude Code | Your Claude subscription | Runs your installed `claude` CLI headlessly in the work folder and streams its work (`stream-json`). It gets its own file and web tools (never a shell), limited to what the agent may do, and Cubicle's own tools over a local MCP bridge. It is isolated from your personal Claude Code setup. MCP servers are passed with `--mcp-config` |
 | Demo | Trying Cubicle out | Sample answers with no model |
 
 **Test connection** in Settings runs `cubicle-agents models`, which asks the provider for its model
@@ -131,9 +138,18 @@ list. A successful list confirms the key works.
 | `ask_owner` | Ask you a question through the Inbox, in an assignment or a chat | Ends the turn; at most two questions per task |
 | `request_approval` | Ask you to approve one specific action before it happens | Ends the turn; the agent acts only on "Approved" and only on that action |
 
-Providers that cannot run Cubicle's tools (Claude Code, Demo) use plain-text directives instead.
-A line starting with `REMEMBER:` saves a fact, and `ASK_OWNER:` asks a question. Their skills are
-included in full in the prompt.
+The Demo provider cannot run Cubicle's tools and uses plain-text directives instead: a line starting
+with `REMEMBER:` saves a fact, and `ASK_OWNER:` asks a question. Its skills are included in full in the prompt.
+
+**Claude Code and Cubicle's tools.** For one run the worker serves every tool Claude Code does not have
+natively (`ask_teammate`, `start_assignment`, `remember`, `forget`, `load_skill`, `ask_owner`,
+`request_approval`, `run_command`) as an MCP server on `127.0.0.1`, guarded by a random bearer token that
+exists only for that run. Claude Code's own `Read`, `Write`, `Edit`, `Glob` and `Grep` replace the file
+tools, and `Write` and `Edit` work only inside the work folder.
+
+**Leading and building.** A main agent with a team coordinates: it gets read-only file tools and must brief
+a teammate (`ask_teammate`, or `start_assignment` for a big job) for anything that has to be built as files.
+Teammates save into the same work folder, so the main agent can look at the result and send it back for fixes.
 
 ## MCP servers, skills and plugins
 
