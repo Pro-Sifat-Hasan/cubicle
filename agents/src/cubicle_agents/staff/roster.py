@@ -18,6 +18,7 @@ TOOL_FILES = "files"
 TOOL_WEB = "web"
 TOOL_MEMORY = "memory"
 TOOL_ASSIGNMENTS = "assignments"
+TOOL_TERMINAL = "terminal"
 STANDARD_TOOLS = (TOOL_FILES, TOOL_WEB, TOOL_MEMORY)
 
 

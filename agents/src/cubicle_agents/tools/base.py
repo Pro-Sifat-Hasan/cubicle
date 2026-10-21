@@ -17,6 +17,9 @@ log = logging.getLogger(__name__)
 
 MAX_RESULT_CHARS = 40_000
 
+# Activity messages with this prefix are tool calls; the app shows them as such.
+TOOL_PREFIX = "Tool: "
+
 
 class ToolError(Exception):
     """Raised by handlers for expected failures; the message is shown to the model."""

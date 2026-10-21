@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from cubicle_agents.core.gateway import Gateway
-from cubicle_agents.staff.roster import TOOL_ASSIGNMENTS, TOOL_FILES, TOOL_MEMORY, TOOL_WEB, Employee
-from cubicle_agents.tools.base import Tool, Toolbox, ToolError, require_str
+from cubicle_agents.staff.roster import TOOL_ASSIGNMENTS, TOOL_FILES, TOOL_MEMORY, TOOL_TERMINAL, TOOL_WEB, Employee
+from cubicle_agents.tools.base import TOOL_PREFIX, Tool, Toolbox, ToolError, require_str
+from cubicle_agents.tools.terminal import terminal_tool
 from cubicle_agents.tools.web import WEB_FETCH
 from cubicle_agents.tools.workspace import Workspace
 
@@ -25,6 +26,7 @@ def build_toolbox(
     client_web_fetch: bool,
     may_approve: bool = False,
     task_id: str = "",
+    approved_actions: tuple[str, ...] = (),
     web_access: bool = True,
     team: list[Employee] | None = None,
     consult: ConsultFunc | None = None,
@@ -38,6 +40,11 @@ def build_toolbox(
     toolbox = Toolbox()
     if employee.has_tool(TOOL_FILES):
         toolbox.tools.extend(Workspace(workspace).tools())
+    if employee.has_tool(TOOL_TERMINAL):
+        async def log_command(message: str) -> None:
+            await gateway.log(employee.id, task_id, f"{TOOL_PREFIX}{message}")
+
+        toolbox.tools.append(terminal_tool(workspace, log_command, approved_actions))
     if employee.has_tool(TOOL_MEMORY):
         toolbox.tools.append(_remember(gateway, employee.id))
     if employee.skills:

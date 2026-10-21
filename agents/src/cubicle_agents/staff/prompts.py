@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from cubicle_agents.staff.roster import TOOL_ASSIGNMENTS, TOOL_FILES, TOOL_MEMORY, TOOL_WEB, Employee
+from cubicle_agents.staff.roster import TOOL_ASSIGNMENTS, TOOL_FILES, TOOL_MEMORY, TOOL_TERMINAL, TOOL_WEB, Employee
 
 ASK_PREFIX = "ASK_OWNER:"
 APPROVAL_PREFIX = "REQUEST_APPROVAL:"
@@ -131,7 +131,14 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
         if employee.has_tool(TOOL_FILES):
             rules.append("Save substantial deliverables (documents, code, tables, drafts) with write_file so the owner "
                          "gets real files, and summarise them in your answer. Use read_file/list_files to build on "
-                         "teammates' files.")
+                         "teammates' files. To change part of a file, read it and use edit_file with the exact text "
+                         "rather than rewriting the whole file; use find_files and grep_files to locate things.")
+        if employee.has_tool(TOOL_TERMINAL):
+            rules.append("run_command runs one command (tests, linters, builds, git) in your workspace. Read-only git "
+                         "queries run at once; for any other command first call request_approval with the action "
+                         "'Run: <exact command>' and what it does, and run it only once approved. After a change, run "
+                         "the project's tests or linter if there are any, and report the real result. Never claim a "
+                         "command passed unless you ran it and saw it pass.")
         if employee.has_tool(TOOL_MEMORY):
             rules.append("Use remember for durable facts you learn about the owner (preferences, people, projects), "
                          "not task details.")

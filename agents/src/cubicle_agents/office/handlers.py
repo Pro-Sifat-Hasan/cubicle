@@ -25,6 +25,7 @@ from cubicle_agents.office.status import StatusBoard
 from cubicle_agents.staff import prompts
 from cubicle_agents.staff.roster import TOOL_MEMORY, TOOL_WEB, Employee, Roster
 from cubicle_agents.tools import build_toolbox
+from cubicle_agents.tools.base import TOOL_PREFIX
 from cubicle_agents.tools.workspace import Workspace
 
 log = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ MAX_QUESTIONS_PER_TASK = 2
 MAX_APPROVALS_PER_TASK = 10
 MEMORY_LIMIT = 50
 MAX_TOOL_LOGS = 40  # tool calls recorded per run
-TOOL_PREFIX = "Tool: "  # activity messages with this prefix are tool calls (the app shows them as such)
+TERMINAL_STATUS = "Running a command…"  # run_command logs the command itself
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,7 @@ class TaskHandler:
             toolbox = build_toolbox(
                 employee=employee, workspace=workdir, gateway=ctx.gateway, may_ask=may_ask,
                 may_approve=mode != prompts.MODE_CONSULT and self._may_approve(claim), task_id=claim.task["id"],
+                approved_actions=self._approved_actions(claim),
                 client_web_fetch=ctx.client_web_fetch, web_access=ctx.web_access,
                 team=team, consult=consult if team else None, allow_assignments=mode == prompts.MODE_CHAT,
             )
@@ -140,7 +142,7 @@ class TaskHandler:
 
         async def on_event(kind: str, text: str) -> None:
             nonlocal last, count
-            if kind != "status" or text == last or count >= MAX_TOOL_LOGS:
+            if kind != "status" or text == last or count >= MAX_TOOL_LOGS or text == TERMINAL_STATUS:
                 return
             last, count = text, count + 1
             await self.ctx.gateway.log(employee.id, claim.task["id"], f"{TOOL_PREFIX}{text}")
@@ -150,6 +152,12 @@ class TaskHandler:
     def _may_ask(self, claim: Claim) -> bool:
         asked = [a for a in claim.human_answers if a.get("kind") != "approval"]
         return len(asked) < MAX_QUESTIONS_PER_TASK
+
+    @staticmethod
+    def _approved_actions(claim: Claim) -> tuple[str, ...]:
+        """What the owner approved on this task so far (the agent's own wording of each request)."""
+        return tuple(a.get("question", "") for a in claim.human_answers
+                     if a.get("kind") == "approval" and str(a.get("answer", "")).startswith("Approved"))
 
     def _may_approve(self, claim: Claim) -> bool:
         approvals = [a for a in claim.human_answers if a.get("kind") == "approval"]

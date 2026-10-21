@@ -79,7 +79,7 @@ passion (or type their own), watch the team get hired, and start a first mission
   missions. Hired teammates join the main agent's team; routines marked `enabled` are switched on,
   the rest wait in Automations.
 - A **passion** pack decides the main agent's voice (`system_prompt_style`, appended to its
-  instructions), the greetings on Today, the daily feed queries and the accent colour the app uses.
+  instructions), the greetings on Today, the daily feed queries and a colour swatch. The app itself always keeps the Cubicle amber.
   Only the main agent takes the voice; specialists stay professional.
 - A **custom** passion is written by the main agent: the gateway queues a hidden `persona` task, the
   worker answers with schema-validated JSON, and the gateway clamps it before anything is stored.

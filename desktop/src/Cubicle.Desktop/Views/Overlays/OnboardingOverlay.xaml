@@ -71,7 +71,7 @@
                 <StackPanel Visibility="{Binding IsPassionStep, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="What are you into?" Style="{StaticResource PageTitle}" />
                     <TextBlock Style="{StaticResource PageSubtitle}" Margin="0,6,0,18"
-                               Text="Your passion gives your chief of staff their voice, their daily interest feed and the app's accent colour. Or type your own and they write it themselves." />
+                               Text="Your passion gives your chief of staff their voice, and their daily interest feed. Or type your own and they write it themselves." />
                     <ListBox ItemsSource="{Binding Passions}" SelectedItem="{Binding SelectedPassion}"
                              Style="{StaticResource PlainList}" ItemContainerStyle="{StaticResource CardItem}"
                              ScrollViewer.VerticalScrollBarVisibility="Disabled">

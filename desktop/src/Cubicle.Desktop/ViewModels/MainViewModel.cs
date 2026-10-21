@@ -485,7 +485,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         _packs = packs;
         Profile = packs.Profile;
-        ThemeService.SetAccent(packs.Profile.Onboarded ? packs.Profile.Passion?.AccentColor : null);
         Replace(StarterMissions, packs.Professions.FirstOrDefault(p => p.Id == packs.Profile.Profession)?.StarterMissions ?? []);
         OnPropertyChanged(nameof(MainAgentName));
     }

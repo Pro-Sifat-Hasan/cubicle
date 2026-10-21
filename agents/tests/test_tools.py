@@ -45,7 +45,8 @@ def test_toolbox_turns_errors_into_results(tmp_path):
 def test_remember_and_ask_tools(tmp_path):
     gw = FakeGateway()
     box = build_toolbox(employee=WRITER, workspace=tmp_path, gateway=gw, may_ask=True, client_web_fetch=True)
-    assert {t.name for t in box.tools} == {"write_file", "read_file", "list_files", "remember", "ask_owner", "web_fetch"}
+    assert {t.name for t in box.tools} == {"write_file", "read_file", "list_files", "edit_file", "find_files", "grep_files",
+                                           "remember", "ask_owner", "web_fetch"}
     run(box.call("remember", {"fact": "Owner is vegetarian"}))
     run(box.call("ask_owner", {"question": "Which city?"}))
     assert gw.memories == ["Owner is vegetarian"]
@@ -102,3 +103,46 @@ def test_extract_directives():
     assert d.text == "The answer" and d.question is None
     assert extract("ASK_OWNER: Which file?\nignored").question == "Which file?"
     assert extract("ASK_OWNER:").question == "Could you give me more detail?"
+
+
+def _tools(tmp_path, **kw):
+    return build_toolbox(employee=WRITER, workspace=tmp_path, gateway=FakeGateway(), may_ask=False,
+                         client_web_fetch=False, **kw)
+
+
+def test_edit_file_replaces_exact_unique_text(tmp_path):
+    box = _tools(tmp_path)
+    run(box.call("write_file", {"path": "a.py", "content": "x = 1\ny = 2\nx = 1\n"}))
+    done = run(box.call("edit_file", {"path": "a.py", "old_text": "y = 2", "new_text": "y = 3"}))
+    assert done.content.startswith("Edited a.py")
+    assert (tmp_path / "a.py").read_text() == "x = 1\ny = 3\nx = 1\n"
+    ambiguous = run(box.call("edit_file", {"path": "a.py", "old_text": "x = 1", "new_text": "x = 9"}))
+    assert ambiguous.is_error and "2 times" in ambiguous.content
+    everywhere = run(box.call("edit_file", {"path": "a.py", "old_text": "x = 1", "new_text": "x = 9", "replace_all": True}))
+    assert "replaced 2" in everywhere.content
+    assert run(box.call("edit_file", {"path": "a.py", "old_text": "nope", "new_text": "z"})).is_error
+    assert run(box.call("edit_file", {"path": "../a.py", "old_text": "x", "new_text": "z"})).is_error
+
+
+def test_find_and_grep_files(tmp_path):
+    box = _tools(tmp_path)
+    run(box.call("write_file", {"path": "src/app.py", "content": "def main():\n    return 'Hello'\n"}))
+    run(box.call("write_file", {"path": "src/util.ts", "content": "export const hello = 1\n"}))
+    run(box.call("write_file", {"path": "notes.md", "content": "hello world\n"}))
+    assert run(box.call("find_files", {"pattern": "*.py"})).content == "src/app.py"
+    assert run(box.call("find_files", {"pattern": "src/**/*.ts"})).content == "src/util.ts"
+    assert run(box.call("find_files", {"pattern": "*.rs"})).content == "No files match."
+    assert run(box.call("find_files", {"pattern": "/etc/*"})).is_error
+    hits = run(box.call("grep_files", {"pattern": "hello", "ignore_case": True})).content.splitlines()
+    assert hits == ["notes.md:1: hello world", "src/app.py:2: return 'Hello'", "src/util.ts:1: export const hello = 1"]
+    assert run(box.call("grep_files", {"pattern": "hello", "file_pattern": "*.md"})).content == "notes.md:1: hello world"
+    assert run(box.call("grep_files", {"pattern": "("})).is_error
+
+
+def test_terminal_is_only_offered_to_agents_that_have_it(tmp_path):
+    import dataclasses
+
+    assert "run_command" not in {t.name for t in _tools(tmp_path).tools}
+    dev = dataclasses.replace(WRITER, tools=(*WRITER.tools, "terminal"))
+    box = build_toolbox(employee=dev, workspace=tmp_path, gateway=FakeGateway(), may_ask=False, client_web_fetch=False)
+    assert "run_command" in {t.name for t in box.tools}

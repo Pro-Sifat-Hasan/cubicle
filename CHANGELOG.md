@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- **Onboarding:** five short screens to name your chief of staff, pick a profession and a passion, watch your team get hired, and start a first mission. Professions (software engineer, video editor, marketer, founder, other) hire a specialist team, set up routines and suggest starter missions. Ten passions give the main agent a voice, greetings and the app's accent colour, and **Custom** lets you type your own and have the model write the persona. Packs are JSON files. Run setup again from Settings.
+- **Onboarding:** five short screens to name your chief of staff, pick a profession and a passion, watch your team get hired, and start a first mission. Professions (software engineer, video editor, marketer, founder, other) hire a specialist team, set up routines and suggest starter missions. Ten passions give the main agent a voice and greetings, and **Custom** lets you type your own and have the model write the persona. Packs are JSON files. Run setup again from Settings.
 - Starter missions on Today while there is no work yet.
 - **A calmer Today page:** a command bar with optional details, questions that need you answered right on the page, assignments newest first with a progress bar while they run, and rectangular team cards with live status. The assignment panel closes with the X and reopens when you click an assignment; it shows the result first, with the plan (who, what they were asked, their activity and output) and how it was done (tools used) collapsed.
 - Agents record the tools they use, so every assignment shows how the work was done.
