@@ -8,8 +8,8 @@ using Cubicle.Client;
 namespace Cubicle.Desktop.ViewModels;
 
 /// <summary>
-/// The Tools page: MCP servers (apps and services agents can use), skills
-/// (reusable instructions) and plugins (installable bundles).
+/// The Integrations page: apps agents can connect to (MCP servers, with guided setup), skills (reusable
+/// instructions, installable from skills.sh) and plugins (installable bundles).
 /// </summary>
 public sealed partial class ToolsViewModel(Func<GatewayClient?> client, Action<string> showError, Action<string, string> notify)
     : ObservableObject
@@ -21,42 +21,82 @@ public sealed partial class ToolsViewModel(Func<GatewayClient?> client, Action<s
     public ObservableCollection<McpTemplate> ServerTemplates { get; } = [];
     public ObservableCollection<Skill> Skills { get; } = [];
     public ObservableCollection<SkillTemplate> SkillTemplates { get; } = [];
+
+    /// <summary>The app catalog, grouped by kind.</summary>
+    public ObservableCollection<AppGroupViewModel> AppGroups { get; } = [];
+
+    /// <summary>Installed skills with who uses them.</summary>
+    public ObservableCollection<SkillItemViewModel> SkillItems { get; } = [];
+
+    /// <summary>Built-in skills not installed yet, for one-tap adding.</summary>
+    public ObservableCollection<SkillTemplate> RecommendedSkills { get; } = [];
+
+    /// <summary>Skills found by "Find skills" (skills.sh link, command or repository).</summary>
+    public ObservableCollection<FoundSkillViewModel> FoundSkills { get; } = [];
     public ObservableCollection<PluginItemViewModel> Plugins { get; } = [];
     public ObservableCollection<PluginTemplateViewModel> PluginTemplates { get; } = [];
     public IReadOnlyList<string> Transports { get; } = ["stdio", "http"];
 
-    /// <summary>"mcp", "skills" or "plugins".</summary>
+    /// <summary>"apps", "skills" or "plugins".</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowMcp), nameof(ShowSkills), nameof(ShowPlugins))]
-    private string _tab = "mcp";
+    [NotifyPropertyChangedFor(nameof(ShowApps), nameof(ShowSkills), nameof(ShowPlugins))]
+    private string _tab = "apps";
 
-    public bool ShowMcp => Tab == "mcp";
+    public bool ShowApps => Tab == "apps";
     public bool ShowSkills => Tab == "skills";
     public bool ShowPlugins => Tab == "plugins";
+    /// <summary>The panel for connecting (or managing) an app.</summary>
+    [ObservableProperty] private ConnectViewModel? _connect;
+
+    /// <summary>Whether the custom server editor (advanced) is open.</summary>
+    [ObservableProperty] private bool _showAdvanced;
+
     [ObservableProperty] private McpEditorViewModel? _serverEditor;
     [ObservableProperty] private SkillEditorViewModel? _skillEditor;
 
     private IReadOnlyList<string> _secretNames = [];
+    private IReadOnlyList<Agent> _agents = [];
+    private IReadOnlyList<McpServer> _servers = [];
 
     public void Load(Catalog catalog, IReadOnlyList<McpServer> servers, IReadOnlyList<Skill> skills,
         IReadOnlyList<Plugin> plugins, IReadOnlyList<Agent> agents, IReadOnlyList<string> secretNames)
     {
         _secretNames = secretNames;
+        _agents = agents;
+        _servers = servers;
         var tests = Servers.ToDictionary(s => s.Server.Id, s => s.TestResult);
         Replace(Servers, servers.Select(s => new McpServerItemViewModel(s, UsedBy(agents, a => a.McpServers.Contains(s.Id)),
             MissingSecrets(s.SecretEnv.Concat(string.IsNullOrEmpty(s.AuthSecret) ? [] : [s.AuthSecret])), TestServerAsync, DeleteServerAsync,
             EditServer, ToggleServerAsync) { TestResult = tests.GetValueOrDefault(s.Id, "") }));
         Replace(Skills, skills);
+        Replace(SkillItems, skills.Select(sk => new SkillItemViewModel(sk, UsedBy(agents, a => a.Skills.Contains(sk.Id)), EditSkillItem, DeleteSkillItemAsync)));
         Replace(Plugins, plugins.Select(p => new PluginItemViewModel(p, UninstallAsync)));
         if (ServerTemplates.Count == 0)
         {
             Replace(ServerTemplates, catalog.McpServers);
             Replace(SkillTemplates, catalog.Skills);
         }
+        Replace(RecommendedSkills, SkillTemplates.Where(t => !skills.Any(sk => sk.TemplateId == t.Id)));
+        BuildAppGroups(servers);
         Replace(PluginTemplates, catalog.Plugins.Select(p => new PluginTemplateViewModel(p,
             plugins.Any(i => i.CatalogId == p.Id), InstallAsync)));
         ServerEditor?.RefreshSecrets(secretNames);
     }
+
+    private void BuildAppGroups(IReadOnlyList<McpServer> servers)
+    {
+        var cards = ServerTemplates.Select(t => new AppCardViewModel(t,
+            servers.FirstOrDefault(s => s.TemplateId == t.Id && string.IsNullOrEmpty(s.PluginId)), OpenApp));
+        var groups = cards.GroupBy(c => c.Template.Group)
+            .OrderBy(g => GroupOrder(g.Key)).ThenBy(g => g.Key)
+            .Select(g => new AppGroupViewModel(g.Key, g.OrderByDescending(c => c.IsConnected).ThenBy(c => c.Name).ToList()));
+        Replace(AppGroups, groups);
+    }
+
+    private static int GroupOrder(string group) => group switch
+    {
+        "Code" => 0, "Productivity" => 1, "Data" => 2, "Web" => 3, "Utilities" => 4, _ => 5,
+    };
 
     private static string UsedBy(IReadOnlyList<Agent> agents, Func<Agent, bool> uses)
     {
@@ -65,6 +105,161 @@ public sealed partial class ToolsViewModel(Func<GatewayClient?> client, Action<s
     }
 
     private List<string> MissingSecrets(IEnumerable<string> names) => names.Where(n => !_secretNames.Contains(n)).ToList();
+
+    // ---- apps ----
+
+    private void OpenApp(AppCardViewModel card) =>
+        Connect = new ConnectViewModel(card.Template, card.Server, _agents, _secretNames);
+
+    [RelayCommand]
+    private void CloseConnect() => Connect = null;
+
+    [RelayCommand]
+    private void OpenLink()
+    {
+        if (Connect is { HasLink: true } c)
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(c.Link) { UseShellExecute = true });
+    }
+
+    /// <summary>Connects the app in one step, then checks that it really works.</summary>
+    [RelayCommand]
+    private Task SaveConnectAsync() => Run(async c =>
+    {
+        if (Connect is not { IsBusy: false } panel)
+            return;
+        panel.IsBusy = true;
+        panel.Status = "Connecting…";
+        try
+        {
+            var result = await c.ConnectIntegrationAsync(panel.Template.Id, panel.Values(), panel.ChosenAgents());
+            Changed?.Invoke();
+            foreach (var f in panel.Fields.Where(f => f.IsSecret))
+                f.Value = ""; // keys are never kept on screen
+            panel.Status = "Saved. Checking the connection… (the first start can take a minute while packages download)";
+            try
+            {
+                var test = await c.TestMcpServerAsync(result.Server.Id);
+                panel.Status = string.IsNullOrEmpty(test.Error)
+                    ? $"✓ Connected. {test.Tools.Count} tools are ready for {(result.Attached.Count > 0 ? "your chosen agents" : "agents you give it to")}."
+                    : $"Saved, but the check failed: {test.Error}";
+                panel.Succeeded = string.IsNullOrEmpty(test.Error);
+            }
+            catch (Exception e) when (e is GatewayException or HttpRequestException or OperationCanceledException)
+            {
+                panel.Status = $"Saved, but the check could not run: {e.Message}";
+            }
+        }
+        catch
+        {
+            panel.Status = "";
+            throw;
+        }
+        finally
+        {
+            panel.IsBusy = false;
+        }
+    });
+
+    [RelayCommand]
+    private Task DisconnectAsync(McpServer server) => Run(async c =>
+    {
+        await c.DeleteMcpServerAsync(server.Id);
+        Connect = null;
+        Changed?.Invoke();
+    });
+
+    // ---- skills from skills.sh ----
+
+    public const string SkillsShUrl = "https://skills.sh";
+
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(FindSkillsCommand))] private string _skillSource = "";
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(FindSkillsCommand), nameof(InstallFoundCommand))] private bool _isFinding;
+    [ObservableProperty] private string _findNote = "";
+    private string _foundFrom = "";
+
+    public bool HasFound => FoundSkills.Count > 0;
+    public string FoundHeading => FoundSkills.Count == 0 ? "" : $"Found {FoundSkills.Count} skill{(FoundSkills.Count == 1 ? "" : "s")} in {_foundFrom}";
+
+    [RelayCommand]
+    private void BrowseSkillsSh() =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(SkillsShUrl) { UseShellExecute = true });
+
+    [RelayCommand]
+    private void PasteSkillSource()
+    {
+        try
+        {
+            if (System.Windows.Clipboard.ContainsText())
+                SkillSource = System.Windows.Clipboard.GetText().Trim();
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            showError("Windows would not let Cubicle read the clipboard. Paste with Ctrl+V instead.");
+        }
+    }
+
+    private bool CanFind() => !IsFinding && !string.IsNullOrWhiteSpace(SkillSource);
+
+    [RelayCommand(CanExecute = nameof(CanFind))]
+    private Task FindSkillsAsync() => Run(async c =>
+    {
+        IsFinding = true;
+        FindNote = "Looking…";
+        FoundSkills.Clear();
+        try
+        {
+            var found = await c.DiscoverSkillsAsync(SkillSource.Trim());
+            _foundFrom = found.Source.ToString();
+            Replace(FoundSkills, found.Skills.Select(f => new FoundSkillViewModel(f)));
+            FindNote = found.Skills.All(f => f.Installed) ? "You already have all of these." : "";
+        }
+        catch
+        {
+            FindNote = "";
+            throw;
+        }
+        finally
+        {
+            IsFinding = false;
+            OnPropertyChanged(nameof(HasFound));
+            OnPropertyChanged(nameof(FoundHeading));
+        }
+    });
+
+    private bool CanInstallFound() => !IsFinding && FoundSkills.Any(f => f.IsChecked && f.CanPick);
+
+    [RelayCommand]
+    private Task InstallFoundAsync() => Run(async c =>
+    {
+        var picked = FoundSkills.Where(f => f.IsChecked && f.CanPick).Select(f => f.Skill.Path).ToList();
+        if (picked.Count == 0)
+        {
+            FindNote = "Tick the skills you want first.";
+            return;
+        }
+        IsFinding = true;
+        try
+        {
+            var done = await c.InstallSkillsAsync(SkillSource.Trim(), picked);
+            notify("Skills installed", done.Installed.Count == 0
+                ? "Nothing new to install."
+                : $"{done.Installed.Count} skill{(done.Installed.Count == 1 ? "" : "s")} added. Give them to agents on the Team page; review what a skill says first, because agents follow it.");
+            FoundSkills.Clear();
+            SkillSource = "";
+            FindNote = "";
+            Changed?.Invoke();
+        }
+        finally
+        {
+            IsFinding = false;
+            OnPropertyChanged(nameof(HasFound));
+            OnPropertyChanged(nameof(FoundHeading));
+        }
+    });
+
+    private void EditSkillItem(SkillItemViewModel item) => SkillEditor = new SkillEditorViewModel(item.Skill);
+
+    private Task DeleteSkillItemAsync(SkillItemViewModel item) => DeleteSkillAsync(item.Skill);
 
     // ---- MCP servers ----
 

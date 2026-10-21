@@ -129,10 +129,10 @@
                             </Border>
                         </Grid>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Agents">
+                    <ListBoxItem ToolTip="Team">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xE716;" />
-                            <TextBlock Style="{StaticResource NavLabel}" Text="Agents" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Team" />
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem ToolTip="Automations">
@@ -141,10 +141,10 @@
                             <TextBlock Style="{StaticResource NavLabel}" Text="Automations" />
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem ToolTip="Tools &amp; skills">
+                    <ListBoxItem ToolTip="Integrations">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource NavIcon}" Text="&#xE90F;" />
-                            <TextBlock Style="{StaticResource NavLabel}" Text="Tools &amp; skills" />
+                            <TextBlock Style="{StaticResource NavLabel}" Text="Integrations" />
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem ToolTip="Memory">

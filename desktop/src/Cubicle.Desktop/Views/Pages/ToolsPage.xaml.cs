@@ -22,6 +22,23 @@ public partial class ToolsPage : UserControl
         await tools.SaveSecretAsync(secret.Name, value);
     }
 
+    // A folder or file field: let the owner pick it instead of typing a path.
+    private void BrowseField_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: FieldInputViewModel field })
+            return;
+        if (field.Field.Label.Contains("file", StringComparison.OrdinalIgnoreCase))
+        {
+            var file = new OpenFileDialog { Title = field.Field.Label };
+            if (file.ShowDialog(Window.GetWindow(this)) == true)
+                field.Value = file.FileName;
+            return;
+        }
+        var dialog = new OpenFolderDialog { Title = field.Field.Label };
+        if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+            field.Value = dialog.FolderName;
+    }
+
     private void ImportSkill_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog { Title = "Import a skill", Filter = "Skill (SKILL.md)|*.md|All files|*.*" };

@@ -54,12 +54,12 @@ func TestOnboardingBuildsTheStaff(t *testing.T) {
 		StarterMissions []string        `json:"starter_missions"`
 	}
 	body := map[string]any{
-		"agent_name": "Nova", "owner_name": "Sam", "profession": "software-engineer", "passion": "gaming",
+		"agent_name": "Atlas", "owner_name": "Sam", "profession": "software-engineer", "passion": "gaming",
 		"stack": []string{"Go", "Python", "go", " "},
 	}
 	h.do("POST", "/api/v1/onboarding", adminTok, body, 200, &res)
 
-	if !res.Profile.Onboarded || res.Profile.AgentName != "Nova" || res.Profile.Passion.ID != "gaming" {
+	if !res.Profile.Onboarded || res.Profile.AgentName != "Atlas" || res.Profile.Passion.ID != "gaming" {
 		t.Fatalf("unexpected profile: %+v", res.Profile)
 	}
 	if len(res.Profile.Stack) != 2 {
@@ -71,7 +71,7 @@ func TestOnboardingBuildsTheStaff(t *testing.T) {
 
 	var main store.Agent
 	h.do("GET", "/api/v1/agents/manager", adminTok, nil, 200, &main)
-	if main.Name != "Nova" || !strings.Contains(main.Instructions, "gamer") || main.Avatar != "🎮" {
+	if main.Name != "Atlas" || !strings.Contains(main.Instructions, "gamer") || main.Avatar != "🎮" {
 		t.Fatalf("main agent was not given the persona: %+v", main)
 	}
 	for _, a := range res.Hired {
@@ -144,7 +144,7 @@ func TestOnboardingOtherKeepsTheDefaultTeam(t *testing.T) {
 func TestOnboardingValidation(t *testing.T) {
 	h := newHarness(t)
 	ok := func(m map[string]any) map[string]any {
-		b := map[string]any{"agent_name": "Nova", "profession": "other", "passion": "gaming"}
+		b := map[string]any{"agent_name": "Atlas", "profession": "other", "passion": "gaming"}
 		for k, v := range m {
 			b[k] = v
 		}
@@ -158,6 +158,7 @@ func TestOnboardingValidation(t *testing.T) {
 		"custom without text": ok(map[string]any{"passion": "custom"}),
 		"long custom":         ok(map[string]any{"passion": "custom", "custom_passion": strings.Repeat("x", 81)}),
 		"unknown field":       ok(map[string]any{"admin": true}),
+		"taken name":          ok(map[string]any{"agent_name": "rhea"}), // the researcher is called Rhea
 	} {
 		t.Run(name, func(t *testing.T) { h.do("POST", "/api/v1/onboarding", adminTok, body, 400, nil) })
 	}
@@ -340,7 +341,7 @@ func TestDevelopersGetTheTerminalAndTheirSkills(t *testing.T) {
 		t.Fatalf("the developer should have the terminal and its skills: %+v", dev)
 	}
 	var res struct{ Hired []store.Agent }
-	h.do("POST", "/api/v1/onboarding", adminTok, map[string]any{"agent_name": "Nova", "profession": "software-engineer", "passion": "gaming"}, 200, &res)
+	h.do("POST", "/api/v1/onboarding", adminTok, map[string]any{"agent_name": "Atlas", "profession": "software-engineer", "passion": "gaming"}, 200, &res)
 	for _, a := range res.Hired {
 		if len(a.Skills) == 0 {
 			t.Errorf("%s was hired without skills", a.Name)

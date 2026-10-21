@@ -22,16 +22,16 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="32,28" MaxWidth="1000" HorizontalAlignment="Stretch" DataContext="{Binding Tools}">
-            <TextBlock Text="Tools &amp; skills" Style="{StaticResource PageTitle}" />
-            <TextBlock Style="{StaticResource PageSubtitle}"
-                       Text="Give your agents more abilities. MCP servers connect them to apps and services, skills teach them how you like things done, and plugins install both (and agents) in one go. Then choose who gets what on the Agents page." />
+            <TextBlock Text="Integrations" Style="{StaticResource PageTitle}" />
+            <TextBlock Style="{StaticResource PageSubtitle}" Margin="0,4,0,18"
+                       Text="Connect the apps your staff work in, and teach them how you like things done. Agents ask your approval before they change anything in a connected app." />
 
             <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="3" HorizontalAlignment="Left" Margin="0,0,0,20">
                 <StackPanel Orientation="Horizontal">
-                    <RadioButton Style="{StaticResource SegmentButton}" MinWidth="130" IsChecked="{Binding Tab, Converter={StaticResource Equals}, ConverterParameter=mcp}">
+                    <RadioButton Style="{StaticResource SegmentButton}" MinWidth="120" IsChecked="{Binding Tab, Converter={StaticResource Equals}, ConverterParameter=apps}">
                         <StackPanel Orientation="Horizontal" Margin="6,2">
                             <TextBlock Style="{StaticResource Icon}" Text="&#xE968;" FontSize="14" Margin="0,0,8,0" />
-                            <TextBlock Text="MCP servers" />
+                            <TextBlock Text="Apps" />
                         </StackPanel>
                     </RadioButton>
                     <RadioButton Style="{StaticResource SegmentButton}" MinWidth="110" IsChecked="{Binding Tab, Converter={StaticResource Equals}, ConverterParameter=skills}">
@@ -49,9 +49,99 @@
                 </StackPanel>
             </Border>
 
-            <!-- ================= MCP servers ================= -->
-            <StackPanel Visibility="{Binding ShowMcp, Converter={StaticResource BoolToVisibility}}">
-                <!-- Editor -->
+            <!-- ================= Apps ================= -->
+            <StackPanel Visibility="{Binding ShowApps, Converter={StaticResource BoolToVisibility}}">
+                                <!-- Connect (or manage) an app -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,18" DataContext="{Binding Connect}"
+                        Visibility="{Binding Converter={StaticResource NullToVisibility}}">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,6">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Padding="10,8" ToolTip="Close"
+                                    Command="{Binding DataContext.Tools.CloseConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="13" />
+                            </Button>
+                            <Border DockPanel.Dock="Left" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource AccentSoftBrush}" Margin="0,0,14,0">
+                                <TextBlock Text="{Binding Icon}" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Heading}" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Template.Description}" Style="{StaticResource Muted}" FontSize="12.5" />
+                            </StackPanel>
+                        </DockPanel>
+                        <TextBlock Text="{Binding Requires}" Style="{StaticResource Caption}" Margin="58,0,0,0"
+                                   Visibility="{Binding Requires, Converter={StaticResource NullToVisibility}}" />
+
+                        <ItemsControl ItemsSource="{Binding Fields}" Margin="0,16,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,14">
+                                        <TextBlock Text="{Binding Label}" Style="{StaticResource Label}" />
+                                        <PasswordBox controls:PasswordBoxAssistant.Password="{Binding Value, Mode=TwoWay}"
+                                                     Visibility="{Binding IsSecret, Converter={StaticResource BoolToVisibility}}"
+                                                     ToolTip="Stored encrypted on this PC and never shown again" />
+                                        <DockPanel Visibility="{Binding IsPlain, Converter={StaticResource BoolToVisibility}}">
+                                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="Browse…" Margin="8,0,0,0" Click="BrowseField_Click"
+                                                    Visibility="{Binding IsFolder, Converter={StaticResource BoolToVisibility}}" />
+                                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" controls:Placeholder.Text="{Binding Placeholder}" />
+                                        </DockPanel>
+                                        <TextBlock Text="{Binding StoredHint}" Style="{StaticResource Caption}" Margin="0,4,0,0" Foreground="{DynamicResource SuccessBrush}"
+                                                   Visibility="{Binding StoredHint, Converter={StaticResource NullToVisibility}}" />
+                                        <TextBlock Text="{Binding Help}" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" TextTrimming="None"
+                                                   Visibility="{Binding Help, Converter={StaticResource NullToVisibility}}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,-6,0,14"
+                                Visibility="{Binding HasLink, Converter={StaticResource BoolToVisibility}}"
+                                Command="{Binding DataContext.Tools.OpenLinkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE71B;" FontSize="12" Margin="0,0,7,0" />
+                                <TextBlock Text="Where do I get this?" />
+                            </StackPanel>
+                        </Button>
+
+                        <TextBlock Text="WHO CAN USE IT" Style="{StaticResource Label}" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" TextWrapping="Wrap" TextTrimming="None"
+                                   Text="Give it only to the agents that need it. They ask your approval before they change anything." />
+                        <ItemsControl ItemsSource="{Binding Agents}" Margin="0,0,0,14">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="10,7" Margin="0,0,8,8">
+                                        <CheckBox IsChecked="{Binding IsChecked}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="2,0,8,0" />
+                                                <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </CheckBox>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="12,9" Margin="0,0,0,14"
+                                Visibility="{Binding HasStatus, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" TextTrimming="None" FontSize="13" />
+                        </Border>
+
+                        <DockPanel LastChildFill="False">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="Disconnect" Foreground="{DynamicResource DangerBrush}"
+                                    Visibility="{Binding IsReconnect, Converter={StaticResource BoolToVisibility}}"
+                                    Command="{Binding DataContext.Tools.DisconnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding Existing}" />
+                            <Button Style="{StaticResource AccentButton}" Padding="22,9" Command="{Binding DataContext.Tools.SaveConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <TextBlock Text="{Binding SaveText}" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
+                            </Button>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Advanced: a custom server -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,18" DataContext="{Binding ServerEditor}"
                         Visibility="{Binding Converter={StaticResource NullToVisibility}}">
                     <StackPanel>
@@ -161,94 +251,109 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Installed servers -->
-                <DockPanel Margin="0,0,0,10">
-                    <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Command="{Binding NewServerCommand}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource Icon}" Text="&#xE710;" FontSize="12" Margin="0,0,7,0" />
-                            <TextBlock Text="Custom server" />
-                        </StackPanel>
-                    </Button>
-                    <TextBlock Text="Your MCP servers" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" Margin="0" />
-                </DockPanel>
+                <!-- Connected apps -->
                 <Border Style="{StaticResource EmptyState}" Margin="0,0,0,18" Visibility="{Binding Servers.Count, Converter={StaticResource ZeroToVisibility}}">
-                    <TextBlock Style="{StaticResource Muted}" Text="No MCP servers yet. Add a preset below or a custom server, then turn it on for an agent." />
+                    <StackPanel>
+                        <TextBlock Text="No apps connected yet" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
+                                   Text="Pick an app below. Connecting takes a minute, and Cubicle checks that it works." />
+                    </StackPanel>
                 </Border>
-                <ItemsControl ItemsSource="{Binding Servers}" Margin="0,0,0,18">
+                <StackPanel Visibility="{Binding Servers.Count, Converter={StaticResource CountToVisibility}}">
+                    <TextBlock Text="Connected" Style="{StaticResource SectionTitle}" />
+                    <ItemsControl ItemsSource="{Binding Servers}" Margin="0,0,0,18">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource Card}" Padding="16,12" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <DockPanel>
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <CheckBox IsChecked="{Binding Enabled}" Margin="0,0,12,0" ToolTip="Turn this app on or off for every agent">
+                                                    <TextBlock Text="On" />
+                                                </CheckBox>
+                                                <Button Style="{StaticResource GhostButton}" Command="{Binding TestCommand}" Margin="0,0,6,0" ToolTip="Check that it works">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="12" Margin="0,0,6,0" />
+                                                        <TextBlock Text="Test" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource GhostButton}" Command="{Binding EditCommand}" Margin="0,0,6,0" ToolTip="Edit the details" Padding="10,8">
+                                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE70F;" FontSize="13" />
+                                                </Button>
+                                                <Button Style="{StaticResource GhostButton}" Command="{Binding DeleteCommand}" ToolTip="Remove" Padding="10,8">
+                                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" />
+                                                </Button>
+                                            </StackPanel>
+                                            <Border DockPanel.Dock="Left" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource AccentSoftBrush}" Margin="0,0,12,0">
+                                                <TextBlock Style="{StaticResource Icon}" Text="&#xE968;" HorizontalAlignment="Center" Foreground="{DynamicResource AccentTextBrush}" />
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
+                                                <TextBlock>
+                                                    <Run Text="{Binding Server.Name, Mode=OneWay}" FontWeight="SemiBold" FontSize="14.5" />
+                                                    <Run Text="{Binding Origin, Mode=OneWay}" Foreground="{DynamicResource TextTertiaryBrush}" FontSize="12" />
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding UsedBy}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <TextBlock Text="{Binding MissingSecretsText}" Foreground="{DynamicResource WarningBrush}" FontSize="12.5" Margin="48,6,0,0"
+                                                   Visibility="{Binding MissingSecretsText, Converter={StaticResource NullToVisibility}}" />
+                                        <TextBlock Text="{Binding TestResult}" Style="{StaticResource Muted}" FontSize="12.5" Margin="48,6,0,0"
+                                                   Visibility="{Binding TestResult, Converter={StaticResource NullToVisibility}}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- The catalog, by kind -->
+                <ItemsControl ItemsSource="{Binding AppGroups}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Style="{StaticResource Card}" Padding="16,12" Margin="0,0,0,8">
-                                <StackPanel>
-                                    <DockPanel>
-                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <CheckBox IsChecked="{Binding Enabled}" Margin="0,0,12,0" ToolTip="Turn this server on or off for every agent">
-                                                <TextBlock Text="On" />
-                                            </CheckBox>
-                                            <Button Style="{StaticResource GhostButton}" Command="{Binding TestCommand}" Margin="0,0,6,0" ToolTip="Start the server and list its tools">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="12" Margin="0,0,6,0" />
-                                                    <TextBlock Text="Test" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button Style="{StaticResource GhostButton}" Command="{Binding EditCommand}" Margin="0,0,6,0" ToolTip="Edit" Padding="10,8">
-                                                <TextBlock Style="{StaticResource Icon}" Text="&#xE70F;" FontSize="13" />
-                                            </Button>
-                                            <Button Style="{StaticResource GhostButton}" Command="{Binding DeleteCommand}" ToolTip="Delete" Padding="10,8">
-                                                <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" />
-                                            </Button>
-                                        </StackPanel>
-                                        <Border DockPanel.Dock="Left" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource AccentSoftBrush}" Margin="0,0,12,0">
-                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE968;" HorizontalAlignment="Center" Foreground="{DynamicResource AccentTextBrush}" />
-                                        </Border>
-                                        <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
-                                            <TextBlock>
-                                                <Run Text="{Binding Server.Name, Mode=OneWay}" FontWeight="SemiBold" FontSize="14.5" />
-                                                <Run Text="{Binding Origin, Mode=OneWay}" Foreground="{DynamicResource TextTertiaryBrush}" FontSize="12" />
-                                            </TextBlock>
-                                            <TextBlock Text="{Binding Where}" Style="{StaticResource Caption}" FontFamily="{StaticResource MonoFont}" Margin="0,2,0,0" />
-                                            <TextBlock Text="{Binding UsedBy}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
-                                        </StackPanel>
-                                    </DockPanel>
-                                    <TextBlock Text="{Binding MissingSecretsText}" Foreground="{DynamicResource WarningBrush}" FontSize="12.5" Margin="48,6,0,0"
-                                               Visibility="{Binding MissingSecretsText, Converter={StaticResource NullToVisibility}}" />
-                                    <TextBlock Text="{Binding TestResult}" Style="{StaticResource Muted}" FontSize="12.5" Margin="48,6,0,0"
-                                               Visibility="{Binding TestResult, Converter={StaticResource NullToVisibility}}" />
-                                </StackPanel>
-                            </Border>
+                            <StackPanel Margin="0,0,0,8">
+                                <TextBlock Text="{Binding Title}" Style="{StaticResource Label}" Margin="0,6,0,8" />
+                                <ItemsControl ItemsSource="{Binding Apps}" ItemsPanel="{StaticResource Wrap}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource PresetCard}" Width="300" Height="168">
+                                                <DockPanel>
+                                                    <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="False">
+                                                        <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Command="{Binding ConnectCommand}" Padding="14,6">
+                                                            <TextBlock Text="{Binding ButtonText}" FontWeight="SemiBold" />
+                                                        </Button>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                                                    Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+                                                            <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" Margin="0,0,6,0" />
+                                                            <TextBlock Text="Connected" Style="{StaticResource Caption}" Foreground="{DynamicResource SuccessBrush}" />
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                    <StackPanel>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding Icon}" FontSize="20" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14.5" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="12.5" Margin="0,8,0,0"
+                                                                   MaxHeight="54" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding Requires}" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                                                                   Visibility="{Binding Requires, Converter={StaticResource NullToVisibility}}" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- Presets -->
-                <TextBlock Text="Add a preset" Style="{StaticResource SectionTitle}" />
-                <ItemsControl ItemsSource="{Binding ServerTemplates}" ItemsPanel="{StaticResource Wrap}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Style="{StaticResource PresetCard}">
-                                <DockPanel>
-                                    <Button DockPanel.Dock="Bottom" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,10,0,0"
-                                            Command="{Binding DataContext.AddServerTemplateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE710;" FontSize="11" Margin="0,0,6,0" />
-                                            <TextBlock Text="Add" />
-                                        </StackPanel>
-                                    </Button>
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="12.5" Margin="0,4,0,0" />
-                                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap" TextTrimming="None"
-                                                   Visibility="{Binding Requires, Converter={StaticResource NullToVisibility}}">
-                                            <Run Text="Needs " /><Run Text="{Binding Requires, Mode=OneWay}" />
-                                        </TextBlock>
-                                        <TextBlock Text="{Binding Setup}" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap" TextTrimming="None"
-                                                   Visibility="{Binding Setup, Converter={StaticResource NullToVisibility}}" />
-                                    </StackPanel>
-                                </DockPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,12,0,0" Command="{Binding NewServerCommand}"
+                        ToolTip="For an MCP server that is not in the list (advanced)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE710;" FontSize="12" Margin="0,0,7,0" />
+                        <TextBlock Text="Add a custom app (advanced)" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
             <!-- ================= Skills ================= -->
@@ -281,38 +386,92 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Install from skills.sh -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,18">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,6">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Command="{Binding BrowseSkillsShCommand}" ToolTip="Opens skills.sh in your browser">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" FontSize="13" Margin="0,0,7,0" />
+                                    <TextBlock Text="Browse skills.sh" />
+                                </StackPanel>
+                            </Button>
+                            <StackPanel>
+                                <TextBlock Text="Get skills from skills.sh" FontSize="16" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Muted}" FontSize="12.5"
+                                           Text="Find a skill on skills.sh, then paste its link or its install command here." />
+                            </StackPanel>
+                        </DockPanel>
+                        <DockPanel Margin="0,10,0,0">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Command="{Binding FindSkillsCommand}" Margin="8,0,0,0" Padding="18,8">
+                                <TextBlock Text="Find skills" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
+                            </Button>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Command="{Binding PasteSkillSourceCommand}" Margin="8,0,0,0" ToolTip="Paste from the clipboard">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE77F;" FontSize="14" />
+                            </Button>
+                            <TextBox Text="{Binding SkillSource, UpdateSourceTrigger=PropertyChanged}"
+                                     controls:Placeholder.Text="https://skills.sh/owner/repo/skill  or  npx skills add owner/repo" />
+                        </DockPanel>
+                        <TextBlock Text="{Binding FindNote}" Style="{StaticResource Muted}" Margin="0,8,0,0"
+                                   Visibility="{Binding FindNote, Converter={StaticResource NullToVisibility}}" />
+                        <StackPanel Margin="0,12,0,0" Visibility="{Binding HasFound, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding FoundHeading}" Style="{StaticResource Label}" />
+                            <ItemsControl ItemsSource="{Binding FoundSkills}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="12,9" Margin="0,0,0,6">
+                                            <DockPanel>
+                                                <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsChecked}" IsEnabled="{Binding CanPick}" VerticalAlignment="Top" Margin="0,2,10,0" />
+                                                <TextBlock DockPanel.Dock="Right" Text="Already installed" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                                           Visibility="{Binding Installed, Converter={StaticResource BoolToVisibility}}" />
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontFamily="{StaticResource MonoFont}" />
+                                                    <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="12.5" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,10" TextWrapping="Wrap" TextTrimming="None"
+                                       Text="A skill is a set of instructions your agents follow. Install only skills from authors you trust." />
+                            <Button Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Padding="20,8" Command="{Binding InstallFoundCommand}">
+                                <TextBlock Text="Install the ticked skills" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <DockPanel Margin="0,0,0,10">
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                        <Button Style="{StaticResource GhostButton}" Click="ImportSkill_Click" Margin="0,0,8,0" ToolTip="Import a SKILL.md file (Claude skills format)">
+                        <Button Style="{StaticResource GhostButton}" Click="ImportSkill_Click" Margin="0,0,8,0" ToolTip="Import a SKILL.md file from your PC">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE8B5;" FontSize="13" Margin="0,0,7,0" />
-                                <TextBlock Text="Import SKILL.md" />
+                                <TextBlock Text="Import a file" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource GhostButton}" Command="{Binding NewSkillCommand}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource Icon}" Text="&#xE710;" FontSize="12" Margin="0,0,7,0" />
-                                <TextBlock Text="New skill" />
+                                <TextBlock Text="Write your own" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
                     <TextBlock Text="Your skills" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" Margin="0" />
                 </DockPanel>
-                <Border Style="{StaticResource EmptyState}" Margin="0,0,0,18" Visibility="{Binding Skills.Count, Converter={StaticResource ZeroToVisibility}}">
-                    <TextBlock Style="{StaticResource Muted}" Text="No skills yet. Add a ready-made one below, write your own, or import a SKILL.md file." />
+                <Border Style="{StaticResource EmptyState}" Margin="0,0,0,18" Visibility="{Binding SkillItems.Count, Converter={StaticResource ZeroToVisibility}}">
+                    <TextBlock Style="{StaticResource Muted}" Text="No skills yet. Get some from skills.sh above, or add a ready-made one below." />
                 </Border>
-                <ItemsControl ItemsSource="{Binding Skills}" Margin="0,0,0,18">
+                <ItemsControl ItemsSource="{Binding SkillItems}" Margin="0,0,0,18">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Style="{StaticResource Card}" Padding="16,12" Margin="0,0,0,8">
                                 <DockPanel>
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Button Style="{StaticResource GhostButton}" Margin="0,0,6,0" ToolTip="Edit" Padding="10,8"
-                                                Command="{Binding DataContext.EditSkillCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}">
+                                        <Button Style="{StaticResource GhostButton}" Margin="0,0,6,0" ToolTip="Read or edit" Padding="10,8" Command="{Binding EditCommand}">
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE70F;" FontSize="13" />
                                         </Button>
-                                        <Button Style="{StaticResource GhostButton}" ToolTip="Delete" Padding="10,8"
-                                                Command="{Binding DataContext.DeleteSkillCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}">
+                                        <Button Style="{StaticResource GhostButton}" ToolTip="Delete" Padding="10,8" Command="{Binding DeleteCommand}">
                                             <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" />
                                         </Button>
                                     </StackPanel>
@@ -320,8 +479,12 @@
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE82D;" HorizontalAlignment="Center" Foreground="{DynamicResource AccentTextBrush}" />
                                     </Border>
                                     <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontFamily="{StaticResource MonoFont}" />
-                                        <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="12.5" Margin="0,2,0,0" />
+                                        <TextBlock>
+                                            <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" FontFamily="{StaticResource MonoFont}" />
+                                            <Run Text="{Binding Origin, Mode=OneWay}" Foreground="{DynamicResource TextTertiaryBrush}" FontSize="12" />
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="12.5" Margin="0,2,0,0" MaxHeight="36" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding UsedBy}" Style="{StaticResource Caption}" Margin="0,3,0,0" />
                                     </StackPanel>
                                 </DockPanel>
                             </Border>
@@ -329,29 +492,31 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <TextBlock Text="Ready-made skills" Style="{StaticResource SectionTitle}" />
-                <ItemsControl ItemsSource="{Binding SkillTemplates}" ItemsPanel="{StaticResource Wrap}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Style="{StaticResource PresetCard}">
-                                <DockPanel>
-                                    <Button DockPanel.Dock="Bottom" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,10,0,0"
-                                            Command="{Binding DataContext.AddSkillTemplateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE710;" FontSize="11" Margin="0,0,6,0" />
-                                            <TextBlock Text="Add" />
+                <StackPanel Visibility="{Binding RecommendedSkills.Count, Converter={StaticResource CountToVisibility}}">
+                    <TextBlock Text="Ready-made skills" Style="{StaticResource SectionTitle}" />
+                    <ItemsControl ItemsSource="{Binding RecommendedSkills}" ItemsPanel="{StaticResource Wrap}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource PresetCard}">
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Bottom" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                                Command="{Binding DataContext.AddSkillTemplateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Style="{StaticResource Icon}" Text="&#xE710;" FontSize="11" Margin="0,0,6,0" />
+                                                <TextBlock Text="Add" />
+                                            </StackPanel>
+                                        </Button>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontFamily="{StaticResource MonoFont}" />
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="12.5" Margin="0,4,0,0" MaxHeight="54" TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
-                                    </Button>
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontFamily="{StaticResource MonoFont}" />
-                                        <TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" FontSize="12.5" Margin="0,4,0,0" />
-                                    </StackPanel>
-                                </DockPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </StackPanel>
 
             <!-- ================= Plugins ================= -->

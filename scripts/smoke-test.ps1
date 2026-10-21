@@ -106,7 +106,7 @@ try {
     }
     if (-not $persona) { throw "persona was not written in time" }
     $ob = Invoke-RestMethod "$Base/api/v1/onboarding" -Method Post -Headers $h -ContentType "application/json" `
-        -Body (@{ agent_name = "Nova"; profession = "software-engineer"; passion = "custom"; custom_passion = "urban foxes"; persona = $persona } | ConvertTo-Json -Depth 5)
+        -Body (@{ agent_name = "Atlas"; profession = "software-engineer"; passion = "custom"; custom_passion = "urban foxes"; persona = $persona } | ConvertTo-Json -Depth 5)
     if (-not $ob.profile.onboarded -or @($ob.hired).Count -ne 4) { throw "onboarding did not hire the team" }
     Write-Host "Onboarding: $($ob.profile.agent_name) hired $(@($ob.hired).Count) teammates, accent $($ob.profile.passion.accent_color)"
     Write-Host "SMOKE TEST PASSED" -ForegroundColor Green

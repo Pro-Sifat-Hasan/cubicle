@@ -226,6 +226,15 @@ func (s *Server) handleOnboard(w http.ResponseWriter, r *http.Request) {
 	stack := cleanStack(in.Stack)
 
 	ctx := r.Context()
+	// Two agents with one name would be impossible to tell apart in chats and plans.
+	if others, err := s.store.ListAgents(ctx); err == nil {
+		for _, a := range others {
+			if !a.IsMain() && strings.EqualFold(a.Name, in.AgentName) {
+				writeErr(w, http.StatusBadRequest, "another agent is already called "+a.Name+"; pick a different name")
+				return
+			}
+		}
+	}
 	res, err := s.applyOnboarding(ctx, in, prof, persona, stack)
 	if err != nil {
 		s.storeErr(w, err)
