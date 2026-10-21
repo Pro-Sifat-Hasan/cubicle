@@ -17,11 +17,11 @@ public static class PortableMode
     public static void ApplyIfPresent()
     {
         var dir = AppContext.BaseDirectory;
-        if (!File.Exists(Path.Combine(dir, "portable.txt")))
+        if (!File.Exists(Path.Join(dir, "portable.txt")))
             return;
 
         IsEnabled = true;
-        SetDefault("CUBICLE_HOME", Path.Combine(dir, "data"));
+        SetDefault("CUBICLE_HOME", Path.Join(dir, "data"));
         SetDefault("CUBICLE_ADDR", $"127.0.0.1:{Port}");
         SetDefault("CUBICLE_GATEWAY_URL", $"http://127.0.0.1:{Port}");
         SetDefault("CUBICLE_INSTANCE", "portable");

@@ -579,7 +579,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OpenWorkspace(string id, string missing)
     {
-        var folder = Path.Combine(CubiclePaths.WorkspaceDirectory, id);
+        var folder = Path.Join(CubiclePaths.WorkspaceDirectory, id);
         if (Directory.Exists(folder))
             Open(folder);
         else

@@ -362,7 +362,10 @@ public sealed class GatewayClient : IDisposable
             if (!string.IsNullOrWhiteSpace(err?.Error))
                 message = err.Error;
         }
-        catch (JsonException) { }
+        catch (JsonException)
+        {
+            message = resp.ReasonPhrase ?? message; // the body was not our error JSON
+        }
         resp.Dispose();
         throw new GatewayException(resp.StatusCode, message);
     }

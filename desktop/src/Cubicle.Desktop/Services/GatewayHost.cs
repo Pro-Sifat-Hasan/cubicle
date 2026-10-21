@@ -18,7 +18,7 @@ public static class GatewayHost
         var overridePath = Environment.GetEnvironmentVariable("CUBICLE_GATEWAY_EXE");
         if (!string.IsNullOrWhiteSpace(overridePath) && File.Exists(overridePath))
             return overridePath;
-        var bundled = Path.Combine(AppContext.BaseDirectory, ExeName);
+        var bundled = Path.Join(AppContext.BaseDirectory, ExeName);
         return File.Exists(bundled) ? bundled : null;
     }
 

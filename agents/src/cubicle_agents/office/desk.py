@@ -87,11 +87,11 @@ class Desk:
         try:
             await self.gateway.fail(task_id, error)
         except TaskConflictError:
-            pass
+            log.debug("task %s was already closed; nothing to report", task_id)
 
 
 async def sleep_until(stop: asyncio.Event, seconds: float) -> None:
     try:
         await asyncio.wait_for(stop.wait(), timeout=seconds)
     except TimeoutError:
-        pass
+        return  # the wait is over; the caller carries on

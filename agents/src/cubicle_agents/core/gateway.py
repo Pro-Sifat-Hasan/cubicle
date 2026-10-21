@@ -47,20 +47,47 @@ class RosterUpdate:
 class Gateway(Protocol):
     """What the office needs from the gateway; implemented by GatewayClient and test fakes."""
 
-    async def start_worker(self) -> None: ...
-    async def roster(self, after: int | None = None) -> RosterUpdate | None: ...
-    async def set_status(self, agent_id: str, status: str, task_id: str = "") -> None: ...
-    async def claim(self, agent_ids: list[str], lane: str) -> Claim | None: ...
-    async def delegate(self, task_id: str, subtasks: list[dict[str, Any]], synthesis: dict[str, Any]) -> None: ...
-    async def complete(self, task_id: str, result: str) -> None: ...
-    async def fail(self, task_id: str, error: str) -> None: ...
-    async def ask(self, task_id: str, agent_id: str, question: str) -> None: ...
-    async def progress(self, task_id: str, status: str = "", text: str = "") -> None: ...
-    async def create_assignment(self, title: str, description: str, agent_id: str) -> dict[str, Any]: ...
-    async def report_usage(self, task_id: str, agent_id: str, input_tokens: int, output_tokens: int) -> None: ...
-    async def log(self, agent_id: str, task_id: str, message: str) -> None: ...
-    async def list_memories(self, limit: int = 50) -> list[str]: ...
-    async def add_memory(self, content: str, agent_id: str) -> None: ...
+    async def start_worker(self) -> None:
+        """Tell the gateway this worker started."""
+
+    async def roster(self, after: int | None = None) -> RosterUpdate | None:
+        """The agent roster; with `after`, wait for a newer revision (None on timeout)."""
+
+    async def set_status(self, agent_id: str, status: str, task_id: str = "") -> None:
+        """Report what an agent is doing."""
+
+    async def claim(self, agent_ids: list[str], lane: str) -> Claim | None:
+        """Long-poll for the next runnable task for these agents."""
+
+    async def delegate(self, task_id: str, subtasks: list[dict[str, Any]], synthesis: dict[str, Any]) -> None:
+        """Split a task into subtasks plus a wrap-up."""
+
+    async def complete(self, task_id: str, result: str) -> None:
+        """Finish a task with its result."""
+
+    async def fail(self, task_id: str, error: str) -> None:
+        """Fail a task with a reason."""
+
+    async def ask(self, task_id: str, agent_id: str, question: str) -> None:
+        """Park a task and ask the owner a question."""
+
+    async def progress(self, task_id: str, status: str = "", text: str = "") -> None:
+        """Stream live progress for a task."""
+
+    async def create_assignment(self, title: str, description: str, agent_id: str) -> dict[str, Any]:
+        """Start a new assignment (from a chat)."""
+
+    async def report_usage(self, task_id: str, agent_id: str, input_tokens: int, output_tokens: int) -> None:
+        """Report the tokens a model call used."""
+
+    async def log(self, agent_id: str, task_id: str, message: str) -> None:
+        """Add a line to the activity log."""
+
+    async def list_memories(self, limit: int = 50) -> list[str]:
+        """Facts the office remembers about the owner."""
+
+    async def add_memory(self, content: str, agent_id: str) -> None:
+        """Save a durable fact about the owner."""
 
 
 class GatewayClient:

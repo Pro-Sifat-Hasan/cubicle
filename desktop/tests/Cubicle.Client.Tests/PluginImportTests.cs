@@ -2,7 +2,7 @@ namespace Cubicle.Client.Tests;
 
 public class PluginImportTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), "cubicle-plugin-" + Guid.NewGuid().ToString("N")[..8]);
+    private readonly string _dir = Path.Join(Path.GetTempPath(), "cubicle-plugin-" + Guid.NewGuid().ToString("N")[..8]);
 
     public PluginImportTests() => Directory.CreateDirectory(_dir);
 
@@ -10,7 +10,7 @@ public class PluginImportTests : IDisposable
 
     private void Write(string relative, string content)
     {
-        var path = Path.Combine(_dir, relative);
+        var path = Path.Join(_dir, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
     }

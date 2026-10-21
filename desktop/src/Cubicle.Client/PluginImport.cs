@@ -47,7 +47,7 @@ public static partial class PluginImport
         string description = "", version = "";
         JsonElement? inlineMcp = null;
 
-        var manifest = Path.Combine(root, ".claude-plugin", "plugin.json");
+        var manifest = Path.Join(root, ".claude-plugin", "plugin.json");
         if (File.Exists(manifest))
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(manifest));
@@ -60,7 +60,7 @@ public static partial class PluginImport
         }
 
         var skills = new List<BundleSkill>();
-        var skillsDir = Path.Combine(root, "skills");
+        var skillsDir = Path.Join(root, "skills");
         if (Directory.Exists(skillsDir))
         {
             foreach (var file in Directory.EnumerateFiles(skillsDir, "SKILL.md", SearchOption.AllDirectories).Order())
@@ -71,7 +71,7 @@ public static partial class PluginImport
         }
 
         var mcp = new List<BundleMcpServer>();
-        var mcpFile = Path.Combine(root, ".mcp.json");
+        var mcpFile = Path.Join(root, ".mcp.json");
         if (File.Exists(mcpFile))
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(mcpFile));
@@ -84,7 +84,7 @@ public static partial class PluginImport
         }
 
         var agents = new List<BundleAgent>();
-        var agentsDir = Path.Combine(root, "agents");
+        var agentsDir = Path.Join(root, "agents");
         if (Directory.Exists(agentsDir))
         {
             foreach (var file in Directory.EnumerateFiles(agentsDir, "*.md").Order())

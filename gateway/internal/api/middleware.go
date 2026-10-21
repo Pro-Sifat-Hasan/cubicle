@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 const maxBodyBytes = 1 << 20 // 1 MiB
@@ -55,11 +56,22 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// logSafe strips line breaks and other control characters from client-supplied
+// text, so it cannot forge log lines.
+func logSafe(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 func recoverer(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if v := recover(); v != nil {
-				log.Error("panic in handler", "path", r.URL.Path, "panic", v)
+				log.Error("panic in handler", "path", logSafe(r.URL.Path), "panic", v)
 				writeErr(w, http.StatusInternalServerError, "internal error")
 			}
 		}()

@@ -1,0 +1,21 @@
+name: Cubicle CodeQL configuration
+
+# The security-and-quality suite also reports a few style notes that do not apply
+# to this code. Each exclusion says why; every other query still runs.
+query-filters:
+  # CommunityToolkit.Mvvm's [ObservableProperty] fields are written by generated
+  # code, so they cannot be readonly.
+  - exclude:
+      id: cs/missed-readonly-modifier
+  # DwmSetWindowAttribute colours the native title bar (Windows 11). It is the only
+  # P/Invoke, it takes no untrusted input, and it fails harmlessly elsewhere.
+  - exclude:
+      id: cs/call-to-unmanaged-code
+  - exclude:
+      id: cs/unmanaged-code
+  # `dialog.ShowDialog() == true` compares a bool?; the "simplification" would change its meaning.
+  - exclude:
+      id: cs/simplifiable-boolean-expression
+  # WPF types such as Run, Paragraph and the file dialogs do not implement IDisposable.
+  - exclude:
+      id: cs/local-not-disposed

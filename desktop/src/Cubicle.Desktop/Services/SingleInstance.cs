@@ -27,15 +27,23 @@ public sealed class SingleInstance : IDisposable
     public static SingleInstance? TryAcquire(Action onShowRequested)
     {
         var mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
-        var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
-        if (!createdNew)
+        EventWaitHandle? showEvent = null;
+        try
         {
-            showEvent.Set();
-            showEvent.Dispose();
-            mutex.Dispose();
-            return null;
+            showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            if (createdNew)
+                return new SingleInstance(mutex, showEvent, onShowRequested);
+            showEvent.Set(); // ask the running instance to show itself
         }
-        return new SingleInstance(mutex, showEvent, onShowRequested);
+        catch
+        {
+            showEvent?.Dispose();
+            mutex.Dispose();
+            throw;
+        }
+        showEvent.Dispose();
+        mutex.Dispose();
+        return null;
     }
 
     public void Dispose()

@@ -67,8 +67,6 @@ class LLM(Protocol):
         history holds earlier conversation turns (chats); mcp the agent's MCP servers;
         effort overrides the office default; web=False withholds web tools.
         """
-        ...
 
     async def list_models(self) -> list[str]:
         """Model ids available with the current credentials (also a connection test)."""
-        ...
