@@ -242,6 +242,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             case "task.progress":
                 Chat.OnProgress(evt.Data);
                 return; // frequent and cosmetic: no full refresh
+            case "task.step":
+                Chat.OnStep(evt.Data);
+                return; // likewise: it only changes the timeline of the open chat
             case "conversation.updated":
                 Chat.OnConversationUpdated(evt.Data);
                 break;

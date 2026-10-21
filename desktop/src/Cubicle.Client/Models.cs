@@ -191,6 +191,65 @@ public static class StepText
         return OneLine(input);
     }
 
+    /// <summary>
+    /// A call's input for reading: one "name: value" per field, with long or multi-line values (a file's content,
+    /// a command) on their own lines as real text. Input still streaming in (not valid JSON yet) is unescaped as far as it goes.
+    /// </summary>
+    public static string DisplayInput(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return "";
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(input);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                var sb = new System.Text.StringBuilder();
+                foreach (var property in doc.RootElement.EnumerateObject())
+                {
+                    var text = property.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                        ? property.Value.GetString() ?? "" : property.Value.GetRawText();
+                    if (sb.Length > 0)
+                        sb.Append('\n');
+                    if (text.Contains('\n') || text.Length > 100)
+                        sb.Append(property.Name).Append(":\n").Append(text).Append('\n');
+                    else
+                        sb.Append(property.Name).Append(": ").Append(text);
+                }
+                return sb.ToString().TrimEnd();
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // still streaming in
+        }
+        return Unescape(input);
+    }
+
+    /// <summary>Shortens long tool output for display, saying how much was left out.</summary>
+    public static string Clip(string? text, int max = 4000)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= max)
+            return text ?? "";
+        return text[..max] + $"\n… {text.Length - max:N0} more characters";
+    }
+
+    private static string Unescape(string raw)
+    {
+        var sb = new System.Text.StringBuilder(raw.Length);
+        for (var i = 0; i < raw.Length; i++)
+        {
+            if (raw[i] != '\\' || i + 1 >= raw.Length)
+            {
+                sb.Append(raw[i]);
+                continue;
+            }
+            var next = raw[++i];
+            sb.Append(next switch { 'n' => '\n', 't' => '\t', 'r' => '\r', _ => next });
+        }
+        return sb.ToString();
+    }
+
     private static string ShortPath(string path)
     {
         var parts = path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);

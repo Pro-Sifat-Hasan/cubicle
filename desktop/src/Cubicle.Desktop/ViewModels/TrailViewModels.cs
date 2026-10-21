@@ -33,17 +33,25 @@ public sealed partial class ReplyTrailViewModel : ObservableObject
     private readonly string _key;
     private readonly OpenSections _sections;
 
-    public ReplyTrailViewModel(string key, IReadOnlyList<ActivityLine> lines, OpenSections sections)
+    public ReplyTrailViewModel(string key, IReadOnlyList<ActivityLine> lines, OpenSections sections,
+        IReadOnlyList<StepViewModel>? steps = null)
     {
         _key = key;
         _sections = sections;
         Lines = lines;
+        Steps = steps ?? [];
         _isOpen = sections.IsOpen(key);
     }
 
+    /// <summary>The activity lines; shown only when the agent left no steps (older replies).</summary>
     public IReadOnlyList<ActivityLine> Lines { get; }
-    public bool HasLines => Lines.Count > 0;
-    public int ToolCount => Lines.Count(l => l.IsTool);
+
+    /// <summary>Everything the agent did: thoughts, remarks and tool calls with their input and output.</summary>
+    public IReadOnlyList<StepViewModel> Steps { get; }
+    public bool HasSteps => Steps.Count > 0;
+    public bool HasOnlyLines => Steps.Count == 0 && Lines.Count > 0;
+    public bool HasLines => Steps.Count > 0 || Lines.Count > 0;
+    public int ToolCount => Steps.Count > 0 ? Steps.Count(s => s.IsTool) : Lines.Count(l => l.IsTool);
     public string Title => ToolCount switch
     {
         0 => "How it was done",
@@ -62,7 +70,7 @@ public sealed partial class StartedCardViewModel : ObservableObject
     private readonly OpenSections _sections;
 
     public StartedCardViewModel(TaskDetail detail, IReadOnlyList<(string TaskId, ActivityLine Line)> lines,
-        IReadOnlyDictionary<string, Agent> agents, OpenSections sections)
+        IReadOnlyDictionary<string, Agent> agents, OpenSections sections, IReadOnlyList<AgentStep>? steps = null)
     {
         _sections = sections;
         Detail = detail;
@@ -71,7 +79,8 @@ public sealed partial class StartedCardViewModel : ObservableObject
                 lines.Where(l => l.TaskId == t.Id).Select(l => l.Line).ToList(), sections.IsOpen("step:" + t.Id),
                 (id, open) => sections.Set("step:" + id, open)))
             .ToList();
-        Trail = new ReplyTrailViewModel("trail:" + detail.Id, lines.Select(l => l.Line).ToList(), sections);
+        Trail = new ReplyTrailViewModel("trail:" + detail.Id, lines.Select(l => l.Line).ToList(), sections,
+            (steps ?? []).Select(s => new StepViewModel(s, s.AgentId is { } id ? agents.GetValueOrDefault(id) : null, "", sections)).ToList());
         _planOpen = sections.IsOpen("plan:" + detail.Id);
     }
 

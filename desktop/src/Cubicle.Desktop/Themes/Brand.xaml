@@ -333,6 +333,109 @@
         <Setter Property="controls:WheelPassthrough.IsEnabled" Value="True" />
     </Style>
 
+    <!-- A pulsing dot: something is happening right now. -->
+    <Style x:Key="PulseDot" TargetType="Ellipse">
+        <Setter Property="Width" Value="8" />
+        <Setter Property="Height" Value="8" />
+        <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
+        <Style.Triggers>
+            <Trigger Property="IsVisible" Value="True">
+                <Trigger.EnterActions>
+                    <BeginStoryboard x:Name="Pulse">
+                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.25" Duration="0:0:0.7" />
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                    <StopStoryboard BeginStoryboardName="Pulse" />
+                </Trigger.ExitActions>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- A read-only block of code or output: selectable, monospace. -->
+    <Style x:Key="CodeText" TargetType="TextBox">
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="Background" Value="{DynamicResource CodeBackgroundBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+        <Setter Property="controls:WheelPassthrough.IsEnabled" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                        <ScrollViewer x:Name="PART_ContentHost" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- One step of what an agent did, like Claude Code shows it: a remark, a thought, or a tool call
+         whose input and output open on click. DataContext = StepViewModel. -->
+    <DataTemplate x:Key="StepTemplate">
+        <Grid Margin="0,0,0,6">
+            <!-- A remark between tool calls -->
+            <DockPanel Visibility="{Binding IsNote, Converter={StaticResource BoolToVisibility}}" Margin="2,2,0,2">
+                <Border DockPanel.Dock="Left" Width="2" CornerRadius="1" Background="{DynamicResource AccentBrush}" Opacity="0.55" Margin="0,2,10,2" />
+                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" TextTrimming="None" FontSize="13" Foreground="{DynamicResource TextSecondaryBrush}" />
+            </DockPanel>
+
+            <!-- A thought -->
+            <StackPanel Visibility="{Binding IsThinking, Converter={StaticResource BoolToVisibility}}" Margin="2,2,0,2">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" Margin="0,0,8,0" />
+                    <TextBlock Text="{Binding Title}" FontSize="12.5" FontStyle="Italic" Foreground="{DynamicResource TextTertiaryBrush}" VerticalAlignment="Center" />
+                    <Ellipse Style="{StaticResource PulseDot}" Width="6" Height="6" Margin="8,0,0,0" VerticalAlignment="Center"
+                             Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" TextTrimming="None" FontSize="12.5" FontStyle="Italic" MaxHeight="130"
+                           Foreground="{DynamicResource TextTertiaryBrush}" Margin="20,3,0,0"
+                           Visibility="{Binding HasText, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+
+            <!-- A tool call -->
+            <Expander Style="{StaticResource StepExpander}" Padding="10,6" IsExpanded="{Binding IsOpen, Mode=TwoWay}"
+                      Visibility="{Binding IsTool, Converter={StaticResource BoolToVisibility}}">
+                <Expander.Header>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                            <TextBlock Text="{Binding Took}" Style="{StaticResource Caption}" FontSize="11" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <Ellipse Style="{StaticResource PulseDot}" Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE73E;" FontSize="12" Foreground="{DynamicResource SuccessBrush}"
+                                       Visibility="{Binding IsDone, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="12" Foreground="{DynamicResource DangerBrush}"
+                                       Visibility="{Binding Failed, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+                        <ContentPresenter DockPanel.Dock="Left" Content="{Binding}" ContentTemplate="{StaticResource AvatarTemplate}" Width="20" Height="20"
+                                          Margin="0,0,8,0" ToolTip="{Binding Name}" Visibility="{Binding ShowAgent, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="{Binding Glyph}" FontSize="13" Width="22"
+                                   Foreground="{DynamicResource AccentTextBrush}" />
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding Title}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Expander.Header>
+                <StackPanel Margin="0,8,0,0">
+                    <StackPanel Visibility="{Binding HasInput, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="INPUT" Style="{StaticResource Label}" FontSize="10.5" Margin="0,0,0,4" />
+                        <TextBox Style="{StaticResource CodeText}" Text="{Binding InputText, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel Visibility="{Binding HasOutput, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="OUTPUT" Style="{StaticResource Label}" FontSize="10.5" Margin="0,0,0,4" />
+                        <TextBox Style="{StaticResource CodeText}" Text="{Binding OutputText, Mode=OneWay}" Margin="0" />
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+        </Grid>
+    </DataTemplate>
+
     <!-- One line of an agent's trail: a tool it used, or a note about what it did. DataContext = ActivityLine. -->
     <DataTemplate x:Key="ActivityLineTemplate">
         <DockPanel Margin="0,0,0,5">
@@ -479,7 +582,11 @@
                             <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" />
                         </StackPanel>
                     </Expander.Header>
-                    <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource ActivityLineTemplate}" />
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding Steps}" ItemTemplate="{StaticResource StepTemplate}" />
+                        <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource ActivityLineTemplate}"
+                                      Visibility="{Binding HasOnlyLines, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
                 </Expander>
             </StackPanel>
         </Border>

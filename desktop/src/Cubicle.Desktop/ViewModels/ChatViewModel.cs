@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Text.Json;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Cubicle.Client;
@@ -19,6 +20,14 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
     private readonly OpenSections _sections = new();
     private IReadOnlyList<InboxItemViewModel> _allRequests = [];
     private bool _hasLiveCards;
+    private StepStore? _stepStore;
+    private readonly TypeWriter _typer = new();
+    private DispatcherTimer? _typeTimer;
+    private string _activeTaskId = "";
+
+    private StepStore _steps => _stepStore ??= new StepStore(_sections);
+    private readonly HashSet<string> _seenMessages = [];
+    private bool _threadLoaded; // the open chat has been shown once; messages that arrive after that are new
 
     public ObservableCollection<ConversationItemViewModel> Conversations { get; } = [];
     public ObservableCollection<ChatMessageViewModel> Messages { get; } = [];
@@ -43,10 +52,73 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
     /// <summary>The reply so far, while the agent is still writing it.</summary>
     [ObservableProperty] private string _liveText = "";
 
+    /// <summary>The part of the reply typed out so far (it catches up with <see cref="LiveText"/> a few characters at a time).</summary>
+    [ObservableProperty] private string _liveShown = "";
+
+    /// <summary>What the agent is doing, step by step, for the reply being written now.</summary>
+    [ObservableProperty] private ObservableCollection<StepViewModel> _liveSteps = [];
+
+    public string LiveDisplay => LiveShown.Length == 0 ? "" : LiveShown + (IsReplying ? " ▍" : "");
+    public bool HasLiveSteps => LiveSteps.Count > 0;
+    public string LiveHeadline => LiveSteps.Count == 0 ? LiveStatus : $"{LiveStatus}  ·  {LiveSteps.Count} step{(LiveSteps.Count == 1 ? "" : "s")}";
+
     [ObservableProperty] private bool _isReplying;
 
     /// <summary>The agent paused its reply to ask you something.</summary>
     [ObservableProperty] private bool _isWaiting;
+
+    partial void OnLiveTextChanged(string value)
+    {
+        _typer.SetTarget(value);
+        if (value.Length == 0)
+        {
+            LiveShown = "";
+            return;
+        }
+        _typeTimer ??= new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(30) };
+        _typeTimer.Tick -= TypeTick;
+        _typeTimer.Tick += TypeTick;
+        _typeTimer.Start();
+    }
+
+    private void TypeTick(object? sender, EventArgs e)
+    {
+        if (_typer.Step())
+        {
+            LiveShown = _typer.Shown;
+            ThreadUpdated?.Invoke();
+        }
+        else
+        {
+            _typeTimer?.Stop();
+        }
+    }
+
+    partial void OnLiveShownChanged(string value) => OnPropertyChanged(nameof(LiveDisplay));
+
+    partial void OnIsReplyingChanged(bool value) => OnPropertyChanged(nameof(LiveDisplay));
+
+    partial void OnLiveStatusChanged(string value) => OnPropertyChanged(nameof(LiveHeadline));
+
+    partial void OnLiveStepsChanged(ObservableCollection<StepViewModel>? oldValue, ObservableCollection<StepViewModel> newValue)
+    {
+        if (oldValue is not null)
+            oldValue.CollectionChanged -= LiveStepsChanged;
+        newValue.CollectionChanged += LiveStepsChanged;
+        LiveStepsChanged(null, null!);
+    }
+
+    private void LiveStepsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasLiveSteps));
+        OnPropertyChanged(nameof(LiveHeadline));
+    }
+
+    private void ShowStepsOf(string taskId)
+    {
+        _activeTaskId = taskId;
+        LiveSteps = taskId.Length == 0 ? [] : _steps.For(taskId);
+    }
 
     public bool HasThread => Selected is not null;
     public string ThreadTitle => Selected?.Title ?? "";
@@ -96,6 +168,10 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
         Messages.Clear();
         LooseStarted.Clear();
         IsWaiting = false;
+        _steps.Clear();
+        _seenMessages.Clear();
+        _threadLoaded = false;
+        ShowStepsOf("");
         FilterRequests();
         if (value is not null)
             _ = Run(async c => await LoadThreadAsync(c, value.Conversation.Id));
@@ -129,19 +205,22 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
     {
         var detailTask = c.GetConversationAsync(id);
         var activityTask = c.GetConversationActivityAsync(id);
+        var stepsTask = c.GetConversationStepsAsync(id);
         try
         {
-            await Task.WhenAll(detailTask, activityTask);
+            await Task.WhenAll(detailTask, activityTask, stepsTask);
         }
-        catch (Exception e) when (activityTask.IsFaulted && !detailTask.IsFaulted)
+        catch (Exception e) when (!detailTask.IsFaulted)
         {
-            Debug.WriteLine($"chat activity unavailable: {e.Message}"); // the thread itself still shows
+            Debug.WriteLine($"chat activity or steps unavailable: {e.Message}"); // the thread itself still shows
         }
         var detail = await detailTask;
         if (Selected?.Conversation.Id != id)
             return;
         var trails = TrailBuilder.Lines(activityTask.IsCompletedSuccessfully ? activityTask.Result : [], _agents);
         var agent = _agents.GetValueOrDefault(detail.AgentId);
+        if (stepsTask.IsCompletedSuccessfully)
+            _steps.Load(stepsTask.Result, _agents, detail.AgentId);
 
         // Assignments the agent started: status, plan, how it was done and the result, each under its reply.
         var cards = new List<(string Source, StartedCardViewModel Card)>();
@@ -151,7 +230,8 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
             {
                 var task = await c.GetTaskAsync(started.Assignment.Id);
                 var lines = TrailBuilder.Lines(await c.GetTaskActivityAsync(started.Assignment.Id), _agents);
-                cards.Add((started.SourceTaskId, new StartedCardViewModel(task, lines, _agents, _sections)));
+                var steps = await TryStepsAsync(c, started.Assignment.Id);
+                cards.Add((started.SourceTaskId, new StartedCardViewModel(task, lines, _agents, _sections, steps)));
             }
             catch (Exception e) when (e is GatewayException or HttpRequestException)
             {
@@ -166,10 +246,21 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
         {
             var own = m.FromOwner || m.TaskId is not { Length: > 0 };
             var trail = own ? null : new ReplyTrailViewModel("reply:" + m.Id,
-                trails.Where(l => l.TaskId == m.TaskId).Select(l => l.Line).ToList(), _sections);
-            Messages.Add(new ChatMessageViewModel(m, m.FromOwner ? null : agent, trail,
-                own ? [] : cards.Where(x => x.Source == m.TaskId).Select(x => x.Card).ToList()));
+                trails.Where(l => l.TaskId == m.TaskId).Select(l => l.Line).ToList(), _sections,
+                m.TaskId is { Length: > 0 } t ? _steps.For(t) : null);
+            var item = new ChatMessageViewModel(m, m.FromOwner ? null : agent, trail,
+                own ? [] : cards.Where(x => x.Source == m.TaskId).Select(x => x.Card).ToList());
+            // A reply that arrives whole (nothing was streamed to the screen) is typed out, once.
+            if (!own && _threadLoaded && !m.Failed && LiveShown.Length == 0 && _seenMessages.Add(m.Id))
+            {
+                item.Typed += () => ThreadUpdated?.Invoke();
+                item.TypeIn();
+            }
+            else
+                _seenMessages.Add(m.Id);
+            Messages.Add(item);
         }
+        _threadLoaded = true;
         var shown = detail.Messages.Select(m => m.TaskId).Where(t => !string.IsNullOrEmpty(t)).ToHashSet();
         LooseStarted.Clear();
         foreach (var (source, card) in cards.Where(x => !shown.Contains(x.Source)))
@@ -178,6 +269,10 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
         _hasLiveCards = cards.Any(x => x.Card.IsRunning);
         IsReplying = detail.Busy;
         IsWaiting = detail.Waiting;
+        if (detail.Busy || detail.Waiting)
+            ShowStepsOf(detail.Messages.LastOrDefault(m => m.FromOwner)?.TaskId ?? _activeTaskId);
+        else
+            ShowStepsOf("");
         if (detail.Waiting)
             LiveStatus = "Waiting for your answer";
         else if (!detail.Busy)
@@ -225,7 +320,9 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
         Draft = "";
         var msg = await c.SendMessageAsync(conv.Conversation.Id, text);
         Messages.Add(new ChatMessageViewModel(msg, null, null, []));
+        _seenMessages.Add(msg.Id);
         OwnerSent?.Invoke();
+        ShowStepsOf(msg.TaskId ?? "");
         IsReplying = true;
         LiveStatus = "Thinking…";
         LiveText = "";
@@ -247,14 +344,64 @@ public sealed partial class ChatViewModel(Func<GatewayClient?> client, Action<st
         if (Selected is null || Str(data, "conversation_id") != Selected.Conversation.Id)
             return;
         IsReplying = true;
-        if (Str(data, "status") is { Length: > 0 } status)
+        if (Str(data, "task_id") is { Length: > 0 } taskId && taskId != _activeTaskId)
+            ShowStepsOf(taskId);
+        var status = Str(data, "status") ?? "";
+        var text = Str(data, "text") ?? "";
+        if (status.Length > 0)
             LiveStatus = status;
-        if (Str(data, "text") is { Length: > 0 } text)
+        if (text.Length > 0)
         {
             LiveText = text;
             LiveStatus = "Writing…";
         }
+        else if (status.Length == 0)
+        {
+            LiveText = ""; // the worker cleared the draft: it turned out to be a remark before a tool call
+        }
         ThreadUpdated?.Invoke();
+    }
+
+    /// <summary>A task.step event: a thought, a remark or a tool call (with its input or output) of the reply being written.</summary>
+    public void OnStep(JsonElement data)
+    {
+        if (Selected is null || Str(data, "conversation_id") != Selected.Conversation.Id)
+            return;
+        AgentStep? step;
+        try
+        {
+            step = data.Deserialize<AgentStep>(GatewayClient.Json);
+        }
+        catch (JsonException e)
+        {
+            Debug.WriteLine($"unreadable step: {e.Message}");
+            return;
+        }
+        if (step is null)
+            return;
+        IsReplying = true;
+        if (step.TaskId != _activeTaskId)
+            ShowStepsOf(step.TaskId);
+        _steps.Upsert(step, _agents, Selected.Conversation.AgentId);
+        if (step.IsNote)
+            LiveText = ""; // what was typed so far became a remark in the timeline
+        if (step.IsRunning && step.IsTool)
+            LiveStatus = $"{step.Title}…";
+        OnPropertyChanged(nameof(LiveHeadline));
+        ThreadUpdated?.Invoke();
+    }
+
+    private async Task<IReadOnlyList<AgentStep>> TryStepsAsync(GatewayClient c, string taskId)
+    {
+        try
+        {
+            return await c.GetTaskStepsAsync(taskId);
+        }
+        catch (Exception e) when (e is GatewayException or HttpRequestException)
+        {
+            Debug.WriteLine($"steps unavailable for {taskId}: {e.Message}");
+            return [];
+        }
     }
 
     /// <summary>A conversation.updated event: reload the open thread when it is the one that changed.</summary>
@@ -303,7 +450,42 @@ public sealed class ConversationItemViewModel(Conversation conversation, Agent? 
 }
 
 public sealed class ChatMessageViewModel(ChatMessage message, Agent? agent, ReplyTrailViewModel? trail, IReadOnlyList<StartedCardViewModel> started)
+    : ObservableObject
 {
+    private readonly TypeWriter _typer = new();
+    private DispatcherTimer? _timer;
+    private bool _typing;
+
+    /// <summary>Types the reply out, as if the agent were writing it now.</summary>
+    public void TypeIn()
+    {
+        if (Content.Length is 0 or > 8000)
+            return;
+        _typer.SetTarget(Content);
+        _typing = true;
+        OnPropertyChanged(nameof(Shown));
+        _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(30) };
+        _timer.Tick += (_, _) =>
+        {
+            if (_typer.Step())
+            {
+                OnPropertyChanged(nameof(Shown));
+                Typed?.Invoke();
+                return;
+            }
+            _typing = false;
+            _timer.Stop();
+            OnPropertyChanged(nameof(Shown));
+        };
+        _timer.Start();
+    }
+
+    /// <summary>Raised as new text is typed, so the view can keep the newest line in sight.</summary>
+    public event Action? Typed;
+
+    /// <summary>What the bubble shows: the reply, or the part typed so far.</summary>
+    public string Shown => _typing ? _typer.Shown : Content;
+
     /// <summary>The tools the agent used for this reply, when it used any.</summary>
     public ReplyTrailViewModel? Trail { get; } = trail;
     public bool HasTrail => Trail is { HasLines: true };

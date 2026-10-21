@@ -236,7 +236,7 @@
                                                             </Style>
                                                         </Border.Style>
                                                         <StackPanel>
-                                                            <RichTextBox Style="{StaticResource MarkdownBox}" controls:Markdown.Source="{Binding Content}" />
+                                                            <RichTextBox Style="{StaticResource MarkdownBox}" controls:Markdown.Source="{Binding Shown}" />
                                                             <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" FontSize="11">
                                                                 <Run Text="{Binding Name, Mode=OneWay}" />
                                                                 <Run Text=" · " />
@@ -254,7 +254,11 @@
                                                                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" />
                                                             </StackPanel>
                                                         </Expander.Header>
-                                                        <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource ActivityLineTemplate}" />
+                                                        <StackPanel>
+                                                            <ItemsControl ItemsSource="{Binding Steps}" ItemTemplate="{StaticResource StepTemplate}" />
+                                                            <ItemsControl ItemsSource="{Binding Lines}" ItemTemplate="{StaticResource ActivityLineTemplate}"
+                                                                          Visibility="{Binding HasOnlyLines, Converter={StaticResource BoolToVisibility}}" />
+                                                        </StackPanel>
                                                     </Expander>
 
                                                     <ItemsControl ItemsSource="{Binding Started}" ItemTemplate="{StaticResource StartedAssignmentTemplate}" />
@@ -272,13 +276,14 @@
                             <DockPanel HorizontalAlignment="Left" MaxWidth="700" Margin="0,0,0,12" Visibility="{Binding IsReplying, Converter={StaticResource BoolToVisibility}}">
                                 <ContentPresenter DockPanel.Dock="Left" Content="{Binding Selected}" ContentTemplate="{StaticResource AvatarSquareTemplate}"
                                                   Width="28" Height="28" Margin="0,2,10,0" VerticalAlignment="Top" />
-                                <Border CornerRadius="12,12,12,2" Padding="14,10" Background="{DynamicResource SurfaceAltBrush}">
+                                <Border CornerRadius="12,12,12,2" Padding="14,10" Background="{DynamicResource SurfaceAltBrush}" MinWidth="320">
                                     <StackPanel>
-                                        <RichTextBox Style="{StaticResource MarkdownBox}" controls:Markdown.Source="{Binding LiveText}"
-                                                     Visibility="{Binding LiveText, Converter={StaticResource NullToVisibility}}" />
-                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                            <Ellipse Width="7" Height="7" Fill="{DynamicResource InfoBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
-                                            <TextBlock Text="{Binding LiveStatus}" Style="{StaticResource Caption}" FontStyle="Italic" />
+                                        <ItemsControl ItemsSource="{Binding LiveSteps}" ItemTemplate="{StaticResource StepTemplate}" Margin="0,0,0,4" />
+                                        <RichTextBox Style="{StaticResource MarkdownBox}" controls:Markdown.Source="{Binding LiveDisplay}"
+                                                     Visibility="{Binding LiveDisplay, Converter={StaticResource NullToVisibility}}" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <Ellipse Style="{StaticResource PulseDot}" Fill="{DynamicResource InfoBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding LiveHeadline}" Style="{StaticResource Caption}" FontStyle="Italic" />
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>

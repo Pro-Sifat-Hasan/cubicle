@@ -53,3 +53,29 @@ public class StepsApiTests
         Assert.Contains("task_id=tsk%201", handler.Requests[0].Request.RequestUri!.Query);
     }
 }
+
+public class StepTextTests
+{
+    [Fact]
+    public void Shows_fields_with_long_values_on_their_own_lines()
+    {
+        var text = StepText.DisplayInput("{\"file_path\":\"index.html\",\"content\":\"<h1>Hi</h1>\\n<p>There</p>\"}");
+        Assert.Equal("file_path: index.html\ncontent:\n<h1>Hi</h1>\n<p>There</p>", text);
+    }
+
+    [Fact]
+    public void Unescapes_input_that_is_still_streaming_in()
+    {
+        // A write's content arriving piece by piece: not valid JSON yet, but readable as it comes.
+        Assert.Equal("{\"content\": \"line one\nline \"two", StepText.DisplayInput("{\"content\": \\\"line one\\nline \\\"two"));
+        Assert.Equal("", StepText.DisplayInput(null));
+    }
+
+    [Fact]
+    public void Clips_long_output_and_says_how_much_was_left_out()
+    {
+        Assert.Equal("short", StepText.Clip("short"));
+        var clipped = StepText.Clip(new string('x', 4100));
+        Assert.EndsWith("… 100 more characters", clipped);
+    }
+}
