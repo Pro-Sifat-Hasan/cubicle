@@ -220,6 +220,47 @@ func (s *Server) addMemory(w http.ResponseWriter, r *http.Request, fromWorker bo
 	writeJSON(w, http.StatusCreated, m)
 }
 
+func (s *Server) handleOwnerSetProfile(w http.ResponseWriter, r *http.Request) {
+	s.setProfile(w, r, false)
+}
+
+func (s *Server) handleWorkerSetProfile(w http.ResponseWriter, r *http.Request) {
+	s.setProfile(w, r, true)
+}
+
+// setProfile replaces the one record that describes the owner in full. Empty content clears it.
+func (s *Server) setProfile(w http.ResponseWriter, r *http.Request, fromWorker bool) {
+	var in struct {
+		Content    string `json:"content"`
+		EmployeeID string `json:"employee_id"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	in.Content = strings.TrimSpace(in.Content)
+	if err := checkLen("content", in.Content, 3000, false); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !fromWorker {
+		in.EmployeeID = ""
+	}
+	m, err := s.store.SetProfile(r.Context(), in.Content, in.EmployeeID)
+	if err != nil {
+		s.storeErr(w, err)
+		return
+	}
+	s.hub.Publish("memory.added", m)
+	if fromWorker && m != nil {
+		s.logActivity(r.Context(), in.EmployeeID, "", "Updated the profile of the owner")
+	}
+	if m == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, http.StatusOK, m)
+}
+
 func (s *Server) handleDeleteMemory(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeleteMemory(r.Context(), r.PathValue("id")); err != nil {
 		s.storeErr(w, err)

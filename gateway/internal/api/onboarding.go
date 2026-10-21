@@ -370,16 +370,14 @@ func (s *Server) applyOnboarding(ctx context.Context, in onboardingInput, prof c
 		res.Routines = append(res.Routines, rt)
 	}
 
-	// The basics go into office memory, which every agent reads.
-	facts := []string{fmt.Sprintf("The owner works as: %s.", prof.Title)}
+	// The basics start the owner's profile, the one record every agent reads and keeps up to date.
+	profile := fmt.Sprintf("Works as %s.", prof.Title)
 	if len(stack) > 0 {
-		facts = append(facts, "The owner works with: "+strings.Join(stack, ", ")+".")
+		profile += " Works with: " + strings.Join(stack, ", ") + "."
 	}
-	facts = append(facts, "The owner is into "+strings.ToLower(firstNonBlank(in.CustomPassion, persona.Title))+".")
-	for _, f := range facts {
-		if _, err := s.store.AddMemory(ctx, f, main.ID); err != nil {
-			return nil, err
-		}
+	profile += " Into " + strings.ToLower(firstNonBlank(in.CustomPassion, persona.Title)) + "."
+	if _, err := s.store.SetProfile(ctx, profile, main.ID); err != nil {
+		return nil, err
 	}
 
 	if in.OwnerName != "" {

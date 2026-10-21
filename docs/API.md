@@ -147,7 +147,8 @@ are stored. Persona tasks run on the main agent and never appear in `/api/v1/tas
 | `GET /api/v1/secrets` | | secret **names** only |
 | `PUT /api/v1/secrets/{NAME}` | `{value}` | `204`; the worker restarts with the new value |
 | `DELETE /api/v1/secrets/{NAME}` | | `204` |
-| `GET /api/v1/memories` | | what the staff remember, newest first |
+| `GET /api/v1/memories` | | what the staff remember: the owner's profile first (`kind: "profile"`, at most one), then facts (`kind: "fact"`) newest first |
+| `PUT /api/v1/memories/profile` | `{content}` | writes the one profile record about the owner (up to 3000 characters), replacing the old one; empty content clears it (`204`) |
 | `POST /api/v1/memories` | `{content}` | the new memory (`201`) |
 | `DELETE /api/v1/memories/{id}` | | `204` |
 | `GET /api/v1/projects` | | the projects the staff keep notes on: `[{id, name, path, notes, created_at, updated_at}]` |
@@ -185,6 +186,7 @@ stored), `assignment.done`, `inbox.new`, `inbox.answered`, `agent.status`, `agen
 | `GET /internal/v1/memories?limit=` | | facts (with ids); the worker picks the ones that fit each request |
 | `DELETE /internal/v1/memories/{id}` | | `204`; an agent forgets a wrong fact |
 | `POST /internal/v1/memories` | `{content, employee_id}` | saves a learned fact |
+| `PUT /internal/v1/memories/profile` | `{content, employee_id}` | an agent rewrites the owner's profile (the full, compact picture; replaces the old one) |
 | `GET /internal/v1/projects` | | the projects; the worker matches them to each request and works inside a matching project's folder |
 | `PUT /internal/v1/projects` | `{name, path?, notes?}` | an agent saves or updates a project (same rules as the owner endpoint); the agent asks the owner to approve a new folder first |
 

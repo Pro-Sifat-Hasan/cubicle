@@ -36,3 +36,32 @@ func TestProjectsAreSavedUpdatedAndValidated(t *testing.T) {
 	h.do("DELETE", "/api/v1/projects/"+p.ID, adminTok, nil, 204, nil)
 	h.do("DELETE", "/api/v1/projects/"+p.ID, adminTok, nil, 404, nil)
 }
+
+func TestOwnerProfileIsOneRecordThatIsReplaced(t *testing.T) {
+	h := newHarness(t)
+	var first store.Memory
+	h.do("PUT", "/internal/v1/memories/profile", workerTok, map[string]string{"content": "Sam is an AI engineer.", "employee_id": "manager"}, 200, &first)
+	h.do("POST", "/internal/v1/memories", workerTok, map[string]string{"content": "Sam prefers tea."}, 201, nil)
+	h.do("PUT", "/api/v1/memories/profile", adminTok, map[string]string{"content": "Sam is an AI engineer in London."}, 200, nil)
+
+	var list []store.Memory
+	h.do("GET", "/api/v1/memories", adminTok, nil, 200, &list)
+	profiles := 0
+	for _, m := range list {
+		if m.Kind == store.KindProfile {
+			profiles++
+			if m.Content != "Sam is an AI engineer in London." || m.EmployeeID != "" {
+				t.Fatalf("profile not replaced by the owner: %+v", m)
+			}
+		}
+	}
+	if profiles != 1 || len(list) != 2 || list[0].Kind != store.KindProfile {
+		t.Fatalf("want one profile listed first plus one fact: %+v", list)
+	}
+
+	h.do("PUT", "/api/v1/memories/profile", adminTok, map[string]string{"content": ""}, 204, nil)
+	h.do("GET", "/api/v1/memories", adminTok, nil, 200, &list)
+	if len(list) != 1 || list[0].Kind != store.KindFact {
+		t.Fatalf("clearing the profile should leave the facts: %+v", list)
+	}
+}

@@ -22,6 +22,7 @@ class FakeGateway:
         self.usage: list[tuple[str, str, int, int]] = []
         self.memories: list[str] = list(memories or [])
         self.projects: list[dict[str, Any]] = []
+        self.profile = ""
         self.progress_events: list[tuple[str, str, str]] = []
         self.steps: list[tuple[str, str, dict[str, Any]]] = []
         self.titles: dict[str, str] = {}
@@ -94,6 +95,12 @@ class FakeGateway:
 
     async def add_memory(self, content, agent_id):
         self.memories.append(content)
+
+    async def get_profile(self):
+        return self.profile
+
+    async def set_profile(self, content, agent_id):
+        self.profile = content
 
     async def list_projects(self):
         return list(self.projects)

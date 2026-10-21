@@ -20,6 +20,9 @@ from cubicle_agents.tools.mcp import tool_prefix
 ASK_PREFIX = "ASK_OWNER:"
 APPROVAL_PREFIX = "REQUEST_APPROVAL:"
 REMEMBER_PREFIX = "REMEMBER:"
+PROFILE_PREFIX = "PROFILE:"
+
+COMPACT_AT = 60  # facts in memory before agents are asked to merge them
 
 MODE_TASK = "task"
 MODE_CHAT = "chat"
@@ -95,7 +98,8 @@ def clean_title(raw: str, fallback_from: str = "") -> str:
 
 def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_mode: bool, web: bool,
                   team: list[Employee] | None = None, mode: str = MODE_TASK, today: date | None = None,
-                  native_files: bool = False, coordinator: bool = False, projects: str = "") -> str:
+                  native_files: bool = False, coordinator: bool = False, projects: str = "", profile: str = "",
+                  memory_count: int = 0) -> str:
     today = today or date.today()
     intro = f"You are {employee.name}"
     if employee.title:
@@ -109,7 +113,7 @@ def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_m
     parts.append(f"Today is {today:%A, %d %B %Y}. Interpret relative dates (\"this week\", \"tomorrow\") from this date.")
     parts.append(_working_rules(employee, owner, tool_mode=tool_mode, web=web, mode=mode,
                                 has_team=bool(team) and tool_mode and mode != MODE_CONSULT,
-                                native_files=native_files, coordinator=coordinator))
+                                native_files=native_files, coordinator=coordinator, memory_count=memory_count))
     if team and tool_mode and mode != MODE_CONSULT:
         parts.append("Teammates you can consult with ask_teammate (use their id):\n"
                      + "\n".join(f"- {m.id}: {m.name}, {m.title or 'agent'}. {m.description}".rstrip() for m in team))
@@ -119,6 +123,8 @@ def system_prompt(employee: Employee, owner: str, *, memories: list[str], tool_m
         apps = "\n".join(f"- {m.name}: its tools start with `{tool_prefix(m)}`" for m in employee.mcp)
         parts.append("Your connected apps (tools from the owner's own accounts and services). When a request involves "
                      f"one, use its tools instead of guessing, and look before you change anything:\n{apps}")
+    if profile:
+        parts.append(f"Profile of {owner} (kept up to date by the staff; trust it unless told otherwise):\n{profile}")
     if projects:
         parts.append(projects)
     if memories:
@@ -138,7 +144,7 @@ def _skills_block(employee: Employee, *, tool_mode: bool) -> str:
 
 
 def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool, mode: str, has_team: bool,
-                   native_files: bool = False, coordinator: bool = False) -> str:
+                   native_files: bool = False, coordinator: bool = False, memory_count: int = 0) -> str:
     rules = []
     if mode == MODE_CHAT:
         rules += [
@@ -214,6 +220,16 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
                          "something, forget the old fact and remember the new one. Never save task details, guesses or "
                          "secrets. What the office remembers is listed below; trust it, and ask rather than guess when "
                          "something you need is not there.")
+            rules.append("Memory has two parts. The profile is one record about who the owner is: when you learn "
+                         "something lasting about them (role, skills, location, language, working style, goals, "
+                         "people), call update_profile with the whole profile rewritten: merge the new detail into "
+                         "the current one, drop what is no longer true, stay under 1500 characters. Everything else "
+                         "is a short fact for remember: one sentence under 300 characters, never one that the profile "
+                         "or an earlier fact already says.")
+            if memory_count >= COMPACT_AT:
+                rules.append(f"The office memory holds {memory_count} facts, which is too many. Before you finish, call "
+                             "compact_memory with no arguments, then merge repeated or overlapping facts into single "
+                             "short ones and remove outdated ones.")
             rules.append("When the owner tells you about a project (its name and folder), call save_project at once. "
                          "After you work on a project, update its notes with what is worth knowing next time (what it "
                          "is, the stack, where things live, conventions, how to run and test it), keeping them short. "
@@ -241,8 +257,10 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
         rules.append("Your MCP tools (if any) connect to the owner's apps and services; use them when they fit the task.")
     else:
         if employee.has_tool(TOOL_MEMORY):
-            rules.append(f"To save a durable fact about the owner for future work, add a line starting with "
-                         f"`{REMEMBER_PREFIX}`.")
+            rules.append(f"To save a short durable fact about the owner (one sentence), add a line starting with "
+                         f"`{REMEMBER_PREFIX}`. When you learn who they are, add one line starting with "
+                         f"`{PROFILE_PREFIX}` followed by their whole profile rewritten (current one merged with the "
+                         "new detail, under 1500 characters, one paragraph); it replaces the old profile.")
         if mode in (MODE_TASK, MODE_CHAT):
             rules.append(f"If you truly cannot proceed without information only {owner} has, reply with a single line "
                          f"starting with `{ASK_PREFIX}` followed by one clear question, and nothing else.")

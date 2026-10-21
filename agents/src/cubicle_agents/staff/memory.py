@@ -43,6 +43,18 @@ def looks_secret(text: str) -> bool:
     return bool(_SECRET.search(text))
 
 
+def is_duplicate(fact: str, existing: list[str], threshold: float = 0.8) -> bool:
+    """True when `fact` says what a stored fact already says (same words, give or take a few)."""
+    mine = words(fact)
+    if not mine:
+        return False
+    for other in existing:
+        theirs = words(other)
+        if theirs and len(mine & theirs) / len(mine | theirs) >= threshold:
+            return True
+    return False
+
+
 def select_memories(memories: list[str], query: str, *, relevant: int = MEMORY_RELEVANT, recent: int = MEMORY_RECENT,
                     budget_chars: int = MEMORY_BUDGET_CHARS) -> list[str]:
     """The facts worth showing for this request. `memories` is newest first (as the gateway returns them)."""

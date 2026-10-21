@@ -105,6 +105,12 @@ class Gateway(Protocol):
     async def forget_memory(self, fact: str) -> bool:
         """Delete the remembered fact that best matches `fact`; False when nothing matches."""
 
+    async def get_profile(self) -> str:
+        """The one record describing the owner in full ('' when there is none)."""
+
+    async def set_profile(self, content: str, agent_id: str) -> None:
+        """Replace the owner's profile; empty content clears it."""
+
     async def list_projects(self) -> list[dict[str, Any]]:
         """The projects the owner works on: id, name, path, notes."""
 
@@ -199,7 +205,14 @@ class GatewayClient:
 
     async def list_memories(self, limit: int = 50) -> list[str]:
         resp = await self._send("GET", f"/internal/v1/memories?limit={limit}")
-        return [m["content"] for m in resp.json()]
+        return [m["content"] for m in resp.json() if m.get("kind") != "profile"]
+
+    async def get_profile(self) -> str:
+        resp = await self._send("GET", "/internal/v1/memories?limit=1")
+        return next((m["content"] for m in resp.json() if m.get("kind") == "profile"), "")
+
+    async def set_profile(self, content: str, agent_id: str) -> None:
+        await self._send("PUT", "/internal/v1/memories/profile", {"content": content[:3000], "employee_id": agent_id})
 
     async def add_memory(self, content: str, agent_id: str) -> None:
         await self._send("POST", "/internal/v1/memories", {"content": content[:1000], "employee_id": agent_id})
@@ -207,7 +220,7 @@ class GatewayClient:
     async def forget_memory(self, fact: str) -> bool:
         wanted = " ".join(fact.lower().split())
         resp = await self._send("GET", "/internal/v1/memories?limit=300")
-        items = [m for m in resp.json() if " ".join(m["content"].lower().split())]
+        items = [m for m in resp.json() if m.get("kind") != "profile" and " ".join(m["content"].lower().split())]
         match = next((m for m in items if " ".join(m["content"].lower().split()) == wanted), None) or next(
             (m for m in items if wanted in " ".join(m["content"].lower().split())), None)
         if match is None:

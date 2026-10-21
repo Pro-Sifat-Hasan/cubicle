@@ -25,7 +25,7 @@ from cubicle_agents.office import directives
 from cubicle_agents.office.status import StatusBoard
 from cubicle_agents.office.steps import StepReporter
 from cubicle_agents.staff import prompts
-from cubicle_agents.staff.memory import MEMORY_FETCH, select_memories, trim_history
+from cubicle_agents.staff.memory import MEMORY_FETCH, is_duplicate, looks_secret, select_memories, trim_history
 from cubicle_agents.staff.projects import Project, match_projects, projects_block
 from cubicle_agents.staff.roster import TOOL_MEMORY, TOOL_WEB, Employee, Roster
 from cubicle_agents.tools import build_toolbox
@@ -88,13 +88,15 @@ class TaskHandler:
         folder = task.get("conversation_id") or task.get("parent_id") or task["id"]
         return self.ctx.workspace_root / folder
 
-    async def _memories(self, query: str) -> list[str]:
-        """The facts that fit this request (not all of them: that costs tokens and buries what matters)."""
+    async def _memories(self, query: str) -> tuple[str, list[str], int]:
+        """The owner's profile, the facts that fit this request (not all of them: that costs tokens and buries what
+        matters), and how many facts are stored."""
         try:
-            return select_memories(await self.ctx.gateway.list_memories(MEMORY_FETCH), query)
+            facts = await self.ctx.gateway.list_memories(MEMORY_FETCH)
+            return await self.ctx.gateway.get_profile(), select_memories(facts, query), len(facts)
         except Exception:  # memory is helpful context, never a reason to fail work
             log.warning("could not load office memory", exc_info=True)
-            return []
+            return "", [], 0
 
     async def _projects(self) -> list[Project]:
         try:
@@ -134,11 +136,12 @@ class TaskHandler:
             )
         if on_event is None and json_schema is None:
             on_event = self._tool_logger(employee, claim)
-        memories = await self._memories(prompt[:3000])
+        profile, memories, memory_count = await self._memories(prompt[:3000])
         system = prompts.system_prompt(employee, ctx.owner, memories=memories, tool_mode=tool_mode,
                                        web=ctx.web_access, team=team, mode=mode, coordinator=coordinator,
                                        native_files=getattr(ctx.llm, "native_file_tools", False),
-                                       projects=projects_block(projects, matched, ctx.owner) if json_schema is None else "")
+                                       projects=projects_block(projects, matched, ctx.owner) if json_schema is None else "",
+                                       profile=profile, memory_count=memory_count)
         reporter = StepReporter(ctx.gateway, claim.task["id"], employee.id) if json_schema is None else None
         result = await ctx.llm.run(
             system=system, prompt=prompt, model=employee.model or ctx.default_model, toolbox=toolbox,
@@ -154,8 +157,13 @@ class TaskHandler:
         if not tool_mode and json_schema is None:
             parsed = directives.extract(result.text)
             if employee.has_tool(TOOL_MEMORY):
+                known = await ctx.gateway.list_memories(MEMORY_FETCH) if parsed.memories else []
                 for fact in parsed.memories:
-                    await ctx.gateway.add_memory(fact, employee.id)
+                    if not looks_secret(fact) and not is_duplicate(fact, known):
+                        await ctx.gateway.add_memory(fact, employee.id)
+                        known.append(fact)
+                if parsed.profile and not looks_secret(parsed.profile):
+                    await ctx.gateway.set_profile(parsed.profile, employee.id)
             result.text = parsed.text
             if (may_ask or parsed.question_kind == "approval") and parsed.question:
                 result.question, result.question_kind = parsed.question, parsed.question_kind

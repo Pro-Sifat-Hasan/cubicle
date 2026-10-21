@@ -94,3 +94,56 @@ def test_remember_refuses_secrets_and_forget_removes_a_fact():
     assert run(box.call("forget", {"fact": "Sam is vegetarian."})).content.startswith("Removed")
     assert "Sam is vegetarian." not in gw.memories
     assert run(box.call("forget", {"fact": "something never saved"})).is_error
+
+
+def test_a_fact_that_repeats_a_stored_one_is_not_saved_again():
+    gw = FakeGateway(memories=["Sam prefers short emails."])
+    box = _toolbox(gw)
+    assert "Already" in run(box.call("remember", {"fact": "Sam prefers short emails"})).content
+    assert gw.memories == ["Sam prefers short emails."]
+    assert run(box.call("remember", {"fact": "x" * 400})).is_error  # a fact is one short sentence
+    assert not run(box.call("remember", {"fact": "Sam lives in London."})).is_error
+    assert memory.is_duplicate("sam prefers SHORT emails", gw.memories)
+    assert not memory.is_duplicate("Sam likes tea", gw.memories)
+
+
+def test_the_profile_is_replaced_whole_and_refuses_secrets():
+    gw = FakeGateway()
+    box = _toolbox(gw)
+    assert not run(box.call("update_profile", {"profile": "Sam is an AI engineer."})).is_error
+    assert not run(box.call("update_profile", {"profile": "Sam is an AI engineer in London."})).is_error
+    assert gw.profile == "Sam is an AI engineer in London."
+    assert run(box.call("update_profile", {"profile": "token = abcdef123456"})).is_error
+    assert run(box.call("update_profile", {"profile": "y" * 2000})).is_error
+
+
+def test_compact_memory_lists_then_merges_facts():
+    gw = FakeGateway(memories=["Sam works as a developer.", "Sam works with Python.", "Sam likes tea."])
+    box = _toolbox(gw)
+    listing = run(box.call("compact_memory", {})).content
+    assert "Sam works with Python." in listing and "Sam likes tea." in listing
+    done = run(box.call("compact_memory", {"remove": ["Sam works as a developer.", "Sam works with Python."],
+                                           "replace_with": "Sam is a Python developer."}))
+    assert "Removed 2" in done.content
+    assert sorted(gw.memories) == ["Sam is a Python developer.", "Sam likes tea."]
+
+
+def test_the_profile_and_a_long_memory_warning_reach_the_prompt(tmp_path):
+    from cubicle_agents.staff import prompts
+    system = prompts.system_prompt(DEFAULT_ROSTER[1], "Sam", memories=["Sam likes tea."], tool_mode=True, web=False,
+                                   profile="Sam is an AI engineer.", memory_count=prompts.COMPACT_AT)
+    assert "Sam is an AI engineer." in system and "compact_memory" in system
+    short = prompts.system_prompt(DEFAULT_ROSTER[1], "Sam", memories=[], tool_mode=True, web=False, memory_count=5)
+    assert "too many" not in short
+
+
+def test_text_mode_profile_directive_replaces_the_profile(tmp_path):
+    from fakes import ScriptedLLM, claim, make_handler
+    gw = FakeGateway(memories=["Sam signs emails as S."])
+    llm = ScriptedLLM("PROFILE: Sam is an AI engineer.\nREMEMBER: Sam signs emails as S\n"
+                      "REMEMBER: Sam hates meetings.\nBody")
+    writer = next(e for e in DEFAULT_ROSTER if e.id == "writer")
+    run(make_handler(gw, llm, tmp_path).handle(writer, claim()))
+    assert gw.profile == "Sam is an AI engineer."
+    assert gw.memories == ["Sam signs emails as S.", "Sam hates meetings."]  # the repeat is skipped
+    assert gw.completed["tsk_1"] == "Body"

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from cubicle_agents.core.gateway import Gateway
-from cubicle_agents.staff.memory import looks_secret
+from cubicle_agents.staff.memory import is_duplicate, looks_secret
 from cubicle_agents.staff.roster import TOOL_ASSIGNMENTS, TOOL_FILES, TOOL_MEMORY, TOOL_TERMINAL, TOOL_WEB, Employee
 from cubicle_agents.tools.base import TOOL_PREFIX, Tool, Toolbox, ToolError, require_str
 from cubicle_agents.tools.terminal import terminal_tool
@@ -55,6 +55,8 @@ def build_toolbox(
     if employee.has_tool(TOOL_MEMORY):
         toolbox.tools.append(_remember(gateway, employee.id))
         toolbox.tools.append(_forget(gateway))
+        toolbox.tools.append(_update_profile(gateway, employee.id))
+        toolbox.tools.append(_compact_memory(gateway, employee.id))
         toolbox.tools.append(_save_project(gateway, toolbox, may_approve, approved_actions))
     if employee.skills:
         toolbox.tools.append(_load_skill(employee))
@@ -110,10 +112,12 @@ def build_toolbox(
 
 def _remember(gateway: Gateway, agent_id: str) -> Tool:
     async def remember(args: dict[str, Any]) -> str:
-        fact = require_str(args, "fact", max_len=1000).strip()
+        fact = require_str(args, "fact", max_len=FACT_MAX_CHARS).strip()
         if looks_secret(fact):
             raise ToolError("That looks like a key, password or token. Never store those; the owner keeps them in "
                             "Settings or Integrations.")
+        if is_duplicate(fact, await gateway.list_memories(300)):
+            return "Already in the office memory; nothing to save."
         await gateway.add_memory(fact, agent_id)
         return "Saved to the office memory."
 
@@ -130,6 +134,80 @@ def _remember(gateway: Gateway, agent_id: str) -> Tool:
             "additionalProperties": False,
         },
         handler=remember,
+    )
+
+
+FACT_MAX_CHARS = 300  # one fact is a short sentence; anything longer belongs in the profile or a project's notes
+PROFILE_MAX_CHARS = 1500
+
+
+def _update_profile(gateway: Gateway, agent_id: str) -> Tool:
+    async def update_profile(args: dict[str, Any]) -> str:
+        profile = require_str(args, "profile", max_len=PROFILE_MAX_CHARS).strip()
+        if looks_secret(profile):
+            raise ToolError("That looks like a key, password or token. Never store those.")
+        await gateway.set_profile(profile, agent_id)
+        return "Profile updated."
+
+    return Tool(
+        name="update_profile",
+        description="Write the owner's profile: ONE record that says who they are, in full and compactly (name, role, "
+        "what they work on and with, location and language, working style, preferences, people, goals). It REPLACES the "
+        "old profile, so start from the current one in your prompt, merge in what you just learned, drop what is no "
+        "longer true, and send the whole text, third person, under 1500 characters. Use it for who the owner is; use "
+        "remember for a separate fact. Never store secrets.",
+        parameters={
+            "type": "object",
+            "properties": {"profile": {"type": "string", "description": "The complete new profile."}},
+            "required": ["profile"],
+            "additionalProperties": False,
+        },
+        handler=update_profile,
+    )
+
+
+REVIEW_CHARS = 6000
+
+
+def _compact_memory(gateway: Gateway, agent_id: str) -> Tool:
+    async def compact_memory(args: dict[str, Any]) -> str:
+        remove = args.get("remove") if isinstance(args.get("remove"), list) else []
+        merged = args.get("replace_with")
+        if not remove and merged is None:  # review: show what is stored so the agent can choose
+            lines, used = [], 0
+            for fact in await gateway.list_memories(300):
+                if used + len(fact) > REVIEW_CHARS:
+                    lines.append("[more not shown]")
+                    break
+                lines.append(f"- {fact}")
+                used += len(fact)
+            return "\n".join(lines) or "No facts are stored."
+        merged = merged.strip() if isinstance(merged, str) else ""
+        if merged and looks_secret(merged):
+            raise ToolError("That looks like a key, password or token. Never store those.")
+        removed = 0
+        for fact in remove[:40]:
+            if isinstance(fact, str) and await gateway.forget_memory(fact):
+                removed += 1
+        if merged:
+            await gateway.add_memory(merged[:FACT_MAX_CHARS], agent_id)
+        return f"Removed {removed} fact(s)" + (" and saved the merged one." if merged else ".")
+
+    return Tool(
+        name="compact_memory",
+        description="Keep the office memory short and true. Called with no arguments it lists the stored facts. Then "
+        "merge facts that overlap or repeat each other: pass the exact facts to `remove` and one short sentence in "
+        "`replace_with` that keeps everything that is still true. Also remove facts that are outdated or wrong. Facts "
+        "about who the owner is belong in the profile (update_profile), not here.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "remove": {"type": "array", "items": {"type": "string"}, "description": "Facts to delete, quoted closely."},
+                "replace_with": {"type": "string", "description": "One short sentence that replaces them."},
+            },
+            "additionalProperties": False,
+        },
+        handler=compact_memory,
     )
 
 
