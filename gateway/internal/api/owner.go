@@ -298,6 +298,8 @@ func (s *Server) handleListActivity(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if id := r.URL.Query().Get("task_id"); id != "" {
 		list, err = s.store.ListTaskActivity(r.Context(), id, limit) // one assignment's trail, oldest first
+	} else if id := r.URL.Query().Get("conversation_id"); id != "" {
+		list, err = s.store.ListConversationActivity(r.Context(), id, limit) // every reply of one chat, oldest first
 	} else {
 		list, err = s.store.ListActivity(r.Context(), limit)
 	}

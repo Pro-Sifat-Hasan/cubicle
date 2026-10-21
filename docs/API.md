@@ -29,7 +29,7 @@ Invoke-RestMethod http://127.0.0.1:7878/api/v1/status -Headers @{ Authorization 
 | `POST /api/v1/tasks/{id}/cancel` | | cancelled task and children |
 | `GET /api/v1/inbox?status=open` | | questions from your staff |
 | `POST /api/v1/inbox/{id}/answer` | `{answer}` | answered item; the task resumes |
-| `GET /api/v1/activity?limit=&task_id=` | | activity log, newest first; with `task_id`, one assignment's trail (its subtasks included), oldest first. Messages starting with `Tool: ` are tool calls |
+| `GET /api/v1/activity?limit=&task_id=&conversation_id=` | | activity log, newest first; with `task_id`, one assignment's trail (its subtasks included), and with `conversation_id`, the trail of every reply in a chat, both oldest first. Messages starting with `Tool: ` are tool calls |
 | `POST /api/v1/breaker/reset` | | `204` |
 | `GET /api/v1/events` | | Server-Sent Events stream |
 

@@ -216,6 +216,30 @@ func (s *Store) ListTaskActivity(ctx context.Context, taskID string, limit int) 
 	return out, rows.Err()
 }
 
+// ListConversationActivity returns the activity of every reply task in a chat, oldest first.
+func (s *Store) ListConversationActivity(ctx context.Context, conversationID string, limit int) ([]*Activity, error) {
+	if limit <= 0 || limit > 2000 {
+		limit = 1000
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, employee_id, task_id, message, created_at FROM activity
+		WHERE task_id IN (SELECT id FROM tasks WHERE conversation_id = ?) ORDER BY id ASC LIMIT ?`, conversationID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*Activity{}
+	for rows.Next() {
+		var a Activity
+		var created int64
+		if err := rows.Scan(&a.ID, &a.EmployeeID, &a.TaskID, &a.Message, &created); err != nil {
+			return nil, err
+		}
+		a.CreatedAt = fromMS(created)
+		out = append(out, &a)
+	}
+	return out, rows.Err()
+}
+
 // ---- Usage ----
 
 func (s *Store) AddUsage(ctx context.Context, taskID, employeeID string, in, out int64) error {

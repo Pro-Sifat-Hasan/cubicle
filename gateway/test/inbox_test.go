@@ -113,3 +113,15 @@ func TestDeletingAChatClosesItsOpenRequests(t *testing.T) {
 		t.Fatalf("requests of a deleted chat must not linger: %+v", open)
 	}
 }
+
+func TestChatActivityGroupsByReplyTask(t *testing.T) {
+	h := newHarness(t)
+	convID, claim := startChatReply(h, "manager")
+	h.do("POST", "/internal/v1/activity", workerTok, map[string]string{"employee_id": "manager", "task_id": claim.Task.ID, "message": "Tool: Searching the web…"}, 204, nil)
+	h.do("POST", "/internal/v1/activity", workerTok, map[string]string{"employee_id": "manager", "task_id": "tsk_other", "message": "Elsewhere"}, 204, nil)
+	var got []store.Activity
+	h.do("GET", "/api/v1/activity?conversation_id="+convID, adminTok, nil, 200, &got)
+	if len(got) != 1 || got[0].TaskID != claim.Task.ID {
+		t.Fatalf("want only this chat's reply trail, got %+v", got)
+	}
+}
