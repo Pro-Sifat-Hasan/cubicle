@@ -15,7 +15,8 @@ public sealed class StatusToBrushConverter : IValueConverter
     {
         "done" or "idle" => Get("SuccessBrush"),
         "in_progress" or "working" or "delegated" => Get("InfoBrush"),
-        "waiting_human" or "waiting" => Get("WarningBrush"),
+        "waiting_human" or "waiting" or "proposed" => Get("WarningBrush"),
+        "approved" => Get("InfoBrush"),
         "failed" => Get("DangerBrush"),
         _ => Get("NeutralBrush"),
     };
@@ -103,6 +104,15 @@ public sealed class InitialConverter : IValueConverter
 }
 
 /// <summary>Two-way "value equals parameter", for binding RadioButtons to a string property.</summary>
+/// <summary>Visible when the bound value equals the parameter ("log", "messages"), otherwise collapsed.</summary>
+public sealed class VisibleWhenConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        string.Equals(value?.ToString(), parameter?.ToString(), StringComparison.Ordinal) ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
 public sealed class EqualsConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>

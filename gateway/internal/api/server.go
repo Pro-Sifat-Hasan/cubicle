@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/alerts"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/config"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/events"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/secrets"
@@ -56,10 +57,14 @@ type Server struct {
 	breakerOpen    bool
 	breakerResetAt time.Time
 	LongPollWait   time.Duration
+	// Alerts delivers messages outside the app (Discord, email); tests replace its HTTP client.
+	Alerts    *alerts.Sender
+	alertMu   sync.Mutex
+	alertSent map[string]time.Time
 }
 
 func New(cfg *config.Config, st *store.Store, hub *events.Hub, box *secrets.Box, log *slog.Logger) *Server {
-	s := &Server{cfg: cfg, store: st, hub: hub, secrets: box, log: log, LongPollWait: 25 * time.Second, SkillSource: skillsrc.New()}
+	s := &Server{cfg: cfg, store: st, hub: hub, secrets: box, log: log, LongPollWait: 25 * time.Second, SkillSource: skillsrc.New(), Alerts: &alerts.Sender{}}
 	s.revision.Store(time.Now().UnixMilli())
 	if err := s.ensureOffice(context.Background()); err != nil {
 		log.Error("could not set up the starting team", "err", err)
@@ -136,6 +141,9 @@ func (s *Server) Handler() http.Handler {
 	owner.HandleFunc("DELETE /api/v1/memories/{id}", s.handleDeleteMemory)
 	owner.HandleFunc("GET /api/v1/projects", s.handleListProjects)
 	owner.HandleFunc("GET /api/v1/triage", s.handleListTriage)
+	owner.HandleFunc("GET /api/v1/alerts", s.handleGetAlerts)
+	owner.HandleFunc("PUT /api/v1/alerts", s.handlePutAlerts)
+	owner.HandleFunc("POST /api/v1/alerts/test", s.handleTestAlert)
 	owner.HandleFunc("PUT /api/v1/projects", s.handleOwnerSaveProject)
 	owner.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
 

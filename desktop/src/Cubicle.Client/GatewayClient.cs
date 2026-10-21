@@ -225,6 +225,26 @@ public sealed class GatewayClient : IDisposable
         return GetAsync<ModelList>(path, ct, TimeSpan.FromSeconds(60));
     }
 
+    // ---- messages the staff looked at, and alerts outside the app ----
+
+    public Task<List<TriageItem>> GetTriageAsync(int limit = 100, CancellationToken ct = default) =>
+        GetAsync<List<TriageItem>>($"/api/v1/triage?limit={limit}", ct);
+
+    public Task<AlertSettings> GetAlertsAsync(CancellationToken ct = default) =>
+        GetAsync<AlertSettings>("/api/v1/alerts", ct);
+
+    /// <summary>Saves the alert choices. A null or empty webhook or password keeps the stored one.</summary>
+    public Task<AlertSettings> SaveAlertsAsync(AlertSettings settings, string? discordWebhook, string? smtpPassword, CancellationToken ct = default) =>
+        SendAsync<AlertSettings>(HttpMethod.Put, "/api/v1/alerts", new
+        {
+            settings.Waiting, settings.Done, settings.Discord, settings.Email, settings.EmailTo, settings.SmtpHost, settings.SmtpPort,
+            settings.SmtpUser, email_from = settings.EmailFrom, discord_webhook = discordWebhook ?? "", smtp_password = smtpPassword ?? "",
+        }, ct);
+
+    /// <summary>Sends one test message ("discord" or "email"); fails with the reason when it cannot.</summary>
+    public Task TestAlertAsync(string channel, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Post, "/api/v1/alerts/test", new { channel }, ct);
+
     // ---- memory ----
 
     public Task<List<Memory>> GetMemoriesAsync(CancellationToken ct = default) =>

@@ -176,6 +176,7 @@ func (s *Server) handleComplete(w http.ResponseWriter, r *http.Request) {
 		switch t.Kind {
 		case store.KindAssignment:
 			s.hub.Publish("assignment.done", t)
+			s.notifyOwner("done", "Done: "+t.Title, "Your staff finished “"+t.Title+"”. Open Cubicle to read the result.")
 			s.logActivity(r.Context(), "", t.ID, "Done: "+t.Title)
 		case store.KindChat:
 			s.publishConversation(r, t.ConversationID)
@@ -234,6 +235,11 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.store.FinishSteps(r.Context(), item.TaskID)
 	s.hub.Publish("inbox.new", item)
+	title := "Your staff have a question"
+	if item.Kind == store.InboxApproval {
+		title = "Your staff need your approval"
+	}
+	s.notifyOwner("waiting", title+": open Cubicle to answer", item.Question)
 	if t, err := s.store.GetTask(r.Context(), item.TaskID); err == nil {
 		s.publishTasks(t)
 		if t.ConversationID != "" {

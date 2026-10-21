@@ -22,6 +22,7 @@
     <conv:AvatarBrushConverter x:Key="AvatarBrush" />
     <conv:InitialConverter x:Key="Initial" />
     <conv:EqualsConverter x:Key="Equals" />
+    <conv:VisibleWhenConverter x:Key="VisibleWhen" />
 
     <!-- Keyboard focus: a rounded accent ring, only when the control is reached with Tab or the arrow keys. -->
     <Style x:Key="KeyboardFocus">

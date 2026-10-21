@@ -413,6 +413,9 @@ func (s *Server) secretEnv(ctx context.Context) []string {
 	}
 	var env []string
 	for _, n := range names {
+		if strings.HasPrefix(n, store.AlertSecretPrefix) {
+			continue // the alert credentials stay in the gateway; the agents never see them
+		}
 		sealed, err := s.store.GetSecret(ctx, n)
 		if err != nil {
 			continue

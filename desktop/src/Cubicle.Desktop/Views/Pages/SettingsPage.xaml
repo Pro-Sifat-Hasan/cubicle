@@ -157,6 +157,107 @@
                 </StackPanel>
             </Border>
 
+            <!-- ================= Alerts outside the app ================= -->
+            <Border Style="{StaticResource Card}" Margin="0,0,0,16" DataContext="{Binding Alerts}">
+                <StackPanel>
+                    <DockPanel Margin="0,0,0,12">
+                        <Border DockPanel.Dock="Left" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource AccentSoftBrush}" Margin="0,0,14,0">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xEA8F;" HorizontalAlignment="Center" Foreground="{DynamicResource AccentTextBrush}" />
+                        </Border>
+                        <StackPanel>
+                            <TextBlock Text="Reach me elsewhere" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Muted}" Text="Get a Discord message or an email when your staff need an answer, so nothing waits unseen while Cubicle is closed to the tray. You still answer in Cubicle." />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <CheckBox IsChecked="{Binding Waiting}">
+                        <TextBlock Text="When a question or approval is waiting for me" />
+                    </CheckBox>
+                    <CheckBox IsChecked="{Binding Done}" Margin="0,6,0,14">
+                        <TextBlock Text="When an assignment is finished" />
+                    </CheckBox>
+
+                    <!-- Discord -->
+                    <CheckBox IsChecked="{Binding Discord}" FontWeight="SemiBold">
+                        <TextBlock Text="Discord" FontWeight="SemiBold" />
+                    </CheckBox>
+                    <StackPanel Margin="26,8,0,14" Visibility="{Binding Discord, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="WEBHOOK LINK" Style="{StaticResource Label}" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="Send a test" Margin="10,0,0,0" Command="{Binding TestDiscordCommand}" />
+                            <PasswordBox controls:PasswordBoxAssistant.Password="{Binding Webhook, Mode=TwoWay}" />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap" TextTrimming="None"
+                                   Text="In Discord: channel settings, Integrations, Webhooks, New webhook, Copy webhook URL. Stored encrypted and never shown again." />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" Foreground="{DynamicResource SuccessBrush}" Text="A webhook is saved. Paste a new one to replace it."
+                                   Visibility="{Binding WebhookSet, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+
+                    <!-- Email -->
+                    <CheckBox IsChecked="{Binding Email}">
+                        <TextBlock Text="Email" FontWeight="SemiBold" />
+                    </CheckBox>
+                    <StackPanel Margin="26,8,0,4" Visibility="{Binding Email, Converter={StaticResource BoolToVisibility}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="SEND TO" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding EmailTo, UpdateSourceTrigger=PropertyChanged}" controls:Placeholder.Text="you@example.com" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="SEND FROM" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding EmailFrom, UpdateSourceTrigger=PropertyChanged}" controls:Placeholder.Text="you@gmail.com" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="90" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="MAIL SERVER" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding SmtpHost, UpdateSourceTrigger=PropertyChanged}" controls:Placeholder.Text="smtp.gmail.com" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="PORT" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding SmtpPort, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="USER NAME" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding SmtpUser, UpdateSourceTrigger=PropertyChanged}" controls:Placeholder.Text="you@gmail.com" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="PASSWORD" Style="{StaticResource Label}" />
+                                <PasswordBox controls:PasswordBoxAssistant.Password="{Binding MailPassword, Mode=TwoWay}" />
+                            </StackPanel>
+                        </Grid>
+                        <DockPanel Margin="0,8,0,0">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Content="Send a test" Margin="10,0,0,0" Command="{Binding TestEmailCommand}" />
+                            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center"
+                                       Text="Gmail: server smtp.gmail.com, port 587, and an app password (not your normal password). Sent over an encrypted connection only." />
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" Foreground="{DynamicResource SuccessBrush}" Text="A password is saved. Type a new one to replace it."
+                                   Visibility="{Binding MailPasswordSet, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+
+                    <Button Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,16,0,0" Command="{Binding SaveCommand}">
+                        <TextBlock Text="Save alerts" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
+                    </Button>
+                </StackPanel>
+            </Border>
+
             <!-- ================= Data & about ================= -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>

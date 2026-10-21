@@ -42,6 +42,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         void ShowError(string message) => ErrorText = message;
         void Notice(string title, string message) => Notify?.Invoke(title, message, TodaySection);
         Ai = new AiSettingsViewModel(() => _client, ShowError, Notice);
+        Alerts = new AlertsViewModel(() => _client, ShowError, Notice);
         AgentsPage = new AgentsViewModel(() => _client, ShowError, Notice);
         Tools = new ToolsViewModel(() => _client, ShowError, Notice);
         Chat = new ChatViewModel(() => _client, ShowError);
@@ -65,6 +66,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public AiSettingsViewModel Ai { get; }
+    public AlertsViewModel Alerts { get; }
+
+    /// <summary>Messages the staff looked at and what became of them (newest first).</summary>
+    public ObservableCollection<TriageViewModel> MessagesSeen { get; } = [];
+
+    /// <summary>The Activity page shows the "log" of everything done, or the "messages" the staff went through.</summary>
+    [ObservableProperty] private string _activityView = "log";
     public AgentsViewModel AgentsPage { get; }
     public ToolsViewModel Tools { get; }
     public ChatViewModel Chat { get; }
@@ -236,6 +244,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     _catalog = await client.GetCatalogAsync(ct);
                     await RefreshAllAsync();
                     await Ai.LoadAsync();
+                    await Alerts.LoadAsync();
                     await LoadProfileAsync(ct);
                     IsConnected = true;
                     ConnectionText = "Office open";
@@ -326,13 +335,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var routinesTask = c.GetRoutinesAsync();
         var activityTask = c.GetActivityAsync(150);
         var memoriesTask = c.GetMemoriesAsync();
+        var triageTask = c.GetTriageAsync(100);
         var conversationsTask = c.GetConversationsAsync();
         var serversTask = c.GetMcpServersAsync();
         var skillsTask = c.GetSkillsAsync();
         var pluginsTask = c.GetPluginsAsync();
         var secretsTask = c.GetSecretNamesAsync();
         await Task.WhenAll(statusTask, agentsTask, assignmentsTask, inboxTask, routinesTask, activityTask, memoriesTask,
-            conversationsTask, serversTask, skillsTask, pluginsTask, secretsTask);
+            triageTask, conversationsTask, serversTask, skillsTask, pluginsTask, secretsTask);
 
         var status = statusTask.Result;
         BreakerOpen = status.BreakerOpen;
@@ -382,6 +392,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Summary));
 
         Replace(Activity, activityTask.Result);
+        Replace(MessagesSeen, triageTask.Result.Select(t => new TriageViewModel(t)));
         string Source(Memory m) => string.IsNullOrEmpty(m.EmployeeId) ? "Added by you" : $"Learned by {names.GetValueOrDefault(m.EmployeeId, m.EmployeeId)}";
         Replace(Memories, memoriesTask.Result.Where(m => !m.IsProfile).Select(m => new MemoryViewModel(m, Source(m), DeleteMemoryAsync)));
         var profile = memoriesTask.Result.FirstOrDefault(m => m.IsProfile);

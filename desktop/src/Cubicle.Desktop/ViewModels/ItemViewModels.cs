@@ -168,6 +168,23 @@ public sealed partial class SubtaskViewModel : ObservableObject
     partial void OnIsExpandedChanged(bool value) => _toggled(Task.Id, value);
 }
 
+/// <summary>One message the staff looked at (email, Discord, Slack) and what became of it.</summary>
+public sealed class TriageViewModel(TriageItem item)
+{
+    public string Status => item.Status;
+    public string StatusLabel => StatusText.For(item.Status);
+    public string Summary => string.IsNullOrWhiteSpace(item.Summary) ? "(no summary)" : item.Summary;
+    public string Source => item.Source switch
+    {
+        "gmail" => "Email",
+        "discord" => "Discord",
+        "slack" => "Slack",
+        "" => "Message",
+        var s => char.ToUpperInvariant(s[0]) + s[1..],
+    };
+    public string When => item.UpdatedAt.ToLocalTime().ToString("ddd dd MMM, HH:mm");
+}
+
 public static class StatusText
 {
     public static string For(string status) => status switch
@@ -183,6 +200,9 @@ public static class StatusText
         "working" => "Working",
         "waiting" => "Waiting on you",
         "offline" => "Offline",
+        "proposed" => "Waiting for you",
+        "approved" => "Approved",
+        "dismissed" => "Skipped",
         _ => status,
     };
 }

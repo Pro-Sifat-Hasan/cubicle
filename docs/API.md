@@ -152,6 +152,9 @@ are stored. Persona tasks run on the main agent and never appear in `/api/v1/tas
 | `POST /api/v1/memories` | `{content}` | the new memory (`201`) |
 | `DELETE /api/v1/memories/{id}` | | `204` |
 | `GET /api/v1/triage?status=&limit=` | | the messages the staff looked at (email, Discord, Slack): `[{key, source, summary, status, created_at, updated_at}]`, newest change first; `status` is `proposed`, `approved`, `done` or `dismissed` |
+| `GET /api/v1/alerts` | | how the owner is reached outside the app: `{waiting, done, discord, email, email_to, smtp_host, smtp_port, smtp_user, email_from, discord_webhook_set, smtp_password_set}`. The webhook and mail password are never returned |
+| `PUT /api/v1/alerts` | the same fields, plus write-only `discord_webhook` and `smtp_password` | saves them (an empty secret keeps the stored one). `waiting` alerts a question or approval waiting for the owner, `done` a finished assignment. The webhook must be a Discord webhook (`https://discord.com/api/webhooks/…`); mail goes over TLS only (port 465, 587 or 25 with STARTTLS). `400` with the reason when a setting is wrong |
+| `POST /api/v1/alerts/test` | `{channel}` | sends one test message through `discord` or `email` (`204`, or `400` with the reason). The credentials stay in the gateway and are never given to the agents |
 | `GET /api/v1/projects` | | the projects the staff keep notes on: `[{id, name, path, notes, created_at, updated_at}]` |
 | `PUT /api/v1/projects` | `{name, path?, notes?}` | adds a project, or updates the one with the same name (any letter case); an empty `path` or `notes` keeps what is stored. `path` must be an absolute, existing folder. Up to 50 projects (`409` beyond that) |
 | `DELETE /api/v1/projects/{id}` | | `204` |

@@ -271,6 +271,23 @@ public sealed record OfficeStatus(
     long TokensToday,
     long DailyTokenBudget);
 
+/// <summary>A message the staff looked at (email, Discord, Slack) and what became of it: proposed, approved, done or dismissed.</summary>
+public sealed record TriageItem(string Key, string Source, string Summary, string Status, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+
+/// <summary>How the owner is reached outside the app. The webhook and mail password are write-only: only whether they are set is returned.</summary>
+public sealed record AlertSettings(
+    bool Waiting,
+    bool Done,
+    bool Discord,
+    bool Email,
+    string EmailTo,
+    string SmtpHost,
+    int SmtpPort,
+    string SmtpUser,
+    string EmailFrom,
+    bool DiscordWebhookSet,
+    bool SmtpPasswordSet);
+
 /// <summary>How the office runs: which AI provider and model, effort, and limits.</summary>
 public sealed record OfficeSettings(
     string Provider,

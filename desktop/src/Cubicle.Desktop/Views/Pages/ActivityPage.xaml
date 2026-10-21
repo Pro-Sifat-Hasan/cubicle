@@ -9,9 +9,25 @@
     <DockPanel Margin="32,28">
         <StackPanel DockPanel.Dock="Top">
             <TextBlock Text="Activity" Style="{StaticResource PageTitle}" />
-            <TextBlock Style="{StaticResource PageSubtitle}" Text="Everything your office did, newest first." />
+            <TextBlock Style="{StaticResource PageSubtitle}" Margin="0,6,0,14"
+                       Text="Everything your office did, and the messages your staff went through for you." />
+            <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="3" HorizontalAlignment="Left" Margin="0,0,0,16">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton Style="{StaticResource SegmentButton}" MinWidth="110"
+                                 IsChecked="{Binding ActivityView, Converter={StaticResource Equals}, ConverterParameter=log}">
+                        <TextBlock Text="Everything done" Margin="8,2" />
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource SegmentButton}" MinWidth="110"
+                                 IsChecked="{Binding ActivityView, Converter={StaticResource Equals}, ConverterParameter=messages}">
+                        <TextBlock Text="Messages seen" Margin="8,2" />
+                    </RadioButton>
+                </StackPanel>
+            </Border>
         </StackPanel>
-        <Border Style="{StaticResource Card}" Padding="8">
+
+        <!-- Everything the office did -->
+        <Border Style="{StaticResource Card}" Padding="8"
+                Visibility="{Binding ActivityView, Converter={StaticResource VisibleWhen}, ConverterParameter=log}">
             <ListBox ItemsSource="{Binding Activity}" Style="{StaticResource PlainList}">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
@@ -38,5 +54,47 @@
                 </ListBox.ItemTemplate>
             </ListBox>
         </Border>
+
+        <!-- The messages the staff went through: what came in and what became of it -->
+        <Grid Visibility="{Binding ActivityView, Converter={StaticResource VisibleWhen}, ConverterParameter=messages}">
+            <Border Style="{StaticResource EmptyState}" VerticalAlignment="Top"
+                    Visibility="{Binding MessagesSeen.Count, Converter={StaticResource ZeroToVisibility}}">
+                <TextBlock Style="{StaticResource Muted}"
+                           Text="Nothing yet. Connect your email or Discord on the Integrations page and your staff will go through new messages every hour, asking you before they do anything." />
+            </Border>
+            <Border Style="{StaticResource Card}" Padding="8" Visibility="{Binding MessagesSeen.Count, Converter={StaticResource CountToVisibility}}">
+                <ListBox ItemsSource="{Binding MessagesSeen}" Style="{StaticResource PlainList}">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Focusable" Value="False" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="12,11">
+                                            <ContentPresenter />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel>
+                                <Border DockPanel.Dock="Right" Style="{StaticResource StatusPill}" Tag="{Binding Status}" Margin="12,0,0,0">
+                                    <TextBlock Text="{Binding StatusLabel}" Style="{StaticResource PillText}" />
+                                </Border>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" TextTrimming="None" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0">
+                                        <Run Text="{Binding Source, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding When, Mode=OneWay}" />
+                                    </TextBlock>
+                                </StackPanel>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </Grid>
     </DockPanel>
 </UserControl>
