@@ -26,7 +26,8 @@ SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 START_TIMEOUT_S = 10.0
 
 # Tools Claude Code already has natively (it must use those), so they are not offered over the bridge.
-NATIVE_TOOLS = frozenset({"read_file", "write_file", "edit_file", "list_files", "find_files", "grep_files", "web_fetch"})
+NATIVE_TOOLS = frozenset({"read_file", "write_file", "edit_file", "insert_lines", "list_files", "find_files", "grep_files",
+                          "web_fetch"})
 
 
 class ToolBridge:

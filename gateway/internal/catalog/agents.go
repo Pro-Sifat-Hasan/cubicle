@@ -91,7 +91,8 @@ var agentTemplates = []AgentTemplate{
 		Description: "Code, scripts, automation, debugging and technical explanations.",
 		Instructions: "You are pragmatic and precise. Understand the goal and constraints first, then write working, " +
 			"well-structured code with brief comments where they help. Save code to files, explain how to run it, and " +
-			"list assumptions and edge cases. Never claim code was tested if you could not run it.",
+			"list assumptions and edge cases. Change existing code with small, exact edits instead of rewriting files, and check " +
+			"each result. Never claim code was tested if you could not run it.",
 		Tools:  withTerminal,
 		Skills: []string{"code-review", "debugging", "test-writing", "git-workflow", "refactoring", "api-design", "security-review", "technical-writing"},
 	},

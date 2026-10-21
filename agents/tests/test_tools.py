@@ -45,8 +45,8 @@ def test_toolbox_turns_errors_into_results(tmp_path):
 def test_remember_and_ask_tools(tmp_path):
     gw = FakeGateway()
     box = build_toolbox(employee=WRITER, workspace=tmp_path, gateway=gw, may_ask=True, client_web_fetch=True)
-    assert {t.name for t in box.tools} == {"write_file", "read_file", "list_files", "edit_file", "find_files", "grep_files",
-                                           "remember", "forget", "ask_owner", "web_fetch"}
+    assert {t.name for t in box.tools} == {"write_file", "read_file", "list_files", "edit_file", "insert_lines",
+                                           "find_files", "grep_files", "remember", "forget", "ask_owner", "web_fetch"}
     run(box.call("remember", {"fact": "Owner is vegetarian"}))
     run(box.call("ask_owner", {"question": "Which city?"}))
     assert gw.memories == ["Owner is vegetarian"]
@@ -146,3 +146,71 @@ def test_terminal_is_only_offered_to_agents_that_have_it(tmp_path):
     dev = dataclasses.replace(WRITER, tools=(*WRITER.tools, "terminal"))
     box = build_toolbox(employee=dev, workspace=tmp_path, gateway=FakeGateway(), may_ask=False, client_web_fetch=False)
     assert "run_command" in {t.name for t in box.tools}
+
+
+def _edit_box(tmp_path, name, content):
+    box = _tools(tmp_path)
+    (tmp_path / name).write_bytes(content.encode("utf-8"))
+    return box
+
+
+def test_edit_file_shows_the_diff(tmp_path):
+    box = _edit_box(tmp_path, "a.py", "def f():\n    return 1\n")
+    done = run(box.call("edit_file", {"path": "a.py", "old_text": "return 1", "new_text": "return 2"})).content
+    assert "-    return 1" in done and "+    return 2" in done
+
+
+def test_edit_file_applies_several_edits_together_or_not_at_all(tmp_path):
+    box = _edit_box(tmp_path, "site.css", "a { color: red; }\nb { color: blue; }\n")
+    edits = [{"old_text": "red", "new_text": "green"}, {"old_text": "blue", "new_text": "navy"}]
+    done = run(box.call("edit_file", {"path": "site.css", "edits": edits}))
+    assert "Edit 1: replaced 1" in done.content and "Edit 2: replaced 1" in done.content
+    assert (tmp_path / "site.css").read_text() == "a { color: green; }\nb { color: navy; }\n"
+    bad = [{"old_text": "green", "new_text": "lime"}, {"old_text": "missing", "new_text": "x"}]
+    failed = run(box.call("edit_file", {"path": "site.css", "edits": bad}))
+    assert failed.is_error and failed.content.startswith("Edit 2:")
+    assert "green" in (tmp_path / "site.css").read_text()  # the first edit was not kept either
+
+
+def test_edit_file_keeps_windows_line_endings(tmp_path):
+    box = _edit_box(tmp_path, "w.txt", "one\r\ntwo\r\nthree\r\n")
+    run(box.call("edit_file", {"path": "w.txt", "old_text": "one\ntwo", "new_text": "uno\ndos"}))
+    assert (tmp_path / "w.txt").read_bytes() == b"uno\r\ndos\r\nthree\r\n"
+
+
+def test_edit_file_forgives_wrong_indentation_but_keeps_the_files(tmp_path):
+    box = _edit_box(tmp_path, "m.py", "class A:\n    def run(self):\n        x = 1\n        return x\n")
+    done = run(box.call("edit_file", {"path": "m.py", "old_text": "x = 1\nreturn x", "new_text": "x = 2\nreturn x * 2"}))
+    assert "ignoring indentation" in done.content
+    assert (tmp_path / "m.py").read_text() == "class A:\n    def run(self):\n        x = 2\n        return x * 2\n"
+
+
+def test_edit_file_explains_a_miss_and_an_ambiguity(tmp_path):
+    box = _edit_box(tmp_path, "n.py", "alpha = 1\nbeta = 2\nalpha = 1\n")
+    miss = run(box.call("edit_file", {"path": "n.py", "old_text": "beta = 22", "new_text": "beta = 3"}))
+    assert miss.is_error and "most similar line is 2" in miss.content
+    twice = run(box.call("edit_file", {"path": "n.py", "old_text": "alpha = 1", "new_text": "alpha = 5"}))
+    assert twice.is_error and "lines 1, 3" in twice.content
+    assert run(box.call("edit_file", {"path": "n.py", "old_text": "beta = 2", "new_text": "beta = 2"})).is_error
+    assert run(box.call("edit_file", {"path": "n.py", "edits": []})).is_error
+
+
+def test_edit_file_warns_when_it_breaks_python_or_json(tmp_path):
+    box = _edit_box(tmp_path, "b.py", "def f():\n    return 1\n")
+    broke = run(box.call("edit_file", {"path": "b.py", "old_text": "def f():", "new_text": "def f(:"}))
+    assert not broke.is_error and "WARNING" in broke.content and "no longer parses" in broke.content
+    box = _edit_box(tmp_path, "c.json", '{"a": 1}')
+    trailing = run(box.call("edit_file", {"path": "c.json", "old_text": "1", "new_text": "1,"}))
+    assert "no longer valid JSON" in trailing.content
+    ok = run(box.call("edit_file", {"path": "c.json", "old_text": "1,", "new_text": "2"}))
+    assert "WARNING" not in ok.content
+
+
+def test_insert_lines_adds_text_at_a_line(tmp_path):
+    box = _edit_box(tmp_path, "i.txt", "a\nb\nc\n")
+    run(box.call("insert_lines", {"path": "i.txt", "after_line": 1, "text": "x\ny"}))
+    run(box.call("insert_lines", {"path": "i.txt", "after_line": 0, "text": "top"}))
+    run(box.call("insert_lines", {"path": "i.txt", "after_line": 6, "text": "end"}))
+    assert (tmp_path / "i.txt").read_text() == "top\na\nx\ny\nb\nc\nend\n"
+    assert run(box.call("insert_lines", {"path": "i.txt", "after_line": 99, "text": "z"})).is_error
+    assert run(box.call("insert_lines", {"path": "i.txt", "after_line": -1, "text": "z"})).is_error

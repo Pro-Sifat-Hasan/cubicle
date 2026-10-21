@@ -158,7 +158,14 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
             rules.append("Save substantial deliverables (documents, code, tables, drafts) with write_file so the owner "
                          "gets real files, and summarise them in your answer. Use read_file/list_files to build on "
                          "teammates' files. To change part of a file, read it and use edit_file with the exact text "
-                         "rather than rewriting the whole file; use find_files and grep_files to locate things.")
+                         "(several changes to one file go in one edits list; insert_lines adds lines at a line number) "
+                         "rather than rewriting the whole file; use find_files and grep_files to locate things. Read the "
+                         "diff edit_file returns, and fix any WARNING about a file that no longer parses.")
+        if employee.has_tool(TOOL_FILES) and employee.has_tool(TOOL_TERMINAL):
+            rules.append("You write and change code. Read a file before you edit it. Change existing files with small, "
+                         "exact edits (never rewrite a whole file to change a few lines), keep the file's style and "
+                         "indentation, and check the result: look at what the edit returned, then run the tests or linter "
+                         "when the project has them.")
         if employee.has_tool(TOOL_TERMINAL):
             rules.append("run_command runs one command (tests, linters, builds, git) in your workspace. Read-only git "
                          "queries run at once; for any other command first call request_approval with the action "
