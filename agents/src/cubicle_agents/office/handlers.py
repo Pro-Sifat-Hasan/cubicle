@@ -63,7 +63,9 @@ class TaskHandler:
 
     async def handle(self, employee: Employee, claim: Claim) -> None:
         kind = claim.task.get("kind")
-        if kind == "chat":
+        if kind == "persona":
+            await self._persona(employee, claim)
+        elif kind == "chat":
             await self._chat(employee, claim)
         elif kind == "assignment" and employee.is_manager and self.ctx.roster.team_of(employee):
             await self._plan(employee, claim)
@@ -191,6 +193,14 @@ class TaskHandler:
                 text += "\n\n---\n**Files in this assignment's workspace:** " + ", ".join(f"`{f}`" for f in files)
         await gw.complete(task["id"], text)
         await gw.log(employee.id, task["id"], f"{employee.name} finished “{task['title']}”.")
+
+    # ---- onboarding: a persona for a custom passion ----
+
+    async def _persona(self, employee: Employee, claim: Claim) -> None:
+        passion = (claim.task.get("description") or "").strip()[:200]
+        result = await self._run(employee, claim, prompts.persona_prompt(passion, employee.name),
+                                 json_schema=prompts.PERSONA_SCHEMA)
+        await self.ctx.gateway.complete(claim.task["id"], result.text)
 
     # ---- any agent: chat ----
 

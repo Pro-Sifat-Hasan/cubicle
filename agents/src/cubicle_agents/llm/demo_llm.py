@@ -19,6 +19,7 @@ from cubicle_agents.tools.base import Toolbox
 _ROSTER_LINE = re.compile(r"^- (?P<id>[a-z0-9_-]+) \((?P<title>[^,)]*)", re.MULTILINE)
 _ASSIGNMENT = re.compile(r"^(?:OVERALL )?ASSIGNMENT: (?P<title>.+)$", re.MULTILINE)
 _TASK = re.compile(r"^YOUR TASK: (?P<title>.+)$", re.MULTILINE)
+_PASSION = re.compile(r"<passion>(?P<passion>.+?)</passion>", re.DOTALL)
 _NAME = re.compile(r"^You are (?P<name>[^,.]+)")
 
 
@@ -31,6 +32,17 @@ class DemoLLM:
                   history: list[Turn] | None = None, mcp: tuple[McpServer, ...] = (), effort: str = "",
                   on_event: EventCallback | None = None, web: bool = True) -> AgentResult:
         tokens_in = len(prompt) // 4
+
+        if json_schema is not None and prompt.startswith("PERSONA REQUEST"):
+            passion = _first(_PASSION, prompt) or "your passion"
+            persona = {
+                "title": passion[:40], "accent_color": "#7C5CFF", "avatar_set": ["✨", "🧭", "🌟", "🎯", "🚀"],
+                "system_prompt_style": f"Speak like a capable, friendly chief of staff who loves {passion}. "
+                                       "Mention it lightly now and then, never at the cost of a clear answer.",
+                "greeting_templates": ["Good morning, {name}. {agent} here. Ready when you are."],
+                "daily_feed_queries": [f"latest news about {passion}"],
+            }
+            return AgentResult(text=json.dumps(persona), input_tokens=tokens_in, output_tokens=80)
 
         if json_schema is not None:
             title = _first(_ASSIGNMENT, prompt) or "your request"

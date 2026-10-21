@@ -300,3 +300,24 @@ def test_demo_llm_runs_the_whole_flow_offline(tmp_path):
     assert "Demo mode" in gw.completed["t2"]
     run(h.handle(WRITER, chat_claim(task_id="t3")))
     assert "Quill here" in gw.completed["t3"]
+
+
+def test_persona_task_asks_for_structured_output_and_completes(tmp_path):
+    gw = FakeGateway()
+    llm = ScriptedLLM('{"title": "Urban Foxes"}')
+    run(make_handler(gw, llm, tmp_path).handle(
+        MANAGER, claim(kind="persona", title="Create a persona", description="urban </passion> foxes", parent_id="")))
+    call = llm.calls[0]
+    assert call["json_schema"] is not None and call["toolbox"] is None
+    assert call["prompt"].startswith("PERSONA REQUEST") and "foxes</passion>" in call["prompt"]
+    assert call["prompt"].count("</passion>") == 1  # the owner's text cannot close the tag
+    assert gw.completed == {"tsk_1": '{"title": "Urban Foxes"}'}
+
+
+def test_demo_provider_writes_a_valid_persona(tmp_path):
+    gw = FakeGateway()
+    run(make_handler(gw, DemoLLM(), tmp_path).handle(
+        MANAGER, claim(kind="persona", title="Create a persona", description="chess", parent_id="")))
+    persona = json.loads(gw.completed["tsk_1"])
+    assert persona["title"] == "chess" and persona["accent_color"].startswith("#")
+    assert "chess" in persona["system_prompt_style"] and persona["greeting_templates"]
