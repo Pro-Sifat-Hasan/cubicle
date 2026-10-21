@@ -115,6 +115,95 @@ public sealed record Routine(
 
 public sealed record ActivityItem(long Id, string? EmployeeId, string? TaskId, string Message, DateTimeOffset CreatedAt);
 
+/// <summary>One thing an agent did while working: thought, said something, or used a tool (with its input and output).</summary>
+public sealed record AgentStep(
+    string Id,
+    string TaskId,
+    string? ConversationId,
+    string? AgentId,
+    string Kind,
+    string? Name,
+    string? Input,
+    string? Output,
+    string Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt)
+{
+    public bool IsThinking => Kind == "thinking";
+    public bool IsNote => Kind == "note";
+    public bool IsTool => Kind == "tool";
+    public bool IsRunning => Status == "running";
+    public bool Failed => Status == "error";
+
+    /// <summary>A friendly title for the step: "Write file", "Ask teammate", "Thinking".</summary>
+    public string Title => IsThinking ? "Thinking" : IsNote ? "Note" : StepText.ToolTitle(Name);
+
+    /// <summary>The most telling part of the input on one line: the file, the command, the search, the teammate.</summary>
+    public string Summary => IsTool ? StepText.InputSummary(Name, Input) : "";
+}
+
+public static class StepText
+{
+    private static readonly Dictionary<string, string> Titles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Read"] = "Read file", ["read_file"] = "Read file", ["Write"] = "Write file", ["write_file"] = "Write file",
+        ["Edit"] = "Edit file", ["edit_file"] = "Edit file", ["Glob"] = "Find files", ["find_files"] = "Find files",
+        ["list_files"] = "List files", ["Grep"] = "Search files", ["grep_files"] = "Search files",
+        ["WebSearch"] = "Search the web", ["web_search"] = "Search the web", ["WebFetch"] = "Read web page",
+        ["web_fetch"] = "Read web page", ["run_command"] = "Run command", ["remember"] = "Remember",
+        ["forget"] = "Forget", ["load_skill"] = "Load skill", ["ask_teammate"] = "Ask teammate",
+        ["start_assignment"] = "Start assignment", ["ask_owner"] = "Ask you", ["request_approval"] = "Ask approval",
+    };
+
+    // Input fields that best describe a call, most telling first.
+    private static readonly string[] SummaryKeys =
+        ["file_path", "path", "command", "query", "url", "pattern", "teammate", "name", "title", "action", "question", "fact", "request"];
+
+    public static string ToolTitle(string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return "Tool";
+        if (Titles.TryGetValue(name, out var title))
+            return title;
+        var words = name.Replace('_', ' ').Trim();
+        return char.ToUpperInvariant(words[0]) + words[1..];
+    }
+
+    public static string InputSummary(string? name, string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return "";
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(input);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var key in SummaryKeys)
+                    if (doc.RootElement.TryGetProperty(key, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
+                        && v.GetString() is { Length: > 0 } text)
+                        return OneLine(key is "file_path" or "path" ? ShortPath(text) : text);
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // still streaming in, or not JSON: fall through to the raw text
+        }
+        return OneLine(input);
+    }
+
+    private static string ShortPath(string path)
+    {
+        var parts = path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length <= 2 ? path : string.Join('/', parts[^2..]);
+    }
+
+    private static string OneLine(string text)
+    {
+        var line = string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Trim();
+        return line.Length <= 140 ? line : line[..139] + "…";
+    }
+}
+
 public sealed record OfficeStatus(
     string Version,
     IReadOnlyDictionary<string, int> Tasks,

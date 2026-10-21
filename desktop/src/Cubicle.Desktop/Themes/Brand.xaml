@@ -97,26 +97,14 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
-    <!-- Avatar: coloured circle with the employee's initial. DataContext = Employee-like (Id, Name).
-         Drawn at 36 px and scaled by a Viewbox, so callers simply set Width/Height. -->
+    <!-- Avatar: a cartoon character drawn from the agent's id and name, in a circle. DataContext = Employee-like (Id, Name). -->
     <DataTemplate x:Key="AvatarTemplate">
-        <Viewbox>
-            <Grid Width="36" Height="36">
-                <Ellipse Fill="{Binding Id, Converter={StaticResource AvatarBrush}}" />
-                <TextBlock Text="{Binding Name, Converter={StaticResource Initial}}" Foreground="White" FontWeight="SemiBold"
-                           FontSize="16" TextTrimming="None" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Grid>
-        </Viewbox>
+        <controls:CartoonAvatar Seed="{Binding Id}" Label="{Binding Name}" Squareness="0" />
     </DataTemplate>
 
-    <!-- Square avatar: rounded square with the employee's initial (team cards and plan steps). Same DataContext as AvatarTemplate. -->
+    <!-- Square avatar: the same character in a rounded square (team cards, chats and plan steps). Same DataContext as AvatarTemplate. -->
     <DataTemplate x:Key="AvatarSquareTemplate">
-        <Viewbox>
-            <Border Width="36" Height="36" CornerRadius="9" Background="{Binding Id, Converter={StaticResource AvatarBrush}}">
-                <TextBlock Text="{Binding Name, Converter={StaticResource Initial}}" Foreground="White" FontWeight="SemiBold"
-                           FontSize="16" TextTrimming="None" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Border>
-        </Viewbox>
+        <controls:CartoonAvatar Seed="{Binding Id}" Label="{Binding Name}" Squareness="1" />
     </DataTemplate>
 
     <!-- Collapsible section: a clickable header with a chevron, and content that shows when expanded.

@@ -66,6 +66,14 @@ public sealed class GatewayClient : IDisposable
     public Task<List<ActivityItem>> GetTaskActivityAsync(string taskId, int limit = 500, CancellationToken ct = default) =>
         GetAsync<List<ActivityItem>>($"/api/v1/activity?task_id={Uri.EscapeDataString(taskId)}&limit={limit}", ct);
 
+    /// <summary>What agents did in every reply of one chat (thoughts, remarks, tool calls with input and output), oldest first.</summary>
+    public Task<List<AgentStep>> GetConversationStepsAsync(string conversationId, CancellationToken ct = default) =>
+        GetAsync<List<AgentStep>>($"/api/v1/steps?conversation_id={Uri.EscapeDataString(conversationId)}", ct);
+
+    /// <summary>What agents did on one task and its subtasks, oldest first.</summary>
+    public Task<List<AgentStep>> GetTaskStepsAsync(string taskId, CancellationToken ct = default) =>
+        GetAsync<List<AgentStep>>($"/api/v1/steps?task_id={Uri.EscapeDataString(taskId)}", ct);
+
     public Task ResetBreakerAsync(CancellationToken ct = default) => SendAsync(HttpMethod.Post, "/api/v1/breaker/reset", null, ct);
 
     // ---- tasks ----
