@@ -35,15 +35,47 @@ public sealed partial class AgentsViewModel(Func<GatewayClient?> client, Action<
     [ObservableProperty] private bool _showTemplates;
 
     public bool HasEditor => Editor is not null;
-    public bool ShowEmpty => Editor is null && !ShowTemplates;
+
+    /// <summary>The side panel (editor or template gallery) is open. Closed, the team uses the full width.</summary>
+    public bool ShowDrawer => Editor is not null || ShowTemplates;
 
     partial void OnEditorChanged(AgentEditorViewModel? value)
     {
         OnPropertyChanged(nameof(HasEditor));
-        OnPropertyChanged(nameof(ShowEmpty));
+        OnPropertyChanged(nameof(ShowDrawer));
     }
 
-    partial void OnShowTemplatesChanged(bool value) => OnPropertyChanged(nameof(ShowEmpty));
+    partial void OnShowTemplatesChanged(bool value) => OnPropertyChanged(nameof(ShowDrawer));
+
+    /// <summary>Closes the side panel. With unsaved changes it first asks, in the panel, whether to discard them.</summary>
+    [RelayCommand]
+    private void Close()
+    {
+        if (Editor is { IsDirty: true, ConfirmingClose: false } e)
+        {
+            e.ConfirmingClose = true;
+            return;
+        }
+        Editor = null;
+        ShowTemplates = false;
+        Selected = null;
+    }
+
+    /// <summary>Closes the panel and throws away the unsaved changes.</summary>
+    [RelayCommand]
+    private void DiscardClose()
+    {
+        Editor = null;
+        ShowTemplates = false;
+        Selected = null;
+    }
+
+    [RelayCommand]
+    private void KeepEditing()
+    {
+        if (Editor is { } e)
+            e.ConfirmingClose = false;
+    }
 
     partial void OnSelectedChanged(AgentItemViewModel? value)
     {
@@ -247,7 +279,7 @@ public sealed partial class AgentEditorViewModel : ObservableObject
         foreach (var t in tools)
             Tools.Add(new OptionItem(t.Id, t.Name, t.Description) { IsChecked = chosenTools.Contains(t.Id) });
         foreach (var s in servers)
-            McpServers.Add(new OptionItem(s.Id, s.Name, s.Enabled ? s.Description : "Turned off in Tools")
+            McpServers.Add(new OptionItem(s.Id, s.Name, s.Enabled ? s.Description : "Turned off in Integrations")
             { IsChecked = agent?.McpServers.Contains(s.Id) ?? false });
         foreach (var s in skills)
             Skills.Add(new OptionItem(s.Id, s.Name, s.Description) { IsChecked = agent?.Skills.Contains(s.Id) ?? false });
@@ -256,13 +288,19 @@ public sealed partial class AgentEditorViewModel : ObservableObject
             { IsChecked = agent?.Team.Contains(a.Id) ?? false });
 
         foreach (var option in Tools.Concat(McpServers).Concat(Skills).Concat(Team))
-            option.PropertyChanged += (_, _) => IsDirty = true;
+            option.PropertyChanged += (_, _) =>
+            {
+                IsDirty = true;
+                OnPropertyChanged(nameof(AbilitiesSummary));
+                OnPropertyChanged(nameof(TeamSummary));
+            };
         PropertyChanged += MarkDirty;
     }
 
     private void MarkDirty(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is not (nameof(IsDirty) or nameof(Status)))
+        if (e.PropertyName is not (nameof(IsDirty) or nameof(Status) or nameof(Section) or nameof(ConfirmingClose)
+            or nameof(ShowProfile) or nameof(ShowAbilities) or nameof(ShowTeam) or nameof(AbilitiesSummary) or nameof(TeamSummary)))
             IsDirty = true;
     }
 
@@ -272,6 +310,21 @@ public sealed partial class AgentEditorViewModel : ObservableObject
     public bool CanMakeMain => !IsNew && !IsMain;
     public bool CanDelete => !IsNew && !IsMain;
     public string Heading => IsNew ? "New agent" : Name;
+
+    /// <summary>"profile", "abilities" or "team": the editor shows one part at a time.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowProfile), nameof(ShowAbilities), nameof(ShowTeam))]
+    private string _section = "profile";
+
+    public bool ShowProfile => Section == "profile";
+    public bool ShowAbilities => Section == "abilities";
+    public bool ShowTeam => Section == "team";
+
+    /// <summary>The owner pressed close with unsaved changes; the panel asks what to do.</summary>
+    [ObservableProperty] private bool _confirmingClose;
+
+    public string AbilitiesSummary => $"{Tools.Count(t => t.IsChecked)} tools · {McpServers.Count(m => m.IsChecked)} apps · {Skills.Count(k => k.IsChecked)} skills";
+    public string TeamSummary => Team.Count(t => t.IsChecked) switch { 0 => "No one yet", 1 => "1 teammate", var n => $"{n} teammates" };
 
     public ObservableCollection<OptionItem> Tools { get; } = [];
     public ObservableCollection<OptionItem> McpServers { get; } = [];

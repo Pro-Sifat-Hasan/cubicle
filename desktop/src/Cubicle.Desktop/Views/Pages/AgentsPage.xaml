@@ -8,20 +8,26 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
     <UserControl.Resources>
-        <!-- A wrap of checkable choices (tools, MCP servers, skills, teammates). -->
-        <DataTemplate x:Key="OptionChip">
-            <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="10,7" Margin="0,0,8,8" ToolTip="{Binding Detail}">
-                <CheckBox IsChecked="{Binding IsChecked}">
-                    <TextBlock Text="{Binding Label}" />
+        <!-- One thing an agent can have: a tool, an app or a skill, with what it does. -->
+        <DataTemplate x:Key="AbilityRow">
+            <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="12,9" Margin="0,0,0,6">
+                <CheckBox IsChecked="{Binding IsChecked}" VerticalContentAlignment="Top">
+                    <StackPanel Margin="4,0,0,0">
+                        <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" TextWrapping="Wrap" TextTrimming="None" Margin="0,2,0,0" />
+                    </StackPanel>
                 </CheckBox>
             </Border>
         </DataTemplate>
-        <DataTemplate x:Key="TeammateChip">
-            <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="999" Padding="6,4,12,4" Margin="0,0,8,8" ToolTip="{Binding Detail}">
+        <DataTemplate x:Key="TeammateRow">
+            <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="12,9" Margin="0,0,0,6">
                 <CheckBox IsChecked="{Binding IsChecked}" VerticalContentAlignment="Center">
-                    <StackPanel Orientation="Horizontal">
-                        <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource AvatarTemplate}" Width="22" Height="22" Margin="0,0,7,0" />
-                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" Margin="4,0,0,0">
+                        <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource AvatarSquareTemplate}" Width="30" Height="30" Margin="0,0,10,0" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}" />
+                        </StackPanel>
                     </StackPanel>
                 </CheckBox>
             </Border>
@@ -33,17 +39,16 @@
 
     <Grid Margin="32,28,32,24" DataContext="{Binding AgentsPage}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="5*" MinWidth="300" MaxWidth="440" />
-            <ColumnDefinition Width="24" />
-            <ColumnDefinition Width="7*" MinWidth="380" />
+            <ColumnDefinition Width="*" MinWidth="320" />
+            <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <!-- ============ Left: the roster ============ -->
+        <!-- ============ Left: your team ============ -->
         <DockPanel>
             <StackPanel DockPanel.Dock="Top">
-                <TextBlock Text="Agents" Style="{StaticResource PageTitle}" />
-                <TextBlock Style="{StaticResource PageSubtitle}" Margin="0,6,0,16"
-                           Text="Your AI staff. The main agent plans every assignment and hands parts to the agents on its team. Give each agent instructions, tools, MCP servers and skills." />
+                <TextBlock Text="Team" Style="{StaticResource PageTitle}" />
+                <TextBlock Style="{StaticResource PageSubtitle}" Margin="0,4,0,16"
+                           Text="Your AI staff. The main agent plans every assignment and hands parts to its team. Click someone to change how they work." />
                 <WrapPanel Margin="0,0,0,14">
                     <Button Style="{StaticResource AccentButton}" Command="{Binding NewAgentCommand}" Margin="0,0,8,8">
                         <StackPanel Orientation="Horizontal">
@@ -60,59 +65,64 @@
                 </WrapPanel>
             </StackPanel>
 
-            <ListBox ItemsSource="{Binding Agents}" SelectedItem="{Binding Selected}"
-                     Style="{StaticResource PlainList}" ItemContainerStyle="{StaticResource CardItem}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <DockPanel>
-                            <Grid DockPanel.Dock="Left" Margin="0,0,12,0" VerticalAlignment="Top">
-                                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource AvatarTemplate}" Width="38" Height="38" />
-                                <Ellipse Width="11" Height="11" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                         Fill="{Binding Status, Converter={StaticResource StatusToBrush}}"
-                                         Stroke="{DynamicResource SurfaceBrush}" StrokeThickness="2" />
-                            </Grid>
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding Avatar}" Margin="0,0,6,0" FontSize="13" />
-                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" />
-                                    <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="999" Padding="7,1" Margin="8,0,0,0"
-                                            Visibility="{Binding IsMain, Converter={StaticResource BoolToVisibility}}">
-                                        <TextBlock Text="Main" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentTextBrush}" />
-                                    </Border>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ListBox ItemsSource="{Binding Agents}" SelectedItem="{Binding Selected}" Style="{StaticResource PlainList}"
+                         ItemContainerStyle="{StaticResource CardItem}" ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                         controls:WheelPassthrough.IsEnabled="True">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Width="300" Margin="0,0,10,0">
+                                <Grid DockPanel.Dock="Left" Margin="0,0,12,0" VerticalAlignment="Top">
+                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource AvatarSquareTemplate}" Width="42" Height="42" />
+                                    <Ellipse Width="11" Height="11" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-3,-3"
+                                             Fill="{Binding Status, Converter={StaticResource StatusToBrush}}"
+                                             Stroke="{DynamicResource SurfaceBrush}" StrokeThickness="2" />
+                                </Grid>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14.5" />
+                                        <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="999" Padding="7,1" Margin="8,0,0,0"
+                                                Visibility="{Binding IsMain, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="Main" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentTextBrush}" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Title}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                    <TextBlock Text="{Binding StatusLabel}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}" Margin="0,5,0,0" Foreground="{DynamicResource TextSecondaryBrush}"
+                                               Visibility="{Binding Summary, Converter={StaticResource NullToVisibility}}" />
                                 </StackPanel>
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0">
-                                    <Run Text="{Binding Title, Mode=OneWay}" />
-                                    <Run Text=" · " />
-                                    <Run Text="{Binding StatusLabel, Mode=OneWay}" />
-                                </TextBlock>
-                                <TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}" Margin="0,3,0,0"
-                                           Visibility="{Binding Summary, Converter={StaticResource NullToVisibility}}" />
-                            </StackPanel>
-                        </DockPanel>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </ScrollViewer>
         </DockPanel>
 
-        <!-- ============ Right: editor or templates ============ -->
-        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0">
+        <!-- ============ Right: the editor or the templates (closes with X) ============ -->
+        <Border Grid.Column="1" Style="{StaticResource Card}" Padding="0" Width="580" Margin="24,0,0,0"
+                Visibility="{Binding ShowDrawer, Converter={StaticResource BoolToVisibility}}">
             <Grid>
-                <!-- Empty state -->
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="340"
-                            Visibility="{Binding ShowEmpty, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock Style="{StaticResource Icon}" Text="&#xE716;" FontSize="34" HorizontalAlignment="Center" Foreground="{DynamicResource TextTertiaryBrush}" />
-                    <TextBlock Text="Pick an agent to customise" FontWeight="SemiBold" FontSize="15" HorizontalAlignment="Center" Margin="0,12,0,4" />
-                    <TextBlock Style="{StaticResource Muted}" TextAlignment="Center"
-                               Text="Change how they work, which tools and MCP servers they can use, their skills and who is on their team. Or add a new agent in one click from a template." />
-                </StackPanel>
-
                 <!-- Templates gallery -->
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding ShowTemplates, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel Margin="24,22">
-                        <TextBlock Text="Add an agent" FontFamily="{StaticResource DisplayFont}" FontSize="20" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,16"
-                                   Text="Ready-made roles with tuned instructions, tools and skills. New agents join the main agent's team; you can customise everything afterwards." />
-                        <ItemsControl ItemsSource="{Binding TemplateGroups}">
+                <DockPanel Visibility="{Binding ShowTemplates, Converter={StaticResource BoolToVisibility}}">
+                    <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="24,18,16,14">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Command="{Binding CloseCommand}" Padding="10,8" ToolTip="Close" VerticalAlignment="Top">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="13" />
+                            </Button>
+                            <StackPanel>
+                                <TextBlock Text="Add an agent" FontFamily="{StaticResource DisplayFont}" FontSize="20" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0" FontSize="12.5"
+                                           Text="Ready-made roles with tuned instructions, tools and skills. Everything can be changed afterwards." />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding TemplateGroups}" Margin="24,16">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Margin="0,0,0,10">
@@ -120,15 +130,14 @@
                                         <ItemsControl ItemsSource="{Binding Templates}" ItemsPanel="{StaticResource Wrap}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Width="236" Margin="0,0,10,10" Padding="14,12" CornerRadius="10"
-                                                            Background="{DynamicResource SurfaceAltBrush}">
+                                                    <Border Width="262" Margin="0,0,10,10" Padding="14,12" CornerRadius="10" Background="{DynamicResource SurfaceAltBrush}">
                                                         <DockPanel>
                                                             <Button DockPanel.Dock="Bottom" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,10,0,0"
-                                                                    Command="{Binding DataContext.AddTemplateCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                                                                    Command="{Binding DataContext.AgentsPage.AddTemplateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}">
                                                                 <StackPanel Orientation="Horizontal">
                                                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE710;" FontSize="11" Margin="0,0,6,0" />
-                                                                    <TextBlock Text="Add" />
+                                                                    <TextBlock Text="Add to my team" />
                                                                 </StackPanel>
                                                             </Button>
                                                             <StackPanel>
@@ -150,50 +159,42 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
+                    </ScrollViewer>
+                </DockPanel>
 
                 <!-- Editor -->
                 <DockPanel Visibility="{Binding HasEditor, Converter={StaticResource BoolToVisibility}}">
-                    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="24,14">
-                        <DockPanel LastChildFill="False">
-                            <Button Style="{StaticResource AccentButton}" Command="{Binding SaveCommand}">
-                                <TextBlock Text="Save" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
-                            </Button>
-                            <Button Style="{StaticResource GhostButton}" Command="{Binding CancelEditCommand}" Content="Discard changes" Margin="8,0,0,0" />
-                            <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="12,0,0,0"
-                                       Text="Unsaved changes" Visibility="{Binding Editor.IsDirty, Converter={StaticResource BoolToVisibility}}" />
-                        </DockPanel>
-                    </Border>
-
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="24,22" DataContext="{Binding Editor}">
-                            <!-- Header -->
-                            <DockPanel Margin="0,0,0,18">
-                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top"
-                                            Visibility="{Binding IsNew, Converter={StaticResource InverseBoolToVisibility}}">
-                                    <Button Style="{StaticResource GhostButton}" Margin="0,0,8,0" ToolTip="Chat with this agent in the Inbox"
-                                            Command="{Binding DataContext.ChatCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE8BD;" FontSize="13" Margin="0,0,7,0" />
-                                            <TextBlock Text="Chat" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Style="{StaticResource GhostButton}" Margin="0,0,8,0" ToolTip="Make this the main agent: it receives assignments and plans them with its team"
-                                            Visibility="{Binding CanMakeMain, Converter={StaticResource BoolToVisibility}}"
-                                            Command="{Binding DataContext.MakeMainCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE734;" FontSize="13" Margin="0,0,7,0" />
-                                            <TextBlock Text="Make main" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Style="{StaticResource GhostButton}" ToolTip="Remove this agent"
-                                            Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibility}}"
-                                            Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
-                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" />
+                    <!-- Header -->
+                    <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Padding="24,18,16,0"
+                            DataContext="{Binding Editor}">
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,14">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                                    <StackPanel Orientation="Horizontal" Visibility="{Binding IsNew, Converter={StaticResource InverseBoolToVisibility}}">
+                                        <Button Style="{StaticResource GhostButton}" Margin="0,0,6,0" ToolTip="Chat with this agent in the Inbox"
+                                                Command="{Binding DataContext.AgentsPage.ChatCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Style="{StaticResource Icon}" Text="&#xE8BD;" FontSize="13" Margin="0,0,7,0" />
+                                                <TextBlock Text="Chat" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource GhostButton}" Margin="0,0,6,0" Padding="10,8" ToolTip="Make this the main agent: it receives assignments and plans them with its team"
+                                                Visibility="{Binding CanMakeMain, Converter={StaticResource BoolToVisibility}}"
+                                                Command="{Binding DataContext.AgentsPage.MakeMainCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE734;" FontSize="13" />
+                                        </Button>
+                                        <Button Style="{StaticResource GhostButton}" Margin="0,0,6,0" Padding="10,8" ToolTip="Remove this agent"
+                                                Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibility}}"
+                                                Command="{Binding DataContext.AgentsPage.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" FontSize="13" />
+                                        </Button>
+                                    </StackPanel>
+                                    <Button Style="{StaticResource GhostButton}" Padding="10,8" ToolTip="Close"
+                                            Command="{Binding DataContext.AgentsPage.CloseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                        <TextBlock Style="{StaticResource Icon}" Text="&#xE711;" FontSize="13" />
                                     </Button>
                                 </StackPanel>
-                                <StackPanel>
+                                <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Heading}" FontFamily="{StaticResource DisplayFont}" FontSize="20" FontWeight="SemiBold" />
                                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                         <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="999" Padding="8,1" Margin="0,0,8,0"
@@ -205,91 +206,155 @@
                                 </StackPanel>
                             </DockPanel>
 
-                            <!-- Identity -->
-                            <Grid Margin="0,0,0,14">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="72" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="ICON" Style="{StaticResource Label}" />
-                                    <TextBox Text="{Binding Avatar, UpdateSourceTrigger=PropertyChanged}" FontSize="18" HorizontalContentAlignment="Center" MaxLength="8"
-                                             ToolTip="An emoji, e.g. 🧭 (Win + . opens the emoji picker)" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Text="NAME" Style="{StaticResource Label}" />
-                                    <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="60" controls:Placeholder.Text="e.g. Rhea" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="4">
-                                    <TextBlock Text="ROLE" Style="{StaticResource Label}" />
-                                    <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" MaxLength="80" controls:Placeholder.Text="e.g. Research Analyst" />
-                                </StackPanel>
-                            </Grid>
+                            <!-- Discard? -->
+                            <Border Background="{DynamicResource DangerSoftBrush}" CornerRadius="8" Padding="12,9" Margin="0,0,8,14"
+                                    Visibility="{Binding ConfirmingClose, Converter={StaticResource BoolToVisibility}}">
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Style="{StaticResource GhostButton}" Content="Keep editing" Margin="0,0,6,0"
+                                                Command="{Binding DataContext.AgentsPage.KeepEditingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <Button Style="{StaticResource GhostButton}" Content="Discard"
+                                                Command="{Binding DataContext.AgentsPage.DiscardCloseCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    </StackPanel>
+                                    <TextBlock Text="You have unsaved changes." VerticalAlignment="Center" TextWrapping="Wrap" TextTrimming="None" />
+                                </DockPanel>
+                            </Border>
 
-                            <TextBlock Text="GOOD AT" Style="{StaticResource Label}" />
-                            <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" MaxLength="1000" Margin="0,0,0,4"
-                                     controls:Placeholder.Text="What this agent is best at. The main agent uses this to pick who does what." />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,14" Text="The main agent reads this when deciding who gets each part of an assignment." />
+                            <!-- Sections -->
+                            <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="3" HorizontalAlignment="Left" Margin="0,0,0,14">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Style="{StaticResource SegmentButton}" MinWidth="90" IsChecked="{Binding Section, Converter={StaticResource Equals}, ConverterParameter=profile}">
+                                    <TextBlock Text="Profile" Margin="8,2" />
+                                </RadioButton>
+                                <RadioButton Style="{StaticResource SegmentButton}" MinWidth="90" IsChecked="{Binding Section, Converter={StaticResource Equals}, ConverterParameter=abilities}">
+                                    <StackPanel Margin="8,0">
+                                        <TextBlock Text="Abilities" HorizontalAlignment="Center" />
+                                        <TextBlock Text="{Binding AbilitiesSummary}" FontSize="10.5" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton Style="{StaticResource SegmentButton}" MinWidth="90" IsChecked="{Binding Section, Converter={StaticResource Equals}, ConverterParameter=team}">
+                                    <StackPanel Margin="8,0">
+                                        <TextBlock Text="Team" HorizontalAlignment="Center" />
+                                        <TextBlock Text="{Binding TeamSummary}" FontSize="10.5" Foreground="{DynamicResource TextTertiaryBrush}" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </RadioButton>
+                            </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
 
-                            <TextBlock Text="INSTRUCTIONS" Style="{StaticResource Label}" />
-                            <TextBox Text="{Binding Instructions, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
-                                     MinHeight="140" MaxHeight="360" VerticalScrollBarVisibility="Auto" MaxLength="20000" Margin="0,0,0,14"
-                                     controls:Placeholder.Text="How this agent thinks and works: tone, standards, what to always or never do, the format you want back…" />
+                    <!-- Footer -->
+                    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="24,14">
+                        <DockPanel LastChildFill="False">
+                            <Button Style="{StaticResource AccentButton}" Command="{Binding SaveCommand}" Padding="22,9">
+                                <TextBlock Text="Save" Foreground="{DynamicResource TextOnAccentBrush}" FontWeight="SemiBold" />
+                            </Button>
+                            <Button Style="{StaticResource GhostButton}" Command="{Binding CancelEditCommand}" Content="Discard changes" Margin="8,0,0,0"
+                                    Visibility="{Binding Editor.IsDirty, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                       Text="Unsaved changes" Visibility="{Binding Editor.IsDirty, Converter={StaticResource BoolToVisibility}}" />
+                        </DockPanel>
+                    </Border>
 
-                            <Grid Margin="0,0,0,14">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="160" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="MODEL" Style="{StaticResource Label}" />
-                                    <ComboBox IsEditable="True" Text="{Binding Model, UpdateSourceTrigger=PropertyChanged}"
-                                              ItemsSource="{Binding DataContext.Ai.Models, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                              ToolTip="Leave empty to use the model chosen in Settings" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="2">
-                                    <TextBlock Text="EFFORT" Style="{StaticResource Label}" />
-                                    <ComboBox SelectedItem="{Binding Effort}"
-                                              ItemsSource="{Binding DataContext.AgentsPage.Efforts, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                              ToolTip="Empty = the office default. Higher effort means more careful work and more tokens." />
-                                </StackPanel>
-                            </Grid>
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,-8,0,14" Text="Leave model and effort empty to use the office defaults from Settings." />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="24,20" DataContext="{Binding Editor}">
 
-                            <CheckBox IsChecked="{Binding Enabled}" Margin="0,0,0,18"
-                                      Visibility="{Binding IsMain, Converter={StaticResource InverseBoolToVisibility}}">
-                                <TextBlock Text="Turned on (off: the agent takes no new work)" />
-                            </CheckBox>
+                            <!-- ===== Profile ===== -->
+                            <StackPanel Visibility="{Binding ShowProfile, Converter={StaticResource BoolToVisibility}}">
+                                <Grid Margin="0,0,0,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="72" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="ICON" Style="{StaticResource Label}" />
+                                        <TextBox Text="{Binding Avatar, UpdateSourceTrigger=PropertyChanged}" FontSize="18" HorizontalContentAlignment="Center" MaxLength="8"
+                                                 ToolTip="An emoji, e.g. 🧭 (Win + . opens the emoji picker)" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="NAME" Style="{StaticResource Label}" />
+                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="60" controls:Placeholder.Text="e.g. Rhea" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="4">
+                                        <TextBlock Text="ROLE" Style="{StaticResource Label}" />
+                                        <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" MaxLength="80" controls:Placeholder.Text="e.g. Research Analyst" />
+                                    </StackPanel>
+                                </Grid>
 
-                            <TextBlock Text="TOOLS" Style="{StaticResource Label}" />
-                            <ItemsControl ItemsSource="{Binding Tools}" ItemsPanel="{StaticResource Wrap}" ItemTemplate="{StaticResource OptionChip}" Margin="0,0,0,10" />
+                                <TextBlock Text="GOOD AT" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" MaxLength="1000" Margin="0,0,0,4"
+                                         controls:Placeholder.Text="What this agent is best at" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,14" Text="The main agent reads this when deciding who gets each part of an assignment." />
 
-                            <TextBlock Text="TEAM" Style="{StaticResource Label}" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,8"
-                                       Text="Agents this one can hand work to. The main agent plans assignments with its team; any agent can consult its teammates." />
-                            <ItemsControl ItemsSource="{Binding Team}" ItemsPanel="{StaticResource Wrap}" ItemTemplate="{StaticResource TeammateChip}" Margin="0,0,0,10" />
+                                <TextBlock Text="INSTRUCTIONS" Style="{StaticResource Label}" />
+                                <TextBox Text="{Binding Instructions, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="Wrap"
+                                         MinHeight="150" MaxHeight="360" VerticalScrollBarVisibility="Auto" MaxLength="20000" Margin="0,0,0,14"
+                                         controls:Placeholder.Text="How this agent thinks and works: tone, standards, what to always or never do, the format you want back…" />
 
-                            <TextBlock Text="MCP SERVERS" Style="{StaticResource Label}" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,8" Text="Apps and services this agent can use. Add more on the Tools page."
-                                       Visibility="{Binding McpServers.Count, Converter={StaticResource CountToVisibility}}" />
-                            <TextBlock Style="{StaticResource Muted}" FontSize="12.5" Margin="0,0,0,12"
-                                       Text="No MCP servers yet. Add GitHub, a browser, your files and more on the Tools page."
-                                       Visibility="{Binding McpServers.Count, Converter={StaticResource ZeroToVisibility}}" />
-                            <ItemsControl ItemsSource="{Binding McpServers}" ItemsPanel="{StaticResource Wrap}" ItemTemplate="{StaticResource OptionChip}" Margin="0,0,0,10" />
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="160" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="MODEL" Style="{StaticResource Label}" />
+                                        <ComboBox IsEditable="True" Text="{Binding Model, UpdateSourceTrigger=PropertyChanged}"
+                                                  ItemsSource="{Binding DataContext.Ai.Models, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  ToolTip="Leave empty to use the model chosen in Settings" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="EFFORT" Style="{StaticResource Label}" />
+                                        <ComboBox SelectedItem="{Binding Effort}"
+                                                  ItemsSource="{Binding DataContext.AgentsPage.Efforts, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  ToolTip="Empty = the office default. Higher effort means more careful work and more tokens." />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,16" TextWrapping="Wrap" TextTrimming="None"
+                                           Text="Leave both empty to use the office defaults from Settings. A cheaper model with lower effort saves tokens on simple roles." />
 
-                            <TextBlock Text="SKILLS" Style="{StaticResource Label}" />
-                            <TextBlock Style="{StaticResource Muted}" FontSize="12.5" Margin="0,0,0,12"
-                                       Text="No skills yet. Add ready-made skills or your own SKILL.md files on the Tools page."
-                                       Visibility="{Binding Skills.Count, Converter={StaticResource ZeroToVisibility}}" />
-                            <ItemsControl ItemsSource="{Binding Skills}" ItemsPanel="{StaticResource Wrap}" ItemTemplate="{StaticResource OptionChip}" Margin="0,0,0,10" />
+                                <CheckBox IsChecked="{Binding Enabled}" Margin="0,0,0,6" Visibility="{Binding IsMain, Converter={StaticResource InverseBoolToVisibility}}">
+                                    <TextBlock Text="Turned on (off: the agent takes no new work)" />
+                                </CheckBox>
+                                <CheckBox IsChecked="{Binding JoinTeam}" Margin="0,6,0,0" Visibility="{Binding IsNew, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Text="Add to the main agent's team" />
+                                </CheckBox>
+                            </StackPanel>
 
-                            <CheckBox IsChecked="{Binding JoinTeam}" Margin="0,6,0,0" Visibility="{Binding IsNew, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock Text="Add to the main agent's team" />
-                            </CheckBox>
+                            <!-- ===== Abilities ===== -->
+                            <StackPanel Visibility="{Binding ShowAbilities, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="TOOLS" Style="{StaticResource Label}" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,8" TextWrapping="Wrap" TextTrimming="None"
+                                           Text="What this agent can do on its own: read and edit files, search the web, use the terminal (with your approval) and more." />
+                                <ItemsControl ItemsSource="{Binding Tools}" ItemTemplate="{StaticResource AbilityRow}" Margin="0,0,0,16" />
+
+                                <TextBlock Text="APPS" Style="{StaticResource Label}" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,8" TextWrapping="Wrap" TextTrimming="None"
+                                           Text="Connected apps this agent may use. Connect more on the Integrations page." />
+                                <Border Style="{StaticResource EmptyState}" Margin="0,0,0,16" Visibility="{Binding McpServers.Count, Converter={StaticResource ZeroToVisibility}}">
+                                    <TextBlock Style="{StaticResource Muted}" Text="No apps connected yet. Connect GitHub, Slack, Notion and more on the Integrations page." />
+                                </Border>
+                                <ItemsControl ItemsSource="{Binding McpServers}" ItemTemplate="{StaticResource AbilityRow}" Margin="0,0,0,16" />
+
+                                <TextBlock Text="SKILLS" Style="{StaticResource Label}" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,8" TextWrapping="Wrap" TextTrimming="None"
+                                           Text="Know-how this agent loads when a task matches. Too many skills slows nothing down, but pick the ones that fit the role." />
+                                <Border Style="{StaticResource EmptyState}" Visibility="{Binding Skills.Count, Converter={StaticResource ZeroToVisibility}}">
+                                    <TextBlock Style="{StaticResource Muted}" Text="No skills yet. Add built-in skills or install some from skills.sh on the Integrations page." />
+                                </Border>
+                                <ItemsControl ItemsSource="{Binding Skills}" ItemTemplate="{StaticResource AbilityRow}" />
+                            </StackPanel>
+
+                            <!-- ===== Team ===== -->
+                            <StackPanel Visibility="{Binding ShowTeam, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="TEAM" Style="{StaticResource Label}" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,-2,0,8" TextWrapping="Wrap" TextTrimming="None"
+                                           Text="Agents this one can hand work to. The main agent plans assignments with its team; any agent can ask its teammates for help." />
+                                <ItemsControl ItemsSource="{Binding Team}" ItemTemplate="{StaticResource TeammateRow}" />
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>

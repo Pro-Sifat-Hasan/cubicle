@@ -26,12 +26,16 @@ public static class Placeholder
             return;
         box.Loaded -= Refresh;
         box.TextChanged -= Refresh;
+        box.IsVisibleChanged -= VisibilityChanged;
         box.Loaded += Refresh;
         box.TextChanged += Refresh;
+        box.IsVisibleChanged += VisibilityChanged; // an adorner outlives a collapsed parent, so it must follow visibility itself
         Update(box);
     }
 
     private static void Refresh(object sender, RoutedEventArgs e) => Update((TextBox)sender);
+
+    private static void VisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => Update((TextBox)sender);
 
     private static void Update(TextBox box)
     {
@@ -39,7 +43,7 @@ public static class Placeholder
         if (layer is null)
             return;
         var existing = layer.GetAdorners(box)?.OfType<PlaceholderAdorner>().FirstOrDefault();
-        var show = string.IsNullOrEmpty(box.Text) && !string.IsNullOrEmpty(GetText(box));
+        var show = box.IsVisible && string.IsNullOrEmpty(box.Text) && !string.IsNullOrEmpty(GetText(box));
         if (show && existing is null)
             layer.Add(new PlaceholderAdorner(box));
         else if (!show && existing is not null)
