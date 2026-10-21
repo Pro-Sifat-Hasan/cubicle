@@ -1,0 +1,13 @@
+#!/bin/sh
+# Runs scripts/prepush.ps1 before every push (install with scripts/install-hooks.ps1).
+# Git passes the refs being pushed on stdin; the script reads them from there.
+root="$(git rev-parse --show-toplevel)"
+if command -v powershell.exe >/dev/null 2>&1; then
+  shell=powershell.exe
+elif command -v pwsh >/dev/null 2>&1; then
+  shell=pwsh
+else
+  echo "pre-push: PowerShell is needed to run the checks (https://aka.ms/powershell)." >&2
+  exit 1
+fi
+exec "$shell" -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/prepush.ps1" "$@"

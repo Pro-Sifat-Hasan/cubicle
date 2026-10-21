@@ -2,6 +2,8 @@ module github.com/Pro-Sifat-Hasan/cubicle/gateway
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	golang.org/x/sys v0.49.0
 	modernc.org/sqlite v1.60.1
