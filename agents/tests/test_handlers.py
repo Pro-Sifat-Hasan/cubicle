@@ -321,3 +321,15 @@ def test_demo_provider_writes_a_valid_persona(tmp_path):
     persona = json.loads(gw.completed["tsk_1"])
     assert persona["title"] == "chess" and persona["accent_color"].startswith("#")
     assert "chess" in persona["system_prompt_style"] and persona["greeting_templates"]
+
+
+def test_tool_calls_are_logged_as_activity_without_repeats(tmp_path):
+    async def use_tools(kwargs):
+        for text in ("Searching the web…", "Searching the web…", "Reading a page…"):
+            await kwargs["on_event"]("status", text)
+        await kwargs["on_event"]("text", "draft")  # reply text is not a tool call
+        return "done"
+
+    gw = FakeGateway()
+    run(make_handler(gw, ScriptedLLM(use_tools), tmp_path).handle(WRITER, claim(kind="subtask", parent_id="asg_1")))
+    assert [m for m in gw.logs if m.startswith("Tool: ")] == ["Tool: Searching the web…", "Tool: Reading a page…"]

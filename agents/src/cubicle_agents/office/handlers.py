@@ -32,6 +32,8 @@ log = logging.getLogger(__name__)
 MAX_SUBTASKS = 6
 MAX_QUESTIONS_PER_TASK = 2
 MEMORY_LIMIT = 50
+MAX_TOOL_LOGS = 40  # tool calls recorded per run
+TOOL_PREFIX = "Tool: "  # activity messages with this prefix are tool calls (the app shows them as such)
 
 
 @dataclass(frozen=True)
@@ -105,6 +107,8 @@ class TaskHandler:
                 client_web_fetch=ctx.client_web_fetch, web_access=ctx.web_access,
                 team=team, consult=consult if team else None, allow_assignments=mode == prompts.MODE_CHAT,
             )
+        if on_event is None and json_schema is None:
+            on_event = self._tool_logger(employee, claim)
         system = prompts.system_prompt(employee, ctx.owner, memories=await self._memories(), tool_mode=tool_mode,
                                        web=ctx.web_access, team=team, mode=mode)
         result = await ctx.llm.run(
@@ -126,6 +130,20 @@ class TaskHandler:
             if may_ask and parsed.question:
                 result.question = parsed.question
         return result
+
+    def _tool_logger(self, employee: Employee, claim: Claim) -> EventCallback:
+        """Records the tools an agent uses as activity, so the owner can see how the work was done."""
+        last = ""
+        count = 0
+
+        async def on_event(kind: str, text: str) -> None:
+            nonlocal last, count
+            if kind != "status" or text == last or count >= MAX_TOOL_LOGS:
+                return
+            last, count = text, count + 1
+            await self.ctx.gateway.log(employee.id, claim.task["id"], f"{TOOL_PREFIX}{text}")
+
+        return on_event
 
     def _may_ask(self, claim: Claim) -> bool:
         return len(claim.human_answers) < MAX_QUESTIONS_PER_TASK

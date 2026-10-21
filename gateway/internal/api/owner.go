@@ -269,7 +269,13 @@ func (s *Server) handleDeleteRoutine(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListActivity(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	list, err := s.store.ListActivity(r.Context(), limit)
+	var list []*store.Activity
+	var err error
+	if id := r.URL.Query().Get("task_id"); id != "" {
+		list, err = s.store.ListTaskActivity(r.Context(), id, limit) // one assignment's trail, oldest first
+	} else {
+		list, err = s.store.ListActivity(r.Context(), limit)
+	}
 	if err != nil {
 		s.storeErr(w, err)
 		return

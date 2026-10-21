@@ -266,3 +266,30 @@ func contains(list []string, v string) bool {
 	}
 	return false
 }
+
+func TestTaskActivityCoversTheAssignmentAndItsSubtasks(t *testing.T) {
+	h := newHarness(t)
+	var asg store.Task
+	h.do("POST", "/api/v1/assignments", adminTok, map[string]string{"title": "Report"}, 201, &asg)
+	var claim api.ClaimResponse
+	h.do("POST", "/internal/v1/tasks/claim", workerTok, map[string]any{"agent_ids": []string{"manager"}}, 200, &claim)
+	h.do("POST", "/internal/v1/tasks/"+asg.ID+"/delegate", workerTok, map[string]any{
+		"subtasks":  []map[string]any{{"title": "Research", "assignee": "researcher"}},
+		"synthesis": map[string]string{"title": "Wrap up", "assignee": "manager"},
+	}, 201, nil)
+	var detail struct{ Children []store.Task }
+	h.do("GET", "/api/v1/tasks/"+asg.ID, adminTok, nil, 200, &detail)
+
+	log := func(agent, task, msg string) {
+		h.do("POST", "/internal/v1/activity", workerTok, map[string]string{"employee_id": agent, "task_id": task, "message": msg}, 204, nil)
+	}
+	log("manager", asg.ID, "Max is planning.")
+	log("researcher", detail.Children[0].ID, "Tool: Searching the web…")
+	log("writer", "tsk_unrelated", "Not mine.")
+
+	var got []store.Activity
+	h.do("GET", "/api/v1/activity?task_id="+asg.ID, adminTok, nil, 200, &got)
+	if len(got) != 2 || got[0].Message != "Max is planning." || got[1].Message != "Tool: Searching the web…" {
+		t.Fatalf("want the assignment's own trail, oldest first, got %+v", got)
+	}
+}
