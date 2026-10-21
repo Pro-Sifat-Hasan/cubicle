@@ -87,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	owner.HandleFunc("GET /api/v1/skills/{id}", s.handleGetSkill)
 	owner.HandleFunc("PUT /api/v1/skills/{id}", s.handleUpdateSkill)
 	owner.HandleFunc("POST /api/v1/skills/discover", s.handleDiscoverSkills)
+	owner.HandleFunc("POST /api/v1/integrations/{id}/connect", s.handleConnectIntegration)
 	owner.HandleFunc("POST /api/v1/skills/install", s.handleInstallSkills)
 	owner.HandleFunc("DELETE /api/v1/skills/{id}", s.handleDeleteSkill)
 	owner.HandleFunc("GET /api/v1/plugins", s.handleListPlugins)

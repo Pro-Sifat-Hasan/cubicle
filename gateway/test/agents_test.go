@@ -179,7 +179,7 @@ func TestMCPServerValidation(t *testing.T) {
 	h.do("POST", "/api/v1/mcp-servers", adminTok, map[string]any{
 		"template_id": "filesystem", "args": []string{"-y", "@modelcontextprotocol/server-filesystem", "D:\\Notes"},
 	}, 201, &fs)
-	if fs.ID != "filesystem" || fs.Args[2] != "D:\\Notes" || fs.TemplateID != "filesystem" {
+	if fs.ID != "files-on-this-pc" || fs.Args[2] != "D:\\Notes" || fs.TemplateID != "filesystem" {
 		t.Fatalf("template override not applied: %+v", fs)
 	}
 	// Without a worker the test endpoint explains instead of failing.
