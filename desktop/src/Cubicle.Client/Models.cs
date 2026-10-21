@@ -285,14 +285,43 @@ public sealed record McpTemplate(
     string? Url,
     string? AuthSecret,
     string? Requires,
-    string? Setup)
+    string? Setup,
+    string? Category = null,
+    string? Icon = null,
+    IReadOnlyList<IntegrationField>? Fields = null,
+    IReadOnlyList<string>? Agents = null,
+    string? Link = null)
 {
+    /// <summary>The kind of app, for grouping ("Code", "Productivity", "Web"...).</summary>
+    public string Group => string.IsNullOrEmpty(Category) ? "Other" : Category;
+
     /// <summary>Secrets the owner must store before the server works.</summary>
     public IEnumerable<string> RequiredSecrets =>
         (SecretEnv ?? []).Concat(string.IsNullOrEmpty(AuthSecret) ? [] : [AuthSecret]);
 }
 
+/// <summary>One thing to fill in to connect an app: a key, a folder, a workspace id.</summary>
+public sealed record IntegrationField(string Key, string Label, string Kind, string? Secret, string? Placeholder, string? Help, bool Optional = false)
+{
+    public bool IsSecret => Kind == "secret";
+    public bool IsFolder => Kind == "folder";
+}
+
+public sealed record ConnectResult(McpServer Server, IReadOnlyList<string> Attached);
+
 public sealed record SkillTemplate(string Id, string Name, string Description, string Content);
+
+/// <summary>A skill found in a GitHub repository (the way skills.sh lists them).</summary>
+public sealed record FoundSkill(string Name, string Description, string Path, bool Installed);
+
+public sealed record SkillSourceInfo(string Owner, string Repo, string? Ref, string? Skill, string? Dir)
+{
+    public override string ToString() => $"{Owner}/{Repo}";
+}
+
+public sealed record FoundSkills(SkillSourceInfo Source, IReadOnlyList<FoundSkill> Skills);
+
+public sealed record InstalledSkills(IReadOnlyList<Skill> Installed, IReadOnlyList<string> Skipped);
 
 public sealed record PluginTemplate(
     string Id,

@@ -157,6 +157,28 @@ public sealed class GatewayClient : IDisposable
 
     private sealed record PersonaTask(string TaskId);
 
+    // ---- integrations and skills from skills.sh ----
+
+    /// <summary>Connects an app in one step: stores the owner's keys, adds the server, and gives it to the chosen agents.</summary>
+    public Task<ConnectResult> ConnectIntegrationAsync(string templateId, IReadOnlyDictionary<string, string> values,
+        IReadOnlyList<string> agentIds, CancellationToken ct = default) =>
+        SendAsync<ConnectResult>(HttpMethod.Post, $"/api/v1/integrations/{Uri.EscapeDataString(templateId)}/connect",
+            new { values, agent_ids = agentIds }, ct);
+
+    /// <summary>Reads a skills.sh link, an "npx skills add" command, owner/repo or a GitHub link and lists the skills it names.</summary>
+    public Task<FoundSkills> DiscoverSkillsAsync(string source, CancellationToken ct = default) =>
+        SendRawAsync<FoundSkills>("/api/v1/skills/discover", new { source }, TimeSpan.FromSeconds(60), ct);
+
+    /// <summary>Installs skills found by <see cref="DiscoverSkillsAsync"/>; an empty <paramref name="paths"/> installs them all.</summary>
+    public Task<InstalledSkills> InstallSkillsAsync(string source, IReadOnlyList<string> paths, CancellationToken ct = default) =>
+        SendRawAsync<InstalledSkills>("/api/v1/skills/install", new { source, paths }, TimeSpan.FromSeconds(90), ct);
+
+    private async Task<T> SendRawAsync<T>(string path, object body, TimeSpan timeout, CancellationToken ct)
+    {
+        using var resp = await SendRaw(HttpMethod.Post, path, body, ct, timeout).ConfigureAwait(false);
+        return (await resp.Content.ReadFromJsonAsync<T>(Json, ct).ConfigureAwait(false))!;
+    }
+
     // ---- secrets (write-only) ----
 
     public Task<List<string>> GetSecretNamesAsync(CancellationToken ct = default) =>
