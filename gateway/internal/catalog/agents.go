@@ -66,7 +66,7 @@ var agentTemplates = []AgentTemplate{
 			"teammate for each part, and give the owner crisp, actionable briefings. In a chat, answer simple questions " +
 			"yourself, consult a teammate when their expertise clearly helps, and start an assignment for bigger jobs.",
 		Tools:  []string{ToolFiles, ToolWeb, ToolMemory, ToolAssignments},
-		Skills: []string{"project-planning", "daily-briefing", "decision-memo"},
+		Skills: []string{"project-planning", "daily-briefing", "decision-memo", "message-triage"},
 	},
 	{
 		ID: "researcher", Category: "Research", Name: "Rhea", Title: "Research Analyst", Avatar: "🔎",
@@ -121,7 +121,7 @@ var agentTemplates = []AgentTemplate{
 			"follow-ups with clear owners and dates. Be brief, anticipate what is needed next, and flag conflicts or " +
 			"deadlines early.",
 		Tools:  std,
-		Skills: []string{"daily-briefing", "meeting-notes", "project-planning"},
+		Skills: []string{"daily-briefing", "meeting-notes", "project-planning", "message-triage"},
 	},
 	{
 		ID: "email-assistant", Category: "Productivity", Name: "Mia", Title: "Email Assistant", Avatar: "📧",
@@ -130,7 +130,7 @@ var agentTemplates = []AgentTemplate{
 			"needed and by when, and draft replies that are short, polite and ready to send. Never invent commitments " +
 			"or facts the owner has not given you.",
 		Tools:  []string{ToolFiles, ToolMemory},
-		Skills: []string{"email-writing", "proofreading"},
+		Skills: []string{"email-writing", "proofreading", "message-triage"},
 	},
 	{
 		ID: "social-media", Category: "Marketing", Name: "Sky", Title: "Social Media Manager", Avatar: "📣",

@@ -111,6 +111,12 @@ class Gateway(Protocol):
     async def set_profile(self, content: str, agent_id: str) -> None:
         """Replace the owner's profile; empty content clears it."""
 
+    async def triage_new(self, keys: list[str]) -> list[str]:
+        """Which of these message keys have not been looked at before."""
+
+    async def triage_record(self, items: list[dict[str, Any]]) -> None:
+        """Save what happened to messages: key, source, summary, status (proposed, approved, done, dismissed)."""
+
     async def list_projects(self) -> list[dict[str, Any]]:
         """The projects the owner works on: id, name, path, notes."""
 
@@ -227,6 +233,13 @@ class GatewayClient:
             return False
         await self._send("DELETE", f"/internal/v1/memories/{match['id']}")
         return True
+
+    async def triage_new(self, keys: list[str]) -> list[str]:
+        resp = await self._send("POST", "/internal/v1/triage/check", {"keys": keys})
+        return list(resp.json().get("new") or [])
+
+    async def triage_record(self, items: list[dict[str, Any]]) -> None:
+        await self._send("POST", "/internal/v1/triage/record", {"items": items})
 
     async def list_projects(self) -> list[dict[str, Any]]:
         return (await self._send("GET", "/internal/v1/projects")).json()

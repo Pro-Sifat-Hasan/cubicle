@@ -135,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 	owner.HandleFunc("PUT /api/v1/memories/profile", s.handleOwnerSetProfile)
 	owner.HandleFunc("DELETE /api/v1/memories/{id}", s.handleDeleteMemory)
 	owner.HandleFunc("GET /api/v1/projects", s.handleListProjects)
+	owner.HandleFunc("GET /api/v1/triage", s.handleListTriage)
 	owner.HandleFunc("PUT /api/v1/projects", s.handleOwnerSaveProject)
 	owner.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
 
@@ -160,6 +161,8 @@ func (s *Server) Handler() http.Handler {
 	worker.HandleFunc("PUT /internal/v1/memories/profile", s.handleWorkerSetProfile)
 	worker.HandleFunc("DELETE /internal/v1/memories/{id}", s.handleDeleteMemory)
 	worker.HandleFunc("GET /internal/v1/projects", s.handleListProjects)
+	worker.HandleFunc("POST /internal/v1/triage/check", s.handleTriageCheck)
+	worker.HandleFunc("POST /internal/v1/triage/record", s.handleTriageRecord)
 	worker.HandleFunc("PUT /internal/v1/projects", s.handleWorkerSaveProject)
 
 	root := http.NewServeMux()

@@ -23,6 +23,7 @@ class FakeGateway:
         self.memories: list[str] = list(memories or [])
         self.projects: list[dict[str, Any]] = []
         self.profile = ""
+        self.triage: dict[str, dict[str, Any]] = {}
         self.progress_events: list[tuple[str, str, str]] = []
         self.steps: list[tuple[str, str, dict[str, Any]]] = []
         self.titles: dict[str, str] = {}
@@ -95,6 +96,13 @@ class FakeGateway:
 
     async def add_memory(self, content, agent_id):
         self.memories.append(content)
+
+    async def triage_new(self, keys):
+        return [k for k in keys if k not in self.triage]
+
+    async def triage_record(self, items):
+        for item in items:
+            self.triage[item["key"]] = item
 
     async def get_profile(self):
         return self.profile

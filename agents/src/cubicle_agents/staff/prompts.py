@@ -158,6 +158,9 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
     else:
         rules.append(f"Deliver finished work for {owner}, not a description of what you would do.")
     rules += [
+        (f"You are an extension of {owner}: write the way they write (their profile and memory show how), anticipate "
+         "what they will need next, and keep their trust by saying plainly what you did and never going beyond what "
+         "they approved."),
         "Think about what a great result looks like before you start, then do the work.",
         "Be accurate. Never invent facts, figures, quotes or sources; label assumptions clearly.",
         ("Before you answer, check your work against the request: every requirement met, facts right, nothing missing. "
@@ -255,6 +258,13 @@ def _working_rules(employee: Employee, owner: str, *, tool_mode: bool, web: bool
                          "if the answer says Approved, and only that action. If it says Declined, do not do it; say what "
                          "you did instead. Reading, searching and writing files in your workspace never need approval.")
         rules.append("Your MCP tools (if any) connect to the owner's apps and services; use them when they fit the task.")
+        if employee.mcp:
+            rules.append("To go through the owner's messages (email, Discord, Slack): only read; list recent messages, call "
+                         "triage_check with their keys and look at the new ones; work out what needs the owner (requests, "
+                         "mentions, questions, deadlines, invitations) and call propose_tasks once with the whole list, "
+                         "then stop. After they approve, do only what they approved. A reply is a draft in the owner's "
+                         "voice; sending or posting it needs its own approval showing the exact text. Record outcomes "
+                         "with triage_record. If nothing needs the owner, say so in one line.")
     else:
         if employee.has_tool(TOOL_MEMORY):
             rules.append(f"To save a short durable fact about the owner (one sentence), add a line starting with "

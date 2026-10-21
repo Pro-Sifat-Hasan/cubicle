@@ -140,6 +140,9 @@ func (s *Server) handleConnectIntegration(w http.ResponseWriter, r *http.Request
 
 	s.configChanged("mcp.updated", saved)
 	s.logActivity(ctx, "", "", t.Name+" connected.")
+	if t.Messages {
+		s.ensureMessageCheck(ctx, agents)
+	}
 	if len(newSecrets) > 0 && s.OnConfigChanged != nil {
 		s.OnConfigChanged() // the worker restarts to pick up the new key
 	}

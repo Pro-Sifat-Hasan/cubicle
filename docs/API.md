@@ -151,6 +151,7 @@ are stored. Persona tasks run on the main agent and never appear in `/api/v1/tas
 | `PUT /api/v1/memories/profile` | `{content}` | writes the one profile record about the owner (up to 3000 characters), replacing the old one; empty content clears it (`204`) |
 | `POST /api/v1/memories` | `{content}` | the new memory (`201`) |
 | `DELETE /api/v1/memories/{id}` | | `204` |
+| `GET /api/v1/triage?status=&limit=` | | the messages the staff looked at (email, Discord, Slack): `[{key, source, summary, status, created_at, updated_at}]`, newest change first; `status` is `proposed`, `approved`, `done` or `dismissed` |
 | `GET /api/v1/projects` | | the projects the staff keep notes on: `[{id, name, path, notes, created_at, updated_at}]` |
 | `PUT /api/v1/projects` | `{name, path?, notes?}` | adds a project, or updates the one with the same name (any letter case); an empty `path` or `notes` keeps what is stored. `path` must be an absolute, existing folder. Up to 50 projects (`409` beyond that) |
 | `DELETE /api/v1/projects/{id}` | | `204` |
@@ -187,6 +188,8 @@ stored), `assignment.done`, `inbox.new`, `inbox.answered`, `agent.status`, `agen
 | `DELETE /internal/v1/memories/{id}` | | `204`; an agent forgets a wrong fact |
 | `POST /internal/v1/memories` | `{content, employee_id}` | saves a learned fact |
 | `PUT /internal/v1/memories/profile` | `{content, employee_id}` | an agent rewrites the owner's profile (the full, compact picture; replaces the old one) |
+| `POST /internal/v1/triage/check` | `{keys}` | `{new: [...]}`: the message keys not looked at before (up to 100) |
+| `POST /internal/v1/triage/record` | `{items:[{key, source, summary, status}]}` | saves what happened to messages (`204`); an existing key moves to the new status and keeps its summary when none is sent |
 | `GET /internal/v1/projects` | | the projects; the worker matches them to each request and works inside a matching project's folder |
 | `PUT /internal/v1/projects` | `{name, path?, notes?}` | an agent saves or updates a project (same rules as the owner endpoint); the agent asks the owner to approve a new folder first |
 

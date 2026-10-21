@@ -48,6 +48,9 @@ type MCPTemplate struct {
 	Requires string `json:"requires,omitempty"`
 	// Setup explains what the owner should know before connecting.
 	Setup string `json:"setup,omitempty"`
+	// Messages marks an app that receives messages for the owner (email, chat). Connecting one turns on the
+	// "Check my messages" automation, which finds what needs the owner and asks for approval.
+	Messages bool `json:"messages,omitempty"`
 }
 
 func (t MCPTemplate) Server() store.MCPServer {
@@ -136,13 +139,35 @@ var mcpTemplates = []MCPTemplate{
 		ID: "slack", Name: "Slack", Category: "Productivity", Icon: "💬", Transport: store.TransportStdio,
 		Description: "Read channels and threads, and post messages. Agents ask your approval before they post.",
 		Command:     "npx", Args: []string{"-y", "@modelcontextprotocol/server-slack"}, SecretEnv: []string{"SLACK_BOT_TOKEN"},
-		Env: map[string]string{"SLACK_TEAM_ID": "{team}"}, Requires: "Node.js",
+		Env: map[string]string{"SLACK_TEAM_ID": "{team}"}, Requires: "Node.js", Messages: true,
 		Fields: []Field{
 			{Key: "token", Label: "Bot token", Kind: FieldSecret, Secret: "SLACK_BOT_TOKEN", Placeholder: "xoxb-…",
 				Help: "From your Slack app's OAuth page, with the channels:read, channels:history and chat:write scopes."},
 			{Key: "team", Label: "Workspace ID", Kind: FieldText, Placeholder: "T0123456789", Help: "Starts with T; find it in the Slack admin pages."},
 		},
 		Agents: []string{"manager", "executive-assistant", "social-planner"}, Link: "https://api.slack.com/apps",
+	},
+	{
+		ID: "gmail", Name: "Email (Gmail)", Category: "Messages", Icon: "📧", Transport: store.TransportStdio, Messages: true,
+		Description: "Read and search your email so your staff can find what needs you. They only read: nothing is sent or deleted.",
+		Command:     "npx", Args: []string{"-y", "@automatearmy/email-reader-mcp"}, SecretEnv: []string{"USER_PASS"},
+		Env: map[string]string{"USER_EMAIL": "{email}"}, Requires: "Node.js",
+		Fields: []Field{
+			{Key: "email", Label: "Gmail address", Kind: FieldText, Placeholder: "you@gmail.com"},
+			{Key: "password", Label: "App password", Kind: FieldSecret, Secret: "USER_PASS", Placeholder: "16 letters",
+				Help: "Not your normal password. Turn on 2-step verification, then create an app password; IMAP must be on in Gmail settings."},
+		},
+		Agents: []string{"email-assistant", "executive-assistant", "manager"}, Link: "https://myaccount.google.com/apppasswords",
+	},
+	{
+		ID: "discord", Name: "Discord", Category: "Messages", Icon: "🎮", Transport: store.TransportStdio, Messages: true,
+		Description: "Read channel messages and mentions. Your staff ask your approval before they post anything.",
+		Command:     "npx", Args: []string{"-y", "@iqai/mcp-discord"}, SecretEnv: []string{"DISCORD_TOKEN"},
+		// Without this the server would answer mentions by itself, which would skip your approval.
+		Env: map[string]string{"SAMPLING_ENABLED": "false", "BLOCK_DMS": "true"}, Requires: "Node.js",
+		Fields: []Field{{Key: "token", Label: "Bot token", Kind: FieldSecret, Secret: "DISCORD_TOKEN", Placeholder: "MTA…",
+			Help: "Create an application with a bot in the Developer Portal, turn on the Message Content intent, and invite the bot to your server."}},
+		Agents: []string{"email-assistant", "executive-assistant", "manager"}, Link: "https://discord.com/developers/applications",
 	},
 	{
 		ID: "linear", Name: "Linear", Category: "Productivity", Icon: "📐", Transport: store.TransportHTTP,

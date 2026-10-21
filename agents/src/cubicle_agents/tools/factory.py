@@ -11,6 +11,7 @@ from cubicle_agents.staff.memory import is_duplicate, looks_secret
 from cubicle_agents.staff.roster import TOOL_ASSIGNMENTS, TOOL_FILES, TOOL_MEMORY, TOOL_TERMINAL, TOOL_WEB, Employee
 from cubicle_agents.tools.base import TOOL_PREFIX, Tool, Toolbox, ToolError, require_str
 from cubicle_agents.tools.terminal import terminal_tool
+from cubicle_agents.tools.triage import triage_tools
 from cubicle_agents.tools.web import WEB_FETCH
 from cubicle_agents.tools.workspace import Workspace
 
@@ -58,6 +59,8 @@ def build_toolbox(
         toolbox.tools.append(_update_profile(gateway, employee.id))
         toolbox.tools.append(_compact_memory(gateway, employee.id))
         toolbox.tools.append(_save_project(gateway, toolbox, may_approve, approved_actions))
+    if employee.mcp:  # an agent with connected apps can go through the owner's messages
+        toolbox.tools.extend(triage_tools(gateway, toolbox, may_approve))
     if employee.skills:
         toolbox.tools.append(_load_skill(employee))
     if team and consult is not None:

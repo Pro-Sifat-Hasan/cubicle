@@ -131,7 +131,8 @@ class TaskHandler:
                 may_approve=mode != prompts.MODE_CONSULT and self._may_approve(claim), task_id=claim.task["id"],
                 approved_actions=self._approved_actions(claim),
                 client_web_fetch=ctx.client_web_fetch, web_access=ctx.web_access,
-                team=team, consult=consult if team else None, allow_assignments=mode == prompts.MODE_CHAT,
+                team=team, consult=consult if team else None,
+                allow_assignments=mode == prompts.MODE_CHAT or self._standalone(claim),
                 read_only_files=coordinator,
             )
         if on_event is None and json_schema is None:
@@ -182,6 +183,11 @@ class TaskHandler:
             await self.ctx.gateway.log(employee.id, claim.task["id"], f"{TOOL_PREFIX}{text}")
 
         return on_event
+
+    @staticmethod
+    def _standalone(claim: Claim) -> bool:
+        """An assignment one agent does alone (an automation sent straight to them), so it may hand big jobs on."""
+        return claim.task.get("kind") == "assignment"
 
     def _may_ask(self, claim: Claim) -> bool:
         asked = [a for a in claim.human_answers if a.get("kind") != "approval"]
