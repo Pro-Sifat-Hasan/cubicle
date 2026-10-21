@@ -150,6 +150,9 @@ are stored. Persona tasks run on the main agent and never appear in `/api/v1/tas
 | `GET /api/v1/memories` | | what the staff remember, newest first |
 | `POST /api/v1/memories` | `{content}` | the new memory (`201`) |
 | `DELETE /api/v1/memories/{id}` | | `204` |
+| `GET /api/v1/projects` | | the projects the staff keep notes on: `[{id, name, path, notes, created_at, updated_at}]` |
+| `PUT /api/v1/projects` | `{name, path?, notes?}` | adds a project, or updates the one with the same name (any letter case); an empty `path` or `notes` keeps what is stored. `path` must be an absolute, existing folder. Up to 50 projects (`409` beyond that) |
+| `DELETE /api/v1/projects/{id}` | | `204` |
 
 ### Events
 
@@ -182,6 +185,8 @@ stored), `assignment.done`, `inbox.new`, `inbox.answered`, `agent.status`, `agen
 | `GET /internal/v1/memories?limit=` | | facts (with ids); the worker picks the ones that fit each request |
 | `DELETE /internal/v1/memories/{id}` | | `204`; an agent forgets a wrong fact |
 | `POST /internal/v1/memories` | `{content, employee_id}` | saves a learned fact |
+| `GET /internal/v1/projects` | | the projects; the worker matches them to each request and works inside a matching project's folder |
+| `PUT /internal/v1/projects` | `{name, path?, notes?}` | an agent saves or updates a project (same rules as the owner endpoint); the agent asks the owner to approve a new folder first |
 
 Errors are returned as `{"error": "message"}` with `400`, `401`, `404`, `409` (wrong state, or the
 main agent cannot be removed), `429` (rate limited), or `503` (the breaker is open).

@@ -117,7 +117,7 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) migrate() error {
-	if _, err := s.db.Exec(schema + routinesSchema + settingsSchema + memoriesSchema + agentsSchema +
+	if _, err := s.db.Exec(schema + routinesSchema + settingsSchema + memoriesSchema + projectsSchema + agentsSchema +
 		extensionsSchema + chatSchema + stepsSchema); err != nil {
 		return err
 	}
