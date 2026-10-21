@@ -21,6 +21,7 @@ import (
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/config"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/events"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/secrets"
+	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/skillsrc"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/store"
 	"github.com/Pro-Sifat-Hasan/cubicle/gateway/internal/version"
 )
@@ -41,6 +42,9 @@ type Server struct {
 	// worker is available.
 	RunWorker func(ctx context.Context, args, env []string, out any) error
 
+	// SkillSource reads skills from GitHub repositories (skills.sh links). Tests replace it.
+	SkillSource *skillsrc.Client
+
 	// WorkspaceDir is where employees save files, one folder per assignment.
 	WorkspaceDir string
 
@@ -55,7 +59,7 @@ type Server struct {
 }
 
 func New(cfg *config.Config, st *store.Store, hub *events.Hub, box *secrets.Box, log *slog.Logger) *Server {
-	s := &Server{cfg: cfg, store: st, hub: hub, secrets: box, log: log, LongPollWait: 25 * time.Second}
+	s := &Server{cfg: cfg, store: st, hub: hub, secrets: box, log: log, LongPollWait: 25 * time.Second, SkillSource: skillsrc.New()}
 	s.revision.Store(time.Now().UnixMilli())
 	if err := s.ensureOffice(context.Background()); err != nil {
 		log.Error("could not set up the starting team", "err", err)
@@ -82,6 +86,8 @@ func (s *Server) Handler() http.Handler {
 	owner.HandleFunc("POST /api/v1/skills", s.handleCreateSkill)
 	owner.HandleFunc("GET /api/v1/skills/{id}", s.handleGetSkill)
 	owner.HandleFunc("PUT /api/v1/skills/{id}", s.handleUpdateSkill)
+	owner.HandleFunc("POST /api/v1/skills/discover", s.handleDiscoverSkills)
+	owner.HandleFunc("POST /api/v1/skills/install", s.handleInstallSkills)
 	owner.HandleFunc("DELETE /api/v1/skills/{id}", s.handleDeleteSkill)
 	owner.HandleFunc("GET /api/v1/plugins", s.handleListPlugins)
 	owner.HandleFunc("POST /api/v1/plugins", s.handleInstallPlugin)
