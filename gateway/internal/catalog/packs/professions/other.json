@@ -1,0 +1,15 @@
+{
+  "id": "other",
+  "title": "Something else",
+  "emoji": "✨",
+  "description": "Keeps the general team: researcher, writer, engineer, analyst and reviewer.",
+  "team": [],
+  "routines": [],
+  "starter_missions": [
+    "Summarise today's news in my field",
+    "Plan my week",
+    "Draft an email for me",
+    "Explain a topic I'm learning"
+  ],
+  "stack_suggestions": []
+}

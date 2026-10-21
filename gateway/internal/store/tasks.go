@@ -102,7 +102,8 @@ func (s *Store) GetTask(ctx context.Context, id string) (*Task, error) {
 type TaskFilter struct {
 	Status   string
 	ParentID *string
-	// ExcludeChat hides chat replies (they belong to conversations, not the task list).
+	// ExcludeChat hides chat replies (they belong to conversations) and persona tasks (onboarding),
+	// leaving the owner's real work.
 	ExcludeChat bool
 	Limit       int
 }
@@ -119,8 +120,8 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]*Task, error) {
 		args = append(args, *f.ParentID)
 	}
 	if f.ExcludeChat {
-		q += ` AND kind != ?`
-		args = append(args, KindChat)
+		q += ` AND kind NOT IN (?, ?)`
+		args = append(args, KindChat, KindPersona)
 	}
 	if f.Limit <= 0 || f.Limit > 500 {
 		f.Limit = 200

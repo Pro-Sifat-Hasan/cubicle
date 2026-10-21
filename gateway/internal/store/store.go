@@ -37,6 +37,7 @@ const (
 	KindSubtask    = "subtask"    // delegated piece of work for a specialist
 	KindSynthesis  = "synthesis"  // manager's final roll-up once all subtasks are done
 	KindChat       = "chat"       // one reply in a conversation with an agent
+	KindPersona    = "persona"    // the main agent invents a persona from a custom passion (onboarding)
 )
 
 const schema = `

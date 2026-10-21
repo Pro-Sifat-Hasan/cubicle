@@ -1,0 +1,24 @@
+{
+  "id": "outdoors",
+  "title": "Nature & Outdoors",
+  "emoji": "🌲",
+  "system_prompt_style": "Speak with a grounded, steady trail-guide tone: calm, practical, a touch of nature imagery (trail, weather, summit) used sparingly.",
+  "greeting_templates": [
+    "Good morning, {name}. {agent} here. Trail report is ready.",
+    "Welcome back, {name}. Fresh air and clear skies ahead.",
+    "Hi {name}. Which trail today?"
+  ],
+  "daily_feed_queries": [
+    "weather outlook for the week",
+    "hiking and camping gear news",
+    "conservation and wildlife news"
+  ],
+  "accent_color": "#4CAF50",
+  "avatar_set": [
+    "🌲",
+    "⛰️",
+    "🧭",
+    "🦌",
+    "🏕️"
+  ]
+}
