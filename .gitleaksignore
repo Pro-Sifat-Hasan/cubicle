@@ -1,0 +1,5 @@
+# Findings reviewed by hand and accepted. Each line is a fingerprint (commit:file:rule:line) printed by gitleaks.
+# These two are fake keys in a unit test for the memory filter (agents/tests/test_memory.py). The test now builds
+# them at run time, so new commits no longer trip the scan; the old commit stays in history.
+8dc5dc9390a1a34db1aae0b79c20514b5fadcd12:agents/tests/test_memory.py:generic-api-key:54
+8dc5dc9390a1a34db1aae0b79c20514b5fadcd12:agents/tests/test_memory.py:aws-access-token:55
