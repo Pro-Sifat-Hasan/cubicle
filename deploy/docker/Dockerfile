@@ -1,7 +1,7 @@
 # Cubicle server image: gateway + agent worker in one container.
 # Build from the repo root:  docker build -f deploy/docker/Dockerfile -t cubicle .
 
-FROM golang:1.26-alpine AS gateway
+FROM golang:1.27-alpine AS gateway
 WORKDIR /src
 COPY gateway/go.mod gateway/go.sum ./
 RUN go mod download
